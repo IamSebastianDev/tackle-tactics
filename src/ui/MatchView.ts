@@ -21,14 +21,14 @@ import {
 } from '../engine/abilities';
 import { attackGoalX, cheb, dist, disc, fromKey, goalRows, inPitch, isGoalCell, key } from '../engine/grid';
 import type { KickAbility, MoveAbility } from '../engine/match';
-import { movePoints } from '../engine/rules';
+import { movePoints, tackleChance } from '../engine/rules';
 import type { Cell, Piece, TeamSide } from '../types';
 import { KICK_MODES, MOVE_MODES, TARGET_MODES, type MatchController } from './controller';
 import { prewarmPlayer, resolveAnim, spriteStyle } from './sprites';
 import { recolorVersion } from './recolor';
 
 type OverlayKind = 'move' | 'path' | 'danger' | 'scatter' | 'target' | 'active' | 'tackle' | 'pick' | 'run' | 'zone';
-type Overlay = { k: string; x: number; y: number; kind: OverlayKind };
+type Overlay = { k: string; x: number; y: number; kind: OverlayKind; label?: string };
 
 export { isLightKit, kitColor };
 
@@ -145,7 +145,17 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 }
                 if (mode === 'mark') for (const o of m.markTargets(p)) put(o.pos, 'pick');
                 if (mode === 'tempo') for (const q of m.tempoTargets(p)) put(q.pos, 'pick');
-                if (carrier && carrier.team !== p.team && (m.canTackle(p) || m.abilityUsable(p, 'slide'))) put(carrier.pos, 'tackle');
+                if (carrier && carrier.team !== p.team && (m.canTackle(p) || m.abilityUsable(p, 'slide'))) {
+                    // the exact odds the engine will roll: standing tackle if adjacent, else the slide
+                    const label = `${String(odds(p, carrier, !m.canTackle(p)))}%`;
+                    out.set(key(carrier.pos), {
+                        k: `tackle:${key(carrier.pos)}:${label}`,
+                        x: carrier.pos.x,
+                        y: carrier.pos.y,
+                        kind: 'tackle',
+                        label,
+                    });
+                }
             }
             if (flight) {
                 for (const c of disc(flight.target, flight.radius)) if (showable(c)) put(c, 'scatter');
@@ -547,12 +557,21 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 return 'Aim a pass at any cell, or the goal mouth to shoot. Space keeps the ball.';
             }
             const c = m.carrier();
-            if (c && c.team !== p.team && cheb(c.pos, p.pos) <= 2)
-                return 'Click the carrier to tackle: win it and you go again, miss and they get a free turn to escape. Space ends your turn.';
+            if (c && c.team !== p.team && (m.canTackle(p) || m.abilityUsable(p, 'slide'))) {
+                const how = m.canTackle(p) ? 'Tackle' : 'Slide tackle';
+                return `${how} ${String(odds(p, c, !m.canTackle(p)))}%: win it and you go again, miss and they get a free turn to escape. Space ends your turn.`;
+            }
             return 'Use an ability, or Space to end your turn.';
         },
     );
 
+    /** Tackle odds as the engine rolls them (active challenge; a slide adds its bonus). */
+    const odds = (p: Piece, c: Piece, slide = false) =>
+        Math.round(tackleChance(cfg, p, c, true, slide ? cfg.abilities.slide.bonus : 0) * 100);
+    const slideOdds = (p: Piece, id: AbilityId, st: string) => {
+        const c = m.carrier();
+        return id === 'slide' && st === 'ready' && c && c.team !== p.team ? ` · ${String(odds(p, c, true))}%` : '';
+    };
     type Lane = 'before' | 'after';
     const laneOf = (id: AbilityId): Lane => (abilityDef(cfg, id).phase === 'act' ? 'after' : 'before');
     /** What arming the ability asks of you next. */
@@ -641,7 +660,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             });
             return html`<button class="acard ${st}" ${enter} ${leave} ${on('click', () => ctl.useAbility(id))}>
                 <span class="ic">${a.icon}</span>
-                <span class="txt"><b>${a.label}</b><span>${kindOf(id)}</span></span>
+                <span class="txt"><b>${a.label}</b><span>${kindOf(id)}${slideOdds(p, id, st)}</span></span>
                 <span class="state">${label}${st === 'ready' && k ? html`<kbd>${String(k)}</kbd>` : html``}</span>
                 ${st === 'wait' ? html`<span class="cd"><i style="width:${String(100 - (cd / Math.max(1, a.cooldown)) * 100)}%"></i></span>` : html``}
             </button>`;
@@ -662,7 +681,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             </div>
             <div class="core">
                 ${phase === 'move' ? html`<button ${on('click', () => ctl.pass())}>${isCarrier ? 'Stay & kick' : 'Hold'} <kbd>Space</kbd></button>` : html``}
-                ${phase === 'act' && m.canTackle(p) ? html`<button class="warn" ${on('click', () => ctl.input({ t: 'act', d: { kind: 'tackle' } }))}>Tackle <kbd>T</kbd></button>` : html``}
+                ${phase === 'act' && m.canTackle(p) ? html`<button class="warn" title="Chance to win the ball" ${on('click', () => ctl.input({ t: 'act', d: { kind: 'tackle' } }))}>Tackle ${String(odds(p, m.carrier()!))}% <kbd>T</kbd></button>` : html``}
                 ${phase === 'act' ? html`<button ${on('click', () => ctl.pass())}>${isCarrier ? 'Keep ball' : 'End turn'} <kbd>Space</kbd></button>` : html``}
                 <button class="ghost" ${on('click', () => ctl.input({ t: 'auto' }))}>Auto <kbd>A</kbd></button>
             </div>
@@ -684,6 +703,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             <div class="ab-head"><span class="ic">${a.icon}</span><div><b>${a.label}</b><small>${laneOf(id) === 'before' ? 'Before moving' : 'After moving'} · ${kindOf(id)}${a.cooldown ? ` · recharges for ${a.cooldown} round${a.cooldown > 1 ? 's' : ''}` : ''}</small></div></div>
             <p>${a.desc}</p>
             <p class="how"><b>How:</b> ${a.how}</p>
+            ${id === 'slide' && m.carrier() && m.carrier()!.team !== p.team ? html`<p class="odds">Chance to win the ball: <b>${String(odds(p, m.carrier()!, true))}%</b>${m.canTackle(p) ? ` (a standing tackle: ${String(odds(p, m.carrier()!))}%)` : ''}</p>` : html``}
             ${cd > 0 ? html`<p class="why">Recharging: ready in ${String(cd)} round${cd > 1 ? 's' : ''}.</p>` : reason ? html`<p class="why">Not now: ${reason}.</p>` : html``}
         </div>`;
     });
@@ -1034,7 +1054,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                         .$withKey((o) => o.k)
                         .$as(
                             (o) =>
-                                html`<div class="ov ov-${o.kind}" style="left:${px(o.x)}px;top:${px(o.y)}px;width:${C}px;height:${C}px"></div>`,
+                                html`<div class="ov ov-${o.kind}" style="left:${px(o.x)}px;top:${px(o.y)}px;width:${C}px;height:${C}px">${o.label ? html`<span class="ov-label">${o.label}</span>` : html``}</div>`,
                         )}
                     ${$each(reactors)
                         .$withKey((p) => p.id)
