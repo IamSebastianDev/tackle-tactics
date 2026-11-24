@@ -497,7 +497,6 @@ a {
     box-shadow:
         0 0 0 3px var(--active),
         0 0 0 5px var(--ink);
-    animation: blink 0.8s steps(2) infinite;
 }
 .token.spent .ground {
     opacity: 0.5;
@@ -3834,37 +3833,45 @@ dialog.drawer-wrap:not([open]) {
 }
 
 /* ================================================================== READABILITY PASS */
-/* the ball carrier: crowned with a bobbing ball-blue marker */
+/* Markers: yellow = whose turn it is (arrow above the head, ring at the feet); blue = the ball
+   (a steady ring at the carrier's feet and a ball dot on their tag; a pulsing ring only when loose). */
 .token.carrier .ground {
     box-shadow:
         0 0 0 3px #2f8cff,
         0 0 0 5px var(--ink);
 }
-.carrier-mark {
+/* acting with the ball: blue inside, yellow outside */
+.token.active.carrier .ground {
+    box-shadow:
+        0 0 0 3px #2f8cff,
+        0 0 0 6px var(--active),
+        0 0 0 8px var(--ink);
+}
+.turn-mark {
     display: none;
     position: absolute;
-    left: -9px;
-    top: -76px;
-    width: 18px;
-    height: 18px;
+    left: -10px;
+    top: -80px;
+    width: 20px;
+    height: 16px;
     animation: bob 0.8s steps(2) infinite;
 }
-.token.carrier .carrier-mark {
+.token.active .turn-mark {
     display: block;
 }
-.carrier-mark i {
+.turn-mark i {
     position: absolute;
     inset: 0;
-    background: #2f8cff;
+    background: var(--active);
     clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
-.carrier-mark::before {
+.turn-mark::before {
     content: '';
     position: absolute;
     left: -3px;
     top: -3px;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 22px;
     background: var(--ink);
     clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
@@ -3877,6 +3884,21 @@ dialog.drawer-wrap:not([open]) {
     box-shadow:
         0 0 0 2px #2f8cff,
         2px 2px 0 2px #0006;
+}
+/* the carrier's tag carries a ball dot */
+.token.carrier .tag::after {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 3px;
+    vertical-align: 1px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 1.5px #2f8cff;
+}
+.ball.held .ball-ring {
+    display: none;
 }
 /* players crowding the ball step back visually */
 .token.crowd .sprite {
@@ -5619,4 +5641,43 @@ button.dd-button:focus-visible {
     content: '▸';
     position: absolute;
     left: 7px;
+}
+
+/* bench: changes waiting for the next break */
+.bench-queued {
+    color: var(--accent);
+    font-size: 13px;
+}
+
+/* half time: the report layout, a kicker above the score, tired legs beside the stats */
+.ht-kicker {
+    margin: 0 0 4px;
+    text-align: center;
+    font-family: var(--display);
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+.report-grid.ht-grid {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+}
+.ht-tired {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+}
+.ht-tired li {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) 90px 28px;
+    align-items: center;
+    gap: 8px;
+}
+.ht-tired b {
+    text-align: right;
+}
+.ht-legs .ghost {
+    margin-top: 4px;
 }

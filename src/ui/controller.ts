@@ -114,6 +114,15 @@ export class MatchController {
     readonly tutorialDone = grain(false);
     private resolveLesson: (() => void) | null = null;
     private tutEvents: MatchEvent[] = [];
+    /** Half time: the overview is up until the manager starts the second half. */
+    readonly halftime = grain(false);
+    private resolveHalftime: (() => void) | null = null;
+    /** Close the half-time overview and play the second half. */
+    endHalftime() {
+        const r = this.resolveHalftime;
+        this.resolveHalftime = null;
+        r?.();
+    }
     /** Pre-match overview (squads on the pitch, commentators, ground) is showing. */
     readonly intro = grain(false);
     private resolveIntro: (() => void) | null = null;
@@ -227,6 +236,7 @@ export class MatchController {
     stop() {
         this.stopped = true;
         this.introDone(false);
+        this.endHalftime();
         cancelAnimationFrame(this.timerRaf);
         this.resolveInput?.({ t: 'stop' });
         this.resolveTip?.();
@@ -521,6 +531,7 @@ export class MatchController {
             this.bump();
             this.say(this.commentator.call(ev));
             if (m.state.round !== round && !m.state.over) await this.aiSubs();
+            if (!m.state.over) await this.humanSubs();
             for (const t of [0, 1] as TeamSide[]) {
                 const mood = this.brains[t].mood(t);
                 if (mood && mood !== this.moods[t]) this.say(this.commentator.mood(t, mood));
@@ -534,7 +545,14 @@ export class MatchController {
                 }
                 if (e.t === 'halftime') {
                     audio.play('whistleEnd');
-                    await this.showBanner('Half time', `${m.state.score[0]} – ${m.state.score[1]}`, 1800);
+                    if (this.isHuman(0) || this.isHuman(1)) {
+                        // the overview: stats, tired legs, the bench; changes are made on the spot
+                        this.halftime.set(true);
+                        await new Promise<void>((r) => (this.resolveHalftime = r));
+                        this.halftime.set(false);
+                        if (this.stopped) return;
+                        await this.humanSubs();
+                    } else await this.showBanner('Half time', `${m.state.score[0]} – ${m.state.score[1]}`, 1800);
                     audio.play('whistle');
                 }
                 if (e.t === 'fulltime') {
@@ -558,24 +576,75 @@ export class MatchController {
         }
     }
 
-    /** Human substitution (from the bench panel), only between actions on your own turn. */
-    substitute(offId: string, onId: string) {
+    /** Human substitutions waiting for the next break between turns (your side wasn't on the ball). */
+    readonly pendingSubs = grain<Array<{ team: TeamSide; off: string; on: string }>>([]);
+
+    /** Why this change can't be made or queued, or null (counts changes already queued). */
+    subProblem(team: TeamSide, offId: string, onId: string): string | null {
+        if (!this.isHuman(team)) return 'The AI manages its own bench';
+        const queued = this.pendingSubs().filter((x) => x.team === team);
+        if (this.match.subsLeft(team) - queued.length <= 0) return 'No substitutions left';
+        if (queued.some((x) => x.off === offId)) return 'Already coming off';
+        if (queued.some((x) => x.on === onId)) return 'Already coming on';
+        return this.match.subBlock(team, offId, onId, false);
+    }
+
+    /**
+     * Human substitution from the bench panel. On your own turn it happens at once (unless that
+     * player is acting or on the ball); otherwise it's made at the next break between turns.
+     * Returns an error, or null when it was made or queued.
+     */
+    substitute(team: TeamSide, offId: string, onId: string): string | null {
         const m = this.match;
-        if (!this.awaitingHuman() || this.inSetup()) return 'Wait for your turn';
-        const team = m.active().team;
-        const why = m.subBlock(team, offId, onId);
-        if (why) {
+        const problem = this.subProblem(team, offId, onId);
+        if (problem) {
             audio.play('error');
-            return why;
+            return problem;
         }
+        if (this.canSubNow(team, offId, onId)) {
+            this.makeSub(team, offId, onId);
+            return null;
+        }
+        this.pendingSubs.update((list) => [...list, { team, off: offId, on: onId }]);
+        this.flash(`Change queued: ${m.piece(offId).player.name} off at the next break`);
+        audio.play('click');
+        this.bump();
+        return null;
+    }
+
+    /** A change goes through at once at half time, or on your own turn, if that player isn't busy. */
+    canSubNow(team: TeamSide, offId: string, onId: string) {
+        const m = this.match;
+        if (this.inSetup() || m.subBlock(team, offId, onId)) return false;
+        return this.halftime() || (this.awaitingHuman() && m.active().team === team);
+    }
+
+    /** Queued changes go through between turns; one that has to wait (on the ball, set piece) stays queued. */
+    private async humanSubs() {
+        const m = this.match;
+        if (!this.pendingSubs().length || this.inSetup()) return;
+        const keep: Array<{ team: TeamSide; off: string; on: string }> = [];
+        for (const x of this.pendingSubs()) {
+            if (m.subBlock(x.team, x.off, x.on, false)) continue; // no longer possible (sent off, match over)
+            if (m.subBlock(x.team, x.off, x.on)) keep.push(x);
+            else {
+                this.makeSub(x.team, x.off, x.on);
+                await sleep(500);
+            }
+        }
+        this.pendingSubs.set(keep);
+    }
+
+    private makeSub(team: TeamSide, offId: string, onId: string) {
+        const m = this.match;
         const ev = m.substitute(team, offId, onId);
+        if (!ev.length) return;
         this.stats.observe(ev);
         this.say(this.commentator.call(ev));
         const on = m.piece(ev[0]!.t === 'sub' ? ev[0]!.on : onId);
         this.popup(on.pos, `⇄ ${on.player.name}`, 'good');
         audio.play('whistle');
         this.bump();
-        return null;
     }
 
     /** Set-piece setup: sides alternate placements (attackers first) until both are done. */

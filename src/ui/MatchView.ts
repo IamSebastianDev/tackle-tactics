@@ -4,7 +4,7 @@ import { isLightKit, kitColor } from './kits';
 import { Playbook } from './Playbook';
 import { atmosphere, pitchSurface, stadiumProps } from './StadiumView';
 import { conditionsLabel, generateStadium } from '../world/stadium';
-import { MatchReport } from './Report';
+import { HalftimeReport, MatchReport } from './Report';
 import { Dialog } from './Dialog';
 import { distinct } from './value';
 import { MatchRadioButton, MatchRadioControls } from './RadioUI';
@@ -59,6 +59,18 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     const showMusic = grain(false);
     const exitPrompt = grain<{ chance: number; wasPaused: boolean } | null>(null);
     const benchPick = grain<{ off: string | null; on: string | null; msg: string | null }>({ off: null, on: null, msg: null });
+    /** The bench stops the clock: the game pauses while it's open (and resumes unless you had paused it yourself). */
+    const benchPause = grain(false);
+    showBench.subscribe((open) => {
+        if (open && !ctl.paused()) {
+            benchPause.set(true);
+            ctl.paused.set(true);
+        } else if (!open && benchPause()) {
+            benchPause.set(false);
+            ctl.paused.set(false);
+        }
+        if (!open) benchPick.set({ off: null, on: null, msg: null });
+    });
 
     // ------------------------------------------------------------ cached reach per tick
     let reachCache: { tick: number; id: string; ability?: string; map: ReturnType<typeof m.reachable> } | null = null;
@@ -144,6 +156,11 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                             for (const c of disc(hover, cfg.abilities.cross.headRadius))
                                 if (inPitch(cfg, c) && out.get(key(c))?.kind !== 'scatter') put(c, 'run');
                         put(hover, 'target');
+                        if (m.kickKind(p, hover, ability) === 'shot') {
+                            // the exact chance the engine will roll for this shot
+                            const label = `${String(Math.round(m.shotOdds(p, hover, ability).goal * 100))}%`;
+                            out.set(key(hover), { k: `target:${key(hover)}:${label}`, x: hover.x, y: hover.y, kind: 'target', label });
+                        }
                     }
                 }
                 if (mode === 'mark') for (const o of m.markTargets(p)) put(o.pos, 'pick');
@@ -424,7 +441,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             <div class="stand">
                 <div class="sprite" ${attr({ style: sprite })}></div>
                 <div class="tag" style="--kit:${kit}">${String(p.player.number)}<span class="badges">${badges}</span></div>
-                <div class="carrier-mark"><i></i></div>
+                <div class="turn-mark"><i></i></div>
                 ${tokenStam}
             </div>
         </div>`;
@@ -452,6 +469,9 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         const ms = ctl.ballMs;
         return `left:${x}px;top:${y}px;z-index:${Math.round(y) + 2};transition:left ${ms}ms cubic-bezier(.3,.6,.4,1), top ${ms}ms cubic-bezier(.3,.6,.4,1)`;
     });
+
+    /** A held ball is just the ball at its carrier's feet; a loose one gets the pulsing ring. */
+    const ballClass = derived(ctl.tick, () => (m.state.ball.kind === 'held' && !ctl.ballAt ? 'ball held' : 'ball loose'));
 
     // ------------------------------------------------------------ HUD pieces
     const club = (t: TeamSide) => m.state.clubs[t];
@@ -547,7 +567,11 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                     : `${club(p.team).short} is thinking…`;
             const isCarrier = m.carrier()?.id === p.id;
             // the armed bar says what to click; the hint just restates the plan in words
-            if (mode) return abilityDef(cfg, mode).short;
+            if (mode) {
+                if (isCarrier && hover && m.state.phase === 'act' && m.kickKind(p, hover, mode as KickAbility) === 'shot')
+                    return `${abilityDef(cfg, mode).label}: ${shotHint(p, hover, mode).replace(/^Shoot: /, '')}`;
+                return abilityDef(cfg, mode).short;
+            }
             if (m.state.phase === 'move') {
                 if (p.status.fouled) return 'You were fouled: free kick. Stay put (Space), then pass or shoot.';
                 return isCarrier
@@ -557,8 +581,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             if (isCarrier) {
                 if (hover) {
                     const kind = m.kickKind(p, hover);
-                    if (kind === 'shot')
-                        return `Shoot — the orange zone is where it may go. ${dist(p.pos, hover) > 18 ? 'Speculative from here.' : ''}`;
+                    if (kind === 'shot') return shotHint(p, hover);
                     if (kind === 'pass')
                         return `Pass ${dist(p.pos, hover) > cfg.ball.loftThreshold ? '(lofted: only contestable at take-off and landing)' : '(driven: contestable along the whole lane)'}`;
                 }
@@ -573,6 +596,13 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         },
     );
 
+    /** A shot's chance to score and why: on target, the keeper, blocks on the way. */
+    const shotHint = (p: Piece, at: Cell, ability?: AbilityId) => {
+        const o = m.shotOdds(p, at, ability as KickAbility | undefined);
+        const pc = (v: number) => `${String(Math.round(v * 100))}%`;
+        const block = o.block >= 0.01 ? `, ${pc(o.block)} it's blocked` : '';
+        return `Shoot: ${pc(o.goal)} to score. ${pc(o.onTarget)} on target, the keeper saves ${pc(o.save)}${block}. The orange zone is where it may go.`;
+    };
     /** Tackle odds as the engine rolls them (active challenge; a slide adds its bonus). */
     const odds = (p: Piece, c: Piece, slide = false) =>
         Math.round(tackleChance(cfg, p, c, true, slide ? cfg.abilities.slide.bonus : 0) * 100);
@@ -1024,28 +1054,37 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         );
         const bench = derived(combined([team, ctl.tick]), ([side]) => m.bench(side));
         const left = derived(combined([team, ctl.tick]), ([side]) => String(m.subsLeft(side)));
-        const availability = derived(combined([team, ctl.tick, benchPick, ctl.awaitingHuman]), ([side, , pick, awaiting]) => {
-            const mine = ctl.isHuman(side);
-            const why = pick.off && pick.on ? m.subBlock(side, pick.off, pick.on) : null;
-            return {
-                disabled: !mine || !awaiting || !pick.off || !pick.on || !!why || ctl.inSetup(),
-                hint:
-                    pick.msg ??
-                    why ??
-                    (!mine
-                        ? 'Watching: the AI manages its own bench.'
-                        : !awaiting
-                          ? 'Substitutions happen on your turn.'
-                          : 'Tired players move less (under 50) and react worse (under 25). Pick one off, one on.'),
-            };
-        });
+        const availability = derived(
+            combined([team, ctl.tick, benchPick, ctl.awaitingHuman, ctl.pendingSubs, ctl.halftime]),
+            ([side, , pick]) => {
+                const mine = ctl.isHuman(side);
+                const why = pick.off && pick.on ? ctl.subProblem(side, pick.off, pick.on) : null;
+                // straight away on your own turn (if that player isn't busy), otherwise at the next break
+                const now = !!pick.off && !!pick.on && ctl.canSubNow(side, pick.off, pick.on);
+                return {
+                    disabled: !mine || !pick.off || !pick.on || !!why,
+                    label: now || !pick.off || !pick.on ? 'Make the change' : 'Make it at the next break',
+                    hint:
+                        pick.msg ??
+                        why ??
+                        (!mine
+                            ? 'Watching: the AI manages its own bench.'
+                            : 'Tired players move less (under 50) and react worse (under 25). Pick one off, one on.'),
+                };
+            },
+        );
+        const queued = derived(combined([team, ctl.pendingSubs]), ([side, list]) =>
+            list
+                .filter((x) => x.team === side)
+                .map((x) => `${m.piece(x.off).player.name} ⇄ ${m.bench(side).find((p) => p.id === x.on)?.name ?? ''}`),
+        );
         const choose = (slot: 'off' | 'on', id: string) =>
             on('click', () => benchPick.update((pick) => ({ ...pick, [slot]: id, msg: null })));
         const selectedClass = (slot: 'off' | 'on', id: string) => derived(benchPick, (pick) => (pick[slot] === id ? 'on' : ''));
         const go = () => {
             const { off, on: replacement } = benchPick();
             if (!off || !replacement || availability().disabled) return;
-            const err = ctl.substitute(off, replacement);
+            const err = ctl.substitute(team(), off, replacement);
             benchPick.set({ off: null, on: null, msg: err });
             if (!err) showBench.set(false);
         };
@@ -1082,8 +1121,9 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 </div>
             </div>
             <footer class="bench-foot">
+                ${$if(derived(queued, (list) => list.length > 0)).$then(() => html`<span class="bench-queued">Next break: ${derived(queued, (list) => list.join(' · '))}</span>`)}
                 <span class="muted">${derived(availability, (a) => a.hint)}</span>
-                <button class="primary" ${attr({ disabled: derived(availability, (a) => a.disabled) })} ${on('click', go)}>Make the change</button>
+                <button class="primary" ${attr({ disabled: derived(availability, (a) => a.disabled) })} ${on('click', go)}>${derived(availability, (a) => a.label)}</button>
             </footer>
         </div>`;
     };
@@ -1261,7 +1301,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                     ${$each(pieces)
                         .$withKey((p) => p.id)
                         .$as(Token)}
-                    <div class="ball" ${attr({ style: ballStyle })}>
+                    <div ${attr({ class: ballClass, style: ballStyle })}>
                         <div class="ball-shadow"></div><div class="ball-ring"></div>
                         <div class="stand"><img class="ball-img" src="assets/props/ball_classic.png" ${attr({ style: ballImgStyle })} /></div>
                     </div>
@@ -1327,11 +1367,12 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             <div class="modal-body"><header><h2>Playbook</h2><button class="ghost" ${on('click', () => showPlaybook.set(false))}>Close <kbd>Esc</kbd></button></header><div class="modal-scroll">${Playbook(cfg)}</div></div>`,
             }),
         )}
+        ${$if(ctl.halftime).$then(() => HalftimeReport(ctl, { onContinue: () => ctl.endHalftime(), onBench: () => showBench.set(true) }))}
         ${$if(showBench).$then(() => Dialog({ label: 'Bench & substitutions', dismiss: () => showBench.set(false), children: BenchPanel() }))}
         ${$render(tipPanel)}
         ${$if(ctl.intro).$then(introOverlay)}
         ${$render(lessonPanel)}
-        ${$if(ctl.paused).$then(() => html`<div class="pause-veil"><div class="banner"><div class="banner-text">Paused</div><div class="banner-sub">Read the commentary, plan your move. P to resume.</div><button class="primary" ${on('click', () => ctl.togglePause())}>Resume</button></div></div>`)}
+        ${$if(derived(combined([ctl.paused, benchPause]), ([paused, bench]) => paused && !bench)).$then(() => html`<div class="pause-veil"><div class="banner"><div class="banner-text">Paused</div><div class="banner-sub">Read the commentary, plan your move. P to resume.</div><button class="primary" ${on('click', () => ctl.togglePause())}>Resume</button></div></div>`)}
         ${$render(toast)}
         ${$render(banner)}
         ${$if(derived(ctl.report, Boolean)).$then(() => {

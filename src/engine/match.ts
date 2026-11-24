@@ -325,6 +325,56 @@ export class Match {
         return scatterRadius(this.cfg, p, dist(p.pos, target), kind, this.kickMods(ability));
     };
 
+    /**
+     * The odds of a shot at `target` as `kick` will roll them: blocked on the way (each defender
+     * beside the line gets one try), then the landing row (a uniform point in the scatter disc,
+     * so its vertical offset has a semicircle distribution), then the keeper's save from that row.
+     * `goal` is the chance it goes in; the parts explain it in the UI.
+     */
+    shotOdds = (p: Piece, target: Cell, ability?: KickAbility) => {
+        const cfg = this.cfg;
+        const none = { goal: 0, block: 0, onTarget: 0, save: 0 };
+        if (this.kickKind(p, target, ability) !== 'shot') return none;
+        const d = dist(p.pos, target);
+        const R = this.kickRadius(p, target, ability);
+        // P(offset < t) for a uniform point in a disc of radius R, projected on one axis
+        const cdf = (t: number) => {
+            if (R <= 0) return t >= 0 ? 1 : 0;
+            const x = Math.max(-R, Math.min(R, t));
+            return 0.5 + (x * Math.sqrt(R * R - x * x) + R * R * Math.asin(x / R)) / (Math.PI * R * R);
+        };
+        const [top, bottom] = goalRows(cfg);
+        const keeper = this.keeperOf((1 - p.team) as TeamSide);
+        const saveMod = this.shotSaveMod(p, ability);
+        const lineX = target.x < 0 ? 0 : cfg.pitch.cols - 1;
+        let onTarget = 0;
+        let scores = 0;
+        for (let y = top; y <= bottom; y++) {
+            // the landing row is round(target.y + offset)
+            const pr = cdf(y + 0.5 - target.y) - cdf(y - 0.5 - target.y);
+            const save = keeper ? saveChance(cfg, keeper, p, cheb(keeper.pos, { x: lineX, y }), d, saveMod) : 0;
+            onTarget += pr;
+            scores += pr * (1 - save);
+        }
+        // blocks: the same lane and candidates as `kick` (aimed line; the keeper doesn't block)
+        const lineEnd = { x: lineX, y: Math.max(0, Math.min(cfg.pitch.rows - 1, target.y)) };
+        const path = line(p.pos, lineEnd).slice(1);
+        const n = cfg.ball.loftInterceptCells;
+        const tried = new Set<string>();
+        let through = 1;
+        for (let i = 0; i < path.length; i++) {
+            if (ability === 'chip' && i >= n) continue;
+            if (p.status.fouled && i < 2) continue;
+            const c = path[i]!;
+            for (const o of this.opponents(p.team)) {
+                if (o.id === keeper?.id || tried.has(o.id) || !this.canReact(o) || cheb(o.pos, c) > 1) continue;
+                tried.add(o.id);
+                through *= 1 - interceptChance(cfg, o, p, eq(o.pos, c), 'shot');
+            }
+        }
+        return { goal: through * scores, block: 1 - through, onTarget, save: onTarget > 0 ? 1 - scores / onTarget : 0 };
+    };
+
     canTackle = (p: Piece) => {
         const c = this.carrier();
         return !!c && c.team !== p.team && !c.status.fouled && cheb(c.pos, p.pos) === 1;
@@ -655,19 +705,23 @@ export class Match {
     subsLeft = (team: TeamSide) => this.cfg.subs.max - this.state.subs[team];
     bench = (team: TeamSide) => this.state.clubs[team].bench ?? [];
 
-    /** Why `offId` can't make way for `onId` right now, or null. */
-    subBlock = (team: TeamSide, offId: string, onId: string): string | null => {
+    /**
+     * Why `offId` can't make way for `onId`, or null. With `timing` off only the lasting reasons
+     * count (a change can wait for the ball to move on or the set piece to finish).
+     */
+    subBlock = (team: TeamSide, offId: string, onId: string, timing = true): string | null => {
         const off = this.state.pieces.find((q) => q.id === offId);
         const on = this.bench(team).find((p) => p.id === onId);
         if (this.state.over) return 'The match is over';
         if (this.subsLeft(team) <= 0) return 'No substitutions left';
         if (!off || off.team !== team) return 'Pick one of your players on the pitch';
         if (!on) return 'Pick a player from the bench';
+        if ((off.player.cls === 'keeper') !== (on.cls === 'keeper'))
+            return off.player.cls === 'keeper' ? 'A keeper can only be replaced by a keeper' : 'Keepers only replace keepers';
+        if (!timing) return null;
         if (off.id === this.turnPieceId && this.state.phase !== 'done') return 'Not the player whose turn it is';
         if (this.carrier()?.id === off.id) return 'Not while they have the ball';
         if (this.state.setPiece) return 'Not during a set piece';
-        if ((off.player.cls === 'keeper') !== (on.cls === 'keeper'))
-            return off.player.cls === 'keeper' ? 'A keeper can only be replaced by a keeper' : 'Keepers only replace keepers';
         return null;
     };
 
