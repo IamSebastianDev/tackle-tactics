@@ -4,7 +4,7 @@
  */
 import { combined, derived, grain } from '@grainular/grains';
 import { $if, $render, attr, html, on, type Fragment } from '@grainular/nord';
-import type { ClassId, GameConfig } from '../../config';
+import type { ClassId, GameConfig, TeamStyle } from '../../config';
 import { abilitiesOf, abilityDef, allAbilities, classLabel, classLevel, passivesOf } from '../../engine/abilities';
 import {
     askingPrice, autoLineup, buy, divisionOf, stadiumOf, resolveLetter, roundsPerSeason, salePrice, saveCareer, seasonDays, sell, squadOvr, table, today,
@@ -13,7 +13,6 @@ import {
 import { avgRating, moraleLabel, rivalOf, seasonLine, story } from '../../meta/story';
 import { COUNTERS, isDerby, opponentOf, planEdge, prepFor, TALKS, type TeamTalk } from '../../meta/prep';
 import { styleOf } from '../../ai/brain';
-import type { TeamStyle } from '../../config';
 import { audio } from '../audio';
 import { conditionsLabel, sizeLabel } from '../../world/stadium';
 import { fitFor, money, ovr, playerValue, potentialStars, wage, xpToNext } from '../../meta/player';
@@ -44,6 +43,10 @@ export type HubActions = {
 
 export const spriteFor = (club: CareerClub, p: Player) => (p.cls === 'keeper' ? club.keeperKit : `${club.kit}_player_${p.look ?? 1}`);
 
+const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+
+const crest = (cl: CareerClub) => html`<span class="crest" style="--kit:${kitColor(cl.kit)}">${cl.short}</span>`;
+
 export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { title: string; lines: string[] } | null = null) => {
     const version = grain(0);
     const tab = grain<Tab>('overview');
@@ -71,7 +74,6 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
 
     const u = () => userClub(c);
     const club = (id: string) => c.clubs[id]!;
-    const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
     const portrait = (cl: CareerClub, p: Player, size = 40) =>
         html`<span class="portrait-s" style="width:${size}px;height:${size}px"><span class="sprite still" style="${portraitStyle(cl, p, size)}"></span></span>`;
     /** Crop the sprite to head & shoulders: draw it larger than the frame and shift it up-left. */
@@ -81,7 +83,6 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
         return `${spriteStyle(cfg, spriteFor(cl, p), 'idle', 'down', p)};width:${big}px;height:${big}px;background-size:${frames * big}px ${big}px;left:${Math.round((size - big) / 2)}px;top:${Math.round(-big * 0.14)}px`;
     };
     const stars = (p: Player) => html`<span class="stars" title="Potential: growth per level-up">${'★'.repeat(potentialStars(cfg, p))}<i>${'★'.repeat(5 - potentialStars(cfg, p))}</i></span>`;
-    const crest = (cl: CareerClub) => html`<span class="crest" style="--kit:${kitColor(cl.kit)}">${cl.short}</span>`;
 
     // ------------------------------------------------------------ top bar
     const todayInfo = () => {

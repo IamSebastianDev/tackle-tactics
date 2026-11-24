@@ -38,7 +38,7 @@ export const pickReferee = (cfg: GameConfig, seed: number): Referee => {
     const name = names[createRng(seed ^ 0x5bd1e995).int(0, names.length - 1)]!;
     return { name, style: refereeStyle(cfg, name) };
 };
-const SHOT_ABILITIES: KickAbility[] = ['placed', 'power', 'chip'];
+const SHOT_ABILITIES = new Set<KickAbility | undefined>(['placed', 'power', 'chip']);
 
 export class Match {
     readonly cfg: GameConfig;
@@ -256,7 +256,7 @@ export class Match {
         const [top, bottom] = goalRows(cfg);
         const isGoal = target.x === gx && target.y >= top && target.y <= bottom;
         if (isGoal && this.shotBlocked(p)) return null;
-        if (ability && SHOT_ABILITIES.includes(ability)) return isGoal && dist(p.pos, target) <= cfg.ball.maxShotRange ? 'shot' : null;
+        if (ability && SHOT_ABILITIES.has(ability)) return isGoal && dist(p.pos, target) <= cfg.ball.maxShotRange ? 'shot' : null;
         if (isGoal) {
             if (ability) return null;
             return dist(p.pos, target) <= cfg.ball.maxShotRange ? 'shot' : null;
@@ -524,7 +524,7 @@ export class Match {
         this.startCooldown(p, 'trick');
         p.status.tricked = true;
         const events: MatchEvent[] = [{ t: 'ability', by: p.id, ability: 'trick' }];
-        for (const o of this.opponents(p.team).filter((o) => this.canReact(o) && cheb(o.pos, p.pos) === 1)) {
+        for (const o of this.opponents(p.team).filter((q) => this.canReact(q) && cheb(q.pos, p.pos) === 1)) {
             const success = this.rng.chance(trickChance(this.cfg, p, o));
             if (success) {
                 o.reactionReady = false;

@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "env": { "browser": true, "es2024": true },
+  "ignorePatterns": ["dist/**", "src-tauri/**", "public/**", "assets/**"],
+  "rules": {
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "eqeqeq": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-explicit-any": "error",
+    "import/no-duplicates": "error",
+    "import/no-cycle": "warn",
+    "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }],
+    "unicorn/prefer-node-protocol": "error",
+
+    // sorting fresh arrays from filter()/map() is idiomatic here; nothing sorts shared state
+    "unicorn/no-array-sort": "off",
+    // the match presenter plays animations one after another on purpose
+    "no-await-in-loop": "off",
+    // event handlers live next to the listeners that add and remove them
+    "unicorn/consistent-function-scoping": "off",
+    // window.__tt / __career are dev-only debugging hooks
+    "no-underscore-dangle": "off",
+    "promise/always-return": "off"
+  },
+  "overrides": [
+    {
+      "files": ["test/**", "scripts/**", "vite.config.ts"],
+      "env": { "node": true },
+      "rules": { "no-console": "off" }
+    },
+    {
+      "files": ["test/tune.test.ts", "test/styles.test.ts", "test/chains.test.ts"],
+      "rules": { "vitest/expect-expect": "off" }
+    }
+  ]
+}

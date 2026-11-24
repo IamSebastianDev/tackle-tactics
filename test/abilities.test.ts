@@ -60,7 +60,7 @@ describe('abilities', () => {
         const header = ev.find((e) => e.t === 'header');
         const ended = ev.some((e) => ['goal', 'save', 'wide', 'loose', 'receive', 'out', 'intercept'].includes(e.t));
         expect(ended).toBe(true);
-        if (header) expect(header.t === 'header' && header.by).toBe(st.id);
+        expect(!header || (header.t === 'header' && header.by === st.id)).toBe(true);
     });
 
     it('foul in the box gives a penalty; second yellow sends off and keeps the order valid', () => {

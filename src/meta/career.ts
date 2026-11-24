@@ -198,7 +198,7 @@ export const autoLineup = (cfg: GameConfig, club: Club): string[] => {
     const used = new Set<string>();
     // fill the most specialised slots (keeper) first
     const order = formation.slots.map((s, i) => ({ s, i })).sort((a, b) => (a.s.cls === 'keeper' ? -1 : 0) - (b.s.cls === 'keeper' ? -1 : 0));
-    const out: string[] = new Array(formation.slots.length).fill('');
+    const out: string[] = Array.from({ length: formation.slots.length }, () => '');
     for (const { s, i } of order) {
         const best = club.squad.filter((p) => !used.has(p.id)).sort((a, b) => fitFor(cfg, b, s.cls) - fitFor(cfg, a, s.cls))[0];
         if (best) { used.add(best.id); out[i] = best.id; }
@@ -438,7 +438,8 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
 
     // aging & retirement across every squad
     for (const club of Object.values(c.clubs)) {
-        for (const p of [...club.squad]) {
+        // retirement replaces club.squad with a filtered copy, so iterating the original is safe
+        for (const p of club.squad) {
             ageOneSeason(cfg, rng, p);
             if (p.age >= cfg.career.retireFrom && rng.chance(cfg.career.retireChance)) {
                 club.squad = club.squad.filter((q) => q.id !== p.id);

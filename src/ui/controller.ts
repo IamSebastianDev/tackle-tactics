@@ -592,7 +592,7 @@ export class MatchController {
         if (!lines.length) return;
         const minute = this.stats.minute();
         const add = lines.map((l) => ({ ...l, id: ++this.lineId, minute }));
-        this.commentary.update((c) => [...add.reverse(), ...c].slice(0, 30));
+        this.commentary.update((c) => [...add.toReversed(), ...c].slice(0, 30));
         const big = lines.find((l) => l.caption);
         if (big) {
             this.caption.set({ title: big.caption!, text: big.text, team: big.team });

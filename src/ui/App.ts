@@ -70,6 +70,23 @@ const buildClubs = (cfg: GameConfig, s: Settings): [Club, Club] => {
     ];
 };
 
+/** Weather makes the ball a little less predictable (config.weather); the camera preset comes from Settings. */
+const weatherCfg = (base: GameConfig, cond: Conditions) => {
+    const k = base.weather.scatterMult[cond.weather] ?? 1;
+    const cam = base.camera.modes[prefs().camera] ?? base.camera.modes['2d'];
+    return withOverrides({
+        ball: { passScatterPerCell: base.ball.passScatterPerCell * k, shotScatterPerCell: base.ball.shotScatterPerCell * k },
+        camera: { tiltDeg: cam.tiltDeg, scale: cam.scale },
+        sprites: { goalScaleX: cam.goalScaleX, goalScaleY: cam.goalScaleY },
+    }, base);
+};
+
+/** Match pacing follows the AI-speed preference. */
+const pacing = () => {
+    const f = AI_SPEED[prefs().aiSpeed];
+    return { aiThinkMs: Math.round(defaultConfig.match.aiThinkMs * f), resolvePauseMs: Math.round(defaultConfig.match.resolvePauseMs * f) };
+};
+
 export const App = () => {
     const settings = grain<Settings>(loadSettings());
     const showHowto = grain(false);
@@ -80,22 +97,6 @@ export const App = () => {
     let matchExit: () => void = () => {};
     let matchIsCareer = false;
 
-    /** Weather makes the ball a little less predictable (config.weather); the camera preset comes from Settings. */
-    const weatherCfg = (base: GameConfig, cond: Conditions) => {
-        const k = base.weather.scatterMult[cond.weather] ?? 1;
-        const cam = base.camera.modes[prefs().camera] ?? base.camera.modes['2d'];
-        return withOverrides({
-            ball: { passScatterPerCell: base.ball.passScatterPerCell * k, shotScatterPerCell: base.ball.shotScatterPerCell * k },
-            camera: { tiltDeg: cam.tiltDeg, scale: cam.scale },
-            sprites: { goalScaleX: cam.goalScaleX, goalScaleY: cam.goalScaleY },
-        }, base);
-    };
-
-    /** Match pacing follows the AI-speed preference. */
-    const pacing = () => {
-        const f = AI_SPEED[prefs().aiSpeed];
-        return { aiThinkMs: Math.round(defaultConfig.match.aiThinkMs * f), resolvePauseMs: Math.round(defaultConfig.match.resolvePauseMs * f) };
-    };
     const configFor = (s: Settings) => withOverrides({ match: { timerSeconds: s.timerSeconds, rounds: s.rounds, timeoutPolicy: s.timeoutPolicy, ...pacing() } });
 
     const start = () => {

@@ -67,7 +67,7 @@ const buildMap = (data: Uint8ClampedArray, skin: Ramp, hair: Ramp) => {
 const generate = (src: string, skin: number, hair: number, k: string) => {
     pending.add(k);
     const img = new Image();
-    img.onload = () => {
+    img.addEventListener('load', () => {
         try {
             const c = document.createElement('canvas');
             c.width = img.naturalWidth;
@@ -94,8 +94,8 @@ const generate = (src: string, skin: number, hair: number, k: string) => {
         } catch {
             pending.delete(k);
         }
-    };
-    img.onerror = () => pending.delete(k);
+    });
+    img.addEventListener('error', () => pending.delete(k));
     img.src = src;
 };
 

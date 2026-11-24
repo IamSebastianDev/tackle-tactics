@@ -38,9 +38,10 @@ export const parseName = (file: string) => {
     return { order, artist, title };
 };
 
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
 export const musicPlugin = (dir: string, cacheDir: string): Plugin => {
     let entries: Entry[] = [];
-    const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
     const transcode = (src: string) => {
         mkdirSync(cacheDir, { recursive: true });

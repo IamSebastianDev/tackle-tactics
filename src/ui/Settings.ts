@@ -52,9 +52,9 @@ const songList = derived(combined([prefs, nowPlaying]), ([p, playing]) => {
         setPref('radioDisabled', off.has(k) ? p.radioDisabled.filter((x) => x !== k) : [...p.radioDisabled, k]);
         radio.checkCurrent();
     };
-    const on = tracks.filter((t) => !off.has(trackKey(t))).length;
+    const onCount = tracks.filter((t) => !off.has(trackKey(t))).length;
     return html`<div class="songs">
-        <div class="songs-head"><span>Songs <small>${String(on)} of ${String(tracks.length)} on · click a title to play it</small></span>
+        <div class="songs-head"><span>Songs <small>${String(onCount)} of ${String(tracks.length)} on · click a title to play it</small></span>
             <button class="ghost" ${onClick(() => { setPref('radioDisabled', []); })}>All on</button></div>
         <ul>${tracks.map((t) => {
             const k = trackKey(t);

@@ -23,6 +23,8 @@ type Overlay = { k: string; x: number; y: number; kind: OverlayKind };
 
 export { isLightKit, kitColor };
 
+const statBar = (label: string, v: number) => html`<div class="stat"><span>${label}</span><i style="--v:${v}%"></i><b>${String(v)}</b></div>`;
+
 export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?: () => void, continueLabel?: string) => {
     const m = ctl.match;
     const cfg = ctl.cfg;
@@ -383,7 +385,6 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
     const noTimer = cfg.match.timerSeconds <= 0;
     const timerStyle = derived(combined([ctl.timer, ctl.awaitingHuman]), ([t, a]) => `transform:scaleX(${a ? t : 0});${t < 0.3 ? 'background:var(--danger)' : ''}`);
 
-    const statBar = (label: string, v: number) => html`<div class="stat"><span>${label}</span><i style="--v:${v}%"></i><b>${String(v)}</b></div>`;
 
     /** Every ability of the player's classes, locked ones greyed with their unlock level. */
     const kitList = (p: Piece) => {
@@ -648,7 +649,7 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
 
     // ------------------------------------------------------------ keyboard + resize
     const lifecycle = mounted<HTMLDivElement>(() => {
-        const key = (e: KeyboardEvent) => {
+        const onKey = (e: KeyboardEvent) => {
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
             if (ctl.tip() && (e.key === 'Enter' || e.code === 'Space' || e.key === 'Escape')) { e.preventDefault(); ctl.dismissTip(); return; }
             if (ctl.lesson()?.info && e.key === 'Enter') { e.preventDefault(); ctl.nextLesson(); return; }
@@ -672,7 +673,7 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
                 if (id) ctl.useAbility(id);
             }
         };
-        window.addEventListener('keydown', key);
+        window.addEventListener('keydown', onKey);
         // palette-swapped strips arrive asynchronously: redraw when they land, warm the common ones now
         const unRecolor = recolorVersion.subscribe(() => ctl.bump());
         for (const p of m.state.pieces) prewarmPlayer(p.player.sprite, p.player, p.player.cls === 'keeper');
@@ -685,7 +686,7 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         audio.unlock();
         void ctl.run();
         return () => {
-            window.removeEventListener('keydown', key);
+            window.removeEventListener('keydown', onKey);
             window.removeEventListener('wheel', wheel);
             unRecolor();
             ctl.stop();

@@ -1,33 +1,50 @@
 {
-  "name": "tackle-tactics",
-  "version": "1.0.0",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "typecheck": "tsc",
-    "assets": "./scripts/copy-assets.sh",
-    "tauri": "tauri",
-    "desktop": "tauri dev",
-    "desktop:build": "tauri build"
-  },
-  "type": "module",
-  "dependencies": {
-    "@fontsource/barlow-condensed": "^5.3.0",
-    "@fontsource/inter": "^5.3.0",
-    "@fontsource/pixelify-sans": "^5.3.0",
-    "@fontsource/silkscreen": "^5.3.0",
-    "@fontsource/vt323": "^5.3.0",
-    "@grainular/grains": "^2.4.0",
-    "@grainular/nord": "^2.4.0",
-    "@tauri-apps/api": "^2.12.5"
-  },
-  "devDependencies": {
-    "@tauri-apps/cli": "^2.12.6",
-    "typescript": "^7.0.2",
-    "vite": "^8.3.8",
-    "vitest": "^5.1.1"
-  },
-  "private": true
+    "name": "tackle-tactics",
+    "version": "1.0.0",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "preview": "vite preview",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "typecheck": "tsc",
+        "lint": "oxlint",
+        "lint:fix": "oxlint --fix",
+        "format": "oxfmt",
+        "format:check": "oxfmt --check",
+        "rust:check": "cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test",
+        "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
+        "check:all": "npm run check && npm run rust:check",
+        "assets": "./scripts/copy-assets.sh",
+        "frames": "python3 scripts/gen-frames.py",
+        "tauri": "tauri",
+        "desktop": "tauri dev",
+        "desktop:build": "tauri build"
+    },
+    "type": "module",
+    "dependencies": {
+        "@fontsource/barlow-condensed": "^5.3.0",
+        "@fontsource/inter": "^5.3.0",
+        "@fontsource/pixelify-sans": "^5.3.0",
+        "@fontsource/silkscreen": "^5.3.0",
+        "@fontsource/vt323": "^5.3.0",
+        "@grainular/grains": "^2.4.0",
+        "@grainular/nord": "^2.4.0",
+        "@tauri-apps/api": "^2.12.5"
+    },
+    "devDependencies": {
+        "@tauri-apps/cli": "^2.12.6",
+        "@types/node": "^24.19.2",
+        "oxfmt": "^0.80.0",
+        "oxlint": "^1.95.0",
+        "typescript": "^7.0.2",
+        "vite": "^8.3.8",
+        "vitest": "^5.1.1"
+    },
+    "private": true,
+    "description": "Turn-based football tactics: a positioning game in a football kit, with a career mode. Web + Tauri desktop.",
+    "license": "UNLICENSED",
+    "engines": {
+        "node": ">=22"
+    }
 }

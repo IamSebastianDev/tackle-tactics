@@ -107,7 +107,7 @@ export const stadiumProps = (st: Stadium, cond: Conditions, kit: string, g: Geo)
     const baseY = g.T - g.C * 2.6;
     const band = 24;
     if (tiers > 0) {
-        const rows = Array.from({ length: tiers }, (_, i) => crowdRow(st, span, TILE, Math.max(0.2, st.fill - i * 0.12), rng, (i * 370) % 2400)).reverse().join('');
+        const rows = Array.from({ length: tiers }, (_, i) => crowdRow(st, span, TILE, Math.max(0.2, st.fill - i * 0.12), rng, (i * 370) % 2400)).toReversed().join('');
         const roof = k.roof ? `<div class="roof" style="--kit:${kit}"></div>` : '';
         const h = tiers * TILE + band + (k.roof ? 20 : 0);
         parts.push(bb(g.L + g.PW / 2, baseY, span, h, `--kit:${kit}`, 'stand-main',

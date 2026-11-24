@@ -25,7 +25,8 @@ describe('career', () => {
         }
         expect(userClub(c).tier).toBe(4);
         expect(c.market.length).toBe(cfg.career.market.size);
-        const [h, a] = fixtureClubs(cfg, c, today(cfg, c).kind === 'match' ? (today(cfg, c) as { fixture: never }).fixture : c.divisions[4]!.fixtures[0]!);
+        const t = today(cfg, c);
+        const [h, a] = fixtureClubs(cfg, c, t.kind === 'match' ? t.fixture : c.divisions[4]!.fixtures[0]!);
         expect(h.squad.length).toBe(11);
         expect(a.kit).not.toBe(h.kit);
     });
