@@ -607,28 +607,29 @@ export const App = () => {
             const n = k.replace('keeper_', '');
             return n[0]!.toUpperCase() + n.slice(1);
         };
+        // built once each: only the selected / clashing state and the preview kits update (no sprite rebuilds)
         const swatch = (k: string, which: 'home' | 'away' | 'keeper') => {
             const target = which === 'home' ? kit : which === 'away' ? awayKit : keeperKit;
-            return derived(combined([target, kit]), ([cur, home]) => {
-                const clash = which === 'away' && kitsClash(defaultConfig, k, home);
-                return html`<button class="kit-swatch ${cur === k ? 'on' : ''} ${clash ? 'clash' : ''}" ${attr({ disabled: clash })} title="${clash ? `${kitName(k)}: clashes with the home kit` : kitName(k)}" ${on('click', () => target.set(k))}>
-                    <span class="portrait kit-portrait"><span class="sprite still" style="${spriteStyle(defaultConfig, which === 'keeper' ? k : `${k}_player_1`, 'idle', 'down')}"></span></span>
-                    <small>${kitName(k)}</small>
-                </button>`;
-            });
+            const clash = derived(kit, (home) => which === 'away' && kitsClash(defaultConfig, k, home));
+            const cls = derived(combined([target, clash]), ([cur, c]) => `kit-swatch ${cur === k ? 'on' : ''} ${c ? 'clash' : ''}`);
+            const title = derived(clash, (c) => (c ? `${kitName(k)}: clashes with the home kit` : kitName(k)));
+            const art = spriteStyle(defaultConfig, which === 'keeper' ? k : `${k}_player_1`, 'idle', 'down');
+            return html`<button ${attr({ class: cls, disabled: clash, title })} ${on('click', () => target.set(k))}>
+                <span class="portrait kit-portrait"><span class="sprite still" style="${art}"></span></span>
+                <small>${kitName(k)}</small>
+            </button>`;
         };
-        const preview = derived(
-            combined([kit, keeperKit, shownShort, name, awayKit]),
-            ([k, gk, sh, n, ak]) => html`<div class="kit-preview">
-            <div class="kit-crest" style="--kit:${kitColor(k)}"><span>${sh}</span></div>
-            <b>${n.trim() || 'Your club'}</b>
+        const model = (source: typeof kit, sprite: (k: string) => string, anim = 'idle') =>
+            html`<span class="kit-model"><span class="sprite" ${attr({ style: derived(source, (k) => spriteStyle(defaultConfig, sprite(k), anim, 'down')) })}></span></span>`;
+        const preview = html`<div class="kit-preview">
+            <div class="kit-crest" ${attr({ style: derived(kit, (k) => `--kit:${kitColor(k)}`) })}><span>${shownShort}</span></div>
+            <b>${derived(name, (n) => n.trim() || 'Your club')}</b>
             <div class="kit-pitch">
-                ${[`${k}_player_1`, `${k}_player_2`, gk].map((sp, i) => html`<span class="kit-model"><span class="sprite" style="${spriteStyle(defaultConfig, sp, i === 2 ? 'gk_ready' : 'idle', 'down')}"></span></span>`)}
+                ${model(kit, (k) => `${k}_player_1`)}${model(kit, (k) => `${k}_player_2`)}${model(keeperKit, (k) => k, 'gk_ready')}
                 <span class="kit-away-label">Away</span>
-                ${[`${ak}_player_1`, `${ak}_player_2`].map((sp) => html`<span class="kit-model"><span class="sprite" style="${spriteStyle(defaultConfig, sp, 'idle', 'down')}"></span></span>`)}
+                ${model(awayKit, (k) => `${k}_player_1`)}${model(awayKit, (k) => `${k}_player_2`)}
             </div>
-        </div>`,
-        );
+        </div>`;
         const s = settings();
         const create = () => {
             if (career && !confirm('Start a new career? Your current save will be replaced.')) return;
@@ -674,13 +675,13 @@ export const App = () => {
                         short.set((e.target as HTMLInputElement).value.toUpperCase());
                     })} /></label>
                 </div>
-                ${$render(preview)}
+                ${preview}
                 <h4>Home kit</h4>
-                <div class="kit-grid">${kits.map(([k]) => $render(swatch(k, 'home')))}</div>
+                <div class="kit-grid">${kits.map(([k]) => swatch(k, 'home'))}</div>
                 <h4>Away kit <small>worn when the home kit clashes with the hosts'</small></h4>
-                <div class="kit-grid">${kits.map(([k]) => $render(swatch(k, 'away')))}</div>
+                <div class="kit-grid">${kits.map(([k]) => swatch(k, 'away'))}</div>
                 <h4>Goalkeeper</h4>
-                <div class="kit-grid keepers">${defaultConfig.kits.keepers.map((k) => $render(swatch(k, 'keeper')))}</div>
+                <div class="kit-grid keepers">${defaultConfig.kits.keepers.map((k) => swatch(k, 'keeper'))}</div>
             </section>
             <section class="opts">
                 <h4>Match settings</h4>
