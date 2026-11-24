@@ -3,8 +3,7 @@
  *
  * Every piece of pack art is drawn at the players' pixel scale (S = renderPx / framePx), so a fan,
  * a flag and a footballer share one pixel grid. Upright things (stands, boards, pylons, flags) are
- * billboards that follow the camera tilt: in Classic 2D (tilt 0) they simply stand on the ground
- * exactly as the art pack composes them; in tilted 3D they lean back like the players do.
+ * billboards standing on the ground exactly as the art pack composes them (top-down, y-sorted).
  *
  * Layout, outward from the pitch: corner flags → advertising boards on both touchlines → dugouts →
  * the main stand along the far touchline (tiers by ground size), end stands behind both goals,
@@ -14,7 +13,7 @@ import { createDirective, html } from '@grainular/nord';
 import { createRng } from '../rng';
 import { standTiers, type Conditions, type Stadium } from '../world/stadium';
 
-export type Geo = { L: number; T: number; PW: number; PH: number; C: number; W: number; H: number; S: number; tilt: number };
+export type Geo = { L: number; T: number; PW: number; PH: number; C: number; W: number; H: number; S: number };
 
 const GRASS = { light: 'assets/tiles/grass_001.png', dark: 'assets/tiles/grass_006.png', plainLight: 'assets/tiles/grass_003.png' };
 
@@ -109,10 +108,9 @@ export const stadiumProps = (st: Stadium, cond: Conditions, kit: string, g: Geo)
     const TILE = 128 * S; // one block of crowd (two rows of fans)
     const tiers = standTiers(st);
     const k = SIZE_KIT[st.size];
-    const flatMode = g.tilt === 0;
     const lit = cond.time !== 'day' && k.lights > 0;
     const parts = [];
-    const endDepth = flatMode ? k.ends * TILE : 0;
+    const endDepth = k.ends * TILE;
     const endGap = g.C * 3.4; // behind the goal frames
     const span = g.PW + 2 * (endGap + endDepth); // the main stand reaches round to the end stands
 
@@ -194,7 +192,7 @@ export const stadiumProps = (st: Stadium, cond: Conditions, kit: string, g: Geo)
         }
     };
     boards(g.T - g.C * 0.4, k.led, 0);
-    if (k.boardsBottom && flatMode) boards(g.T + g.PH + g.C * 1.9, false, 2);
+    if (k.boardsBottom) boards(g.T + g.PH + g.C * 1.9, false, 2);
 
     // ---- dugouts on the far side, either side of halfway, in front of the boards
     if (k.dugouts) {
@@ -229,8 +227,7 @@ export const stadiumProps = (st: Stadium, cond: Conditions, kit: string, g: Geo)
         [g.L - g.C * 4.2, baseY - g.C * 0.4],
         [g.L + g.PW + g.C * 4.2, baseY - g.C * 0.4],
     ];
-    if (k.lights === 4 && flatMode)
-        corners.push([g.L - g.C * 4.2, g.T + g.PH + g.C * 3.4], [g.L + g.PW + g.C * 4.2, g.T + g.PH + g.C * 3.4]);
+    if (k.lights === 4) corners.push([g.L - g.C * 4.2, g.T + g.PH + g.C * 3.4], [g.L + g.PW + g.C * 4.2, g.T + g.PH + g.C * 3.4]);
     if (k.lights > 0)
         for (const [x, y] of corners)
             parts.push(
@@ -246,16 +243,15 @@ export const stadiumProps = (st: Stadium, cond: Conditions, kit: string, g: Geo)
 
     // ---- the grand extras: TV gantry on halfway, big scoreboard over the right end
     if (st.size === 'grand') {
-        if (flatMode)
-            parts.push(
-                bb(
-                    g.L + g.PW / 2,
-                    g.T + g.PH + g.C * 3.3,
-                    64 * S,
-                    80 * S,
-                    `background-image:url(assets/stadium/tv_camera.png);background-size:${f1(64 * S)}px ${f1(80 * S)}px`,
-                ),
-            );
+        parts.push(
+            bb(
+                g.L + g.PW / 2,
+                g.T + g.PH + g.C * 3.3,
+                64 * S,
+                80 * S,
+                `background-image:url(assets/stadium/tv_camera.png);background-size:${f1(64 * S)}px ${f1(80 * S)}px`,
+            ),
+        );
         parts.push(
             bb(
                 g.L + g.PW + endGap + endDepth / 2,

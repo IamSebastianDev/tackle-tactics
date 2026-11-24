@@ -24,6 +24,8 @@ export type Letter = {
     choices: Choice[];
     subject?: string;
     amount?: number;
+    trainingDay?: number;
+    trainingClass?: ClassId;
 };
 export type Quest = { id: string; title: string; desc: string; target: number; progress: number; reward: number; done: boolean };
 export type Award = { season: number; title: string; who: string };
@@ -206,13 +208,15 @@ type LetterDef = {
     from: string;
     title: string;
     when: (c: Career, u: CareerClub) => boolean;
+    training?: true;
     body: (v: Vars) => string;
     choices: (v: Vars) => Choice[];
     /** Returns a one-line outcome for the news feed. */
     resolve: (choice: number, v: Vars, ctx: Ctx) => string;
 };
-type Vars = { p: Player | null; club: string; amount: number; fee: number; rival: string };
+type Vars = { p: Player | null; club: string; amount: number; fee: number; rival: string; trainingClass?: ClassId };
 type Ctx = { cfg: GameConfig; c: Career; u: CareerClub; rng: Rng; pay: (label: string, amount: number) => void };
+export type Trainee = { player: Player; cls: ClassId };
 
 const LETTERS: LetterDef[] = [
     {
@@ -241,9 +245,10 @@ const LETTERS: LetterDef[] = [
         id: 'extra',
         from: 'Your captain',
         title: 'Extra sessions',
-        when: (_c, u) => u.squad.some((p) => !p.injury),
+        when: () => true,
+        training: true,
         body: (v) =>
-            `Boss, ${v.p!.name} has been staying behind after training every night, running drills until the lanterns go out. They want permission for double sessions this week. The physio is muttering about "overcooking the goose".`,
+            `Boss, ${v.p!.name} stayed behind after today's ${v.trainingClass!} drills. They want to run them again tomorrow before the rest of the squad turns up. The physio says they've already done enough for one day.`,
         choices: () => [
             { label: 'Let them push on', hint: 'Big XP, small injury risk' },
             { label: 'Order them to rest', hint: 'Safe, slightly deflating' },
@@ -254,14 +259,36 @@ const LETTERS: LetterDef[] = [
                 shiftMorale(x.c, -2);
                 return `${p.name} rests, grumbling.`;
             }
-            const ups = gainXp(x.cfg, x.rng, p, p.cls, 90);
+            const cls = v.trainingClass ?? p.cls;
+            const ups = gainXp(x.cfg, x.rng, p, cls, 90);
             if (x.rng.chance(0.22)) {
                 p.injury = Math.max(p.injury ?? 0, 3);
                 return `${p.name} overdid it: strained something, out 3 days.${ups ? ' But they levelled up first!' : ''}`;
             }
             return ups
-                ? `${p.name}'s extra work pays off: they reach ${x.cfg.classes[p.cls].short} ${classLevel(p, p.cls)}!`
+                ? `${p.name}'s extra work pays off: they reach ${x.cfg.classes[cls].short} ${classLevel(p, cls)}!`
                 : `${p.name} banks a heap of experience.`;
+        },
+    },
+    {
+        id: 'openTraining',
+        from: 'Your groundskeeper',
+        title: 'Open training',
+        when: () => true,
+        training: true,
+        body: (v) =>
+            `Supporters gathered at the gates to watch today's drills. They'd love to come inside for the next one. The local guild has offered ${money(v.amount)} for a private coaching session at the same time. We only have one pitch, boss.`,
+        choices: (v) => [
+            { label: 'Open the gates', hint: 'The supporters lift squad morale' },
+            { label: 'Coach the guild', hint: `Earn ${money(v.amount)} for the club` },
+        ],
+        resolve: (ch, v, x) => {
+            if (ch === 0) {
+                shiftMorale(x.c, 7);
+                return 'The supporters cheered every drill. The squad left training in high spirits.';
+            }
+            x.pay('Guild coaching session', v.amount);
+            return `The guild paid ${money(v.amount)} for the coaching session.`;
         },
     },
     {
@@ -611,7 +638,7 @@ const followUp = (c: Career, kind: string, inDays: number, extra: { subject?: st
 };
 
 /** Maybe deliver a new letter (one at a time, no repeats in a season). */
-export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng) => {
+export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng, trainees: readonly Trainee[] = []) => {
     const s = story(c);
     if (s.inbox) return;
     const u = c.clubs[c.userClubId]!;
@@ -621,16 +648,19 @@ export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng) => {
     if (due) def = LETTERS.find((l) => l.id === due.kind)!;
     else {
         // situational letters are likelier when their moment comes
-        const pool = LETTERS.filter((l) => !s.seenLetters.includes(l.id) && l.when(c, u));
+        const pool = LETTERS.filter((l) => (!l.training || trainees.length > 0) && !s.seenLetters.includes(l.id) && l.when(c, u));
         const urgent = pool.filter((l) => ['minutes', 'curse', 'clearAir'].includes(l.id));
         if (!pool.length || !rng.chance(urgent.length ? 0.5 : 0.24)) return;
-        def = rng.pick(urgent.length && rng.chance(0.7) ? urgent : pool);
+        const training = pool.filter((l) => l.training);
+        const priority = urgent.length && rng.chance(0.7) ? urgent : training;
+        def = rng.pick(priority.length && (priority === urgent || rng.chance(0.5)) ? priority : pool);
     }
     const fee = cfg.career.matchFee[u.tier]!;
     const rivals = c.divisions.find((d) => d.clubs.includes(u.id))!.clubs.filter((id) => id !== u.id);
     const rival = c.clubs[s.rival && rivals.includes(s.rival) ? s.rival : rng.pick(rivals)]!.name;
     let p: Player | null = null;
     let amount = 0;
+    let trainingClass: ClassId | undefined;
     switch (def.id) {
         case 'bard':
             amount = Math.round((fee * 0.6) / 1000) * 1000;
@@ -645,8 +675,14 @@ export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng) => {
             p = rng.pick(u.squad.filter((q) => (q.injury ?? 0) >= 3));
             amount = Math.round((fee * 0.5) / 1000) * 1000;
             break;
-        case 'extra':
-            p = rng.pick(u.squad.filter((q) => !q.injury));
+        case 'extra': {
+            const trainee = rng.pick(trainees);
+            p = trainee.player;
+            trainingClass = trainee.cls;
+            break;
+        }
+        case 'openTraining':
+            amount = Math.round((fee * 0.35) / 1000) * 1000;
             break;
         case 'homesick':
             p = rng.pick(u.squad);
@@ -691,7 +727,7 @@ export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng) => {
             break;
         }
     }
-    const v: Vars = { p, club: u.name, amount, fee, rival };
+    const v: Vars = { p, club: u.name, amount, fee, rival, trainingClass };
     s.inbox = {
         id: `${def.id}-${c.season}-${c.day}`,
         kind: def.id,
@@ -701,11 +737,13 @@ export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng) => {
         choices: def.choices(v),
         subject: p?.id,
         amount,
+        trainingClass,
     };
     // stash the generated trialist so the choice can sign them
     if (def.id === 'trialist' && p) (s.inbox as Letter & { player?: Player }).player = p;
     (s.inbox as Letter & { rival?: string }).rival = rival;
     s.seenLetters.push(def.id);
+    return s.inbox;
 };
 
 /** Apply the user's answer to the pending letter; returns the outcome line. */
@@ -722,7 +760,14 @@ export const answerLetter = (
     const def = LETTERS.find((l) => l.id === letter.kind)!;
     const u = c.clubs[c.userClubId]!;
     const p = letter.player ?? u.squad.find((q) => q.id === letter.subject) ?? null;
-    const v: Vars = { p, club: u.name, amount: letter.amount ?? 0, fee: cfg.career.matchFee[u.tier]!, rival: letter.rival ?? 'a rival' };
+    const v: Vars = {
+        p,
+        club: u.name,
+        amount: letter.amount ?? 0,
+        fee: cfg.career.matchFee[u.tier]!,
+        rival: letter.rival ?? 'a rival',
+        trainingClass: letter.trainingClass,
+    };
     s.inbox = null;
     return def.resolve(choice, v, { cfg, c, u, rng, pay });
 };
@@ -813,11 +858,11 @@ export const afterTraining = (
     cfg: GameConfig,
     c: Career,
     rng: Rng,
-    newClass: boolean,
+    training: { trainees: readonly Trainee[]; newClass: boolean },
     pay: (label: string, amount: number) => void,
     news: (t: string, tone: 'good' | 'bad' | 'info') => void,
 ) => {
-    if (newClass)
+    if (training.newClass)
         bumpQuest(cfg, c, 'newclass', 1, 'add', (amount, title) => {
             pay(`Quest complete: ${title}`, amount);
             news(`Quest complete: ${title}! +${money(amount)}.`, 'good');
@@ -825,7 +870,7 @@ export const afterTraining = (
     // morale drifts back towards "settled"
     const s = story(c);
     s.morale += Math.sign(60 - s.morale);
-    maybeLetter(cfg, c, rng);
+    return maybeLetter(cfg, c, rng, training.trainees);
 };
 
 /** Season awards + reset. Returns ceremony lines. */

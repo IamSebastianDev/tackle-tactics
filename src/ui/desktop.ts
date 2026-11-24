@@ -26,6 +26,13 @@ export const setFullscreen = async (on: boolean) => {
 
 export const toggleFullscreen = () => setFullscreen(!fullscreen());
 
+/** Desktop only: let pending save writes finish, then close the window (which quits the app). */
+export const quitApp = async () => {
+    if (!isDesktop) return;
+    await (await import('../meta/storage')).whenSaved();
+    await (await win()).close();
+};
+
 /** F11 (and Ctrl/Cmd+Enter) toggle fullscreen anywhere in the game. */
 export const installDesktopKeys = () => {
     window.addEventListener('keydown', (e) => {

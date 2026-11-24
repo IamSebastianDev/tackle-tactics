@@ -21,6 +21,7 @@ import {
     simLines,
     story,
     type PlayerMatchLine,
+    type Trainee,
 } from './story';
 
 export type Fixture = { id: string; round: number; home: string; away: string; result?: [number, number] };
@@ -395,23 +396,53 @@ const poisson = (rng: Rng, lambda: number) => {
     return k - 1;
 };
 
-export const simulateScore = (cfg: GameConfig, rng: Rng, c: Career, f: Fixture, fraction = 1, userEdge = 0): [number, number] => {
+const fixtureGoalRates = (cfg: GameConfig, c: Career, f: Fixture, fraction: number, userEdge: number): [number, number] => {
     const s = cfg.career.sim;
-    validLineup(cfg, c.clubs[f.home]!);
-    validLineup(cfg, c.clubs[f.away]!);
     const h = squadOvr(cfg, c.clubs[f.home]!);
     const a = squadOvr(cfg, c.clubs[f.away]!);
     const e = userEdge * cfg.career.prep.simEdge * (f.home === c.userClubId ? 1 : f.away === c.userClubId ? -1 : 0);
     const lh = s.baseGoals * Math.pow(h / a, s.exponent) * s.home * fraction * (1 + e);
     const la = s.baseGoals * Math.pow(a / h, s.exponent) * fraction * (1 - e);
-    return [poisson(rng, lh), poisson(rng, la)];
+    return [lh, la];
+};
+
+export const simulateScore = (cfg: GameConfig, rng: Rng, c: Career, f: Fixture, fraction = 1, userEdge = 0): [number, number] => {
+    validLineup(cfg, c.clubs[f.home]!);
+    validLineup(cfg, c.clubs[f.away]!);
+    const [home, away] = fixtureGoalRates(cfg, c, f, fraction, userEdge);
+    return [poisson(rng, home), poisson(rng, away)];
+};
+
+/** Estimate a win if the remaining rounds of an active fixture are simulated. */
+export const simulatedWinChance = (cfg: GameConfig, c: Career, f: Fixture, score: readonly [number, number], fraction: number) => {
+    const [home, away] = fixtureGoalRates(cfg, c, f, fraction, 0);
+    const atHome = f.home === c.userClubId;
+    const [ours, theirs] = atHome ? [home, away] : [away, home];
+    const lead = atHome ? score[0] - score[1] : score[1] - score[0];
+    // The far tail is negligible at ordinary match scoring rates.
+    const goalLimit = (rate: number) => Math.ceil(rate + 12 * Math.sqrt(rate + 1));
+    let theirProbability = Math.exp(-theirs);
+    const theirCumulative = [theirProbability];
+    for (let goals = 1; goals <= goalLimit(theirs); goals++) {
+        theirProbability *= theirs / goals;
+        theirCumulative.push(theirCumulative[goals - 1]! + theirProbability);
+    }
+    let ourProbability = Math.exp(-ours);
+    let win = 0;
+    for (let goals = 0; goals <= goalLimit(ours); goals++) {
+        const mostTheyCanScore = goals + lead - 1;
+        if (mostTheyCanScore >= 0) win += ourProbability * (theirCumulative[mostTheyCanScore] ?? 1);
+        ourProbability *= ours / (goals + 1);
+    }
+    return Math.min(1, win);
 };
 
 // ------------------------------------------------------------------ the day loop
 
-const news = (c: Career, text: string, tone: News['tone'] = 'info') => {
-    c.news.unshift({ season: c.season, day: c.day, text, tone });
-    if (c.news.length > 80) c.news.length = 80;
+const news = (c: Career, text: string, tone: News['tone'] = 'info', day = c.day) => {
+    c.news.unshift({ season: c.season, day, text, tone });
+    // Older news can roll off, but the calendar needs the whole current season.
+    if (c.news.length > 80 && c.news[80]!.season !== c.season) c.news.length = 80;
 };
 const book = (c: Career, label: string, amount: number) => {
     const u = userClub(c);
@@ -514,7 +545,14 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
     if (today(cfg, c).kind !== 'training') return;
     const rng = careerRng(c);
     const u = userClub(c);
+    const trainees: Trainee[] = [];
+    const updates: string[] = [];
+    const announce = (text: string, tone: News['tone']) => {
+        news(c, text, tone);
+        updates.unshift(text);
+    };
     let used = 0;
+    let xp = 0;
     let newClass = false;
     for (const p of u.squad) {
         const s = c.plan[p.id];
@@ -525,23 +563,24 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
             p.injury -= heal;
             if (intensity === 'full' && rng.chance(cfg.training.aggravateChance)) {
                 p.injury += 2;
-                news(c, `${p.name} trained through the pain and made it worse.`, 'bad');
+                announce(`${p.name} trained through the pain and made it worse.`, 'bad');
             }
             if (p.injury <= 0) {
                 delete p.injury;
-                news(c, `${p.name} is fit again.`, 'good');
+                announce(`${p.name} is fit again.`, 'good');
             }
         }
         if (s && intensity) {
+            if (!p.injury) trainees.push({ player: p, cls: s.cls });
             const injuredPenalty = p.injury ? 0.5 : 1;
             const amount = Math.round(cfg.training.xp[intensity] * injuredPenalty * (0.85 + rng() * 0.3));
+            xp += amount;
             const before = classLevel(p, s.cls);
             const ups = gainXp(cfg, rng, p, s.cls, amount);
             if (ups) {
                 const lv = classLevel(p, s.cls);
                 if (before === 0) newClass = true;
-                news(
-                    c,
+                announce(
                     before === 0
                         ? `${p.name} picked up a new class: ${cfg.classes[s.cls].label}!`
                         : `${p.name} reached ${cfg.classes[s.cls].short} ${lv}.`,
@@ -561,16 +600,18 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
             }
         }
     }
-    afterTraining(
-        cfg,
-        c,
-        rng,
-        newClass,
-        (label, amount) => book(c, label, amount),
-        (text, tone) => news(c, text, tone),
-    );
+    const letter = afterTraining(cfg, c, rng, { trainees, newClass }, (label, amount) => book(c, label, amount), announce);
+    if (letter) {
+        letter.trainingDay = c.day;
+        updates.unshift(`New letter · ${letter.title}`);
+    }
+    const summary = used
+        ? `${used} training session${used === 1 ? '' : 's'} completed · ${xp} XP earned.`
+        : 'Rest day. No training sessions ran.';
+    news(c, summary);
     saveRng(c, rng);
     c.day++;
+    return { summary, updates };
 };
 
 export type SeasonCeremony = {
@@ -761,8 +802,12 @@ export const userSide = (c: Career, f: Fixture): TeamSide => (f.home === c.userC
 /** Answer the pending inbox letter with choice `idx`; returns the outcome line (also in the news). */
 export const resolveLetter = (cfg: GameConfig, c: Career, idx: number): string => {
     const rng = careerRng(c);
+    const letter = story(c).inbox;
     const out = answerLetter(cfg, c, rng, idx, (label, amount) => book(c, label, amount));
-    if (out) news(c, out, 'info');
+    if (out) {
+        if (letter?.trainingDay) news(c, `${letter.title} · ${out}`, 'info', letter.trainingDay);
+        else news(c, out, 'info');
+    }
     validLineup(cfg, userClub(c));
     saveRng(c, rng);
     return out;

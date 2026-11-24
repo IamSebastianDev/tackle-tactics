@@ -149,15 +149,6 @@ export const SettingsModal = (props: SettingsProps) => {
                         ) => html`<button class="font-opt ${p.font === f.id ? 'on' : ''}" data-font="${f.id}" ${on('click', () => setPref('font', f.id))}>
                         <b>${f.label}</b><span class="sample">Division 5 of 5 · 128k g · Run in behind</span><small>${f.note}</small></button>`,
                     )}</div></div>
-                <div class="set-row"><span>Camera<small>Classic 2D is the art's native top-down view. Tilted 3D leans the pitch back like a broadcast. From the next match.</small></span>
-                    ${seg(
-                        p.camera,
-                        [
-                            ['2d', 'Classic 2D'],
-                            ['3d', 'Tilted 3D'],
-                        ] as Array<['2d' | '3d', string]>,
-                        (v) => setPref('camera', v),
-                    )}</div>
                 <div class="set-row"><span>Auto zoom<small>The camera leans in when players crowd the ball. Wheel or +/− zoom by hand, 0 resets.</small></span>
                     ${seg(
                         p.autoZoom ? 'on' : 'off',
@@ -291,7 +282,7 @@ export const SettingsModal = (props: SettingsProps) => {
         <div class="modal-body" ${attr({ role: 'dialog', 'aria-label': 'Settings' })}>
             <header><h2>Settings</h2><button class="ghost" ${on('click', props.onClose)}>Close <kbd>Esc</kbd></button></header>
             ${$render(tabs)}
-            <div class="set-body">${$render(body)}</div>
+            <div class="modal-scroll set-body">${$render(body)}</div>
         </div>
     </div>`;
 };

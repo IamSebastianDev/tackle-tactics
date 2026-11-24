@@ -5,6 +5,7 @@ import { Playbook } from './Playbook';
 import { atmosphere, pitchSurface, stadiumProps } from './StadiumView';
 import { generateStadium } from '../world/stadium';
 import { MatchReport } from './Report';
+import { MatchRadioButton, MatchRadioControls } from './RadioUI';
 import { audio } from './audio';
 import { CONTROL_MODES, prefs, setPref } from './prefs';
 import { stageSize } from './stage';
@@ -34,7 +35,9 @@ export { isLightKit, kitColor };
 const statBar = (label: string, v: number) =>
     html`<div class="stat"><span>${label}</span><i style="--v:${v}%"></i><b>${String(v)}</b></div>`;
 
-export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?: () => void, continueLabel?: string) => {
+type MatchViewOptions = { onExit: () => void; onSettings?: () => void; finishOdds?: () => number };
+
+export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds }: MatchViewOptions) => {
     const m = ctl.match;
     const cfg = ctl.cfg;
     const { cols, rows, margin } = cfg.pitch;
@@ -50,6 +53,8 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
     const conditions = ctl.opts.conditions ?? { time: 'day' as const, weather: 'clear' as const };
     const showPlaybook = grain(false);
     const showBench = grain(false);
+    const showMusic = grain(false);
+    const exitPrompt = grain<{ chance: number; wasPaused: boolean } | null>(null);
     const benchPick = grain<{ off: string | null; on: string | null; msg: string | null }>({ off: null, on: null, msg: null });
 
     // ------------------------------------------------------------ cached reach per tick
@@ -213,11 +218,9 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             : '';
         const fx = f ? (f.x + margin) * C + C / 2 : W / 2;
         const fy = f ? (f.y + margin) * C + C / 2 : H / 2;
-        const k = cfg.camera;
         return [
             `transform-origin:${fx}px ${fy}px`,
-            `transform:translate3d(${vp.w / 2 - fx}px, ${vp.h * (k.tiltDeg ? 0.52 : 0.5) - fy}px, 0) rotateX(${k.tiltDeg}deg) scale(${k.scale * az.zoom * bias})`,
-            `--tilt:${k.tiltDeg}deg`,
+            `transform:translate(${vp.w / 2 - fx}px, ${vp.h / 2 - fy}px) scale(${cfg.camera.scale * az.zoom * bias})`,
             `width:${W}px`,
             `height:${H}px`,
             ride,
@@ -225,30 +228,22 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             .filter(Boolean)
             .join(';');
     });
-    // flat 2D needs no perspective (it would only nudge the raised layers out of register)
-    const viewportStyle = cfg.camera.tiltDeg
-        ? `perspective:${cfg.camera.perspectivePx}px;perspective-origin:${cfg.camera.originX} ${cfg.camera.originY}`
-        : '';
 
     // ------------------------------------------------------------ static pitch
     /**
-     * Goals as upright sprites, billboarded like the players (same art pack). The art's posts span
-     * ~193px from the far post (y≈35) to the near post (y≈228); it is scaled so that span matches
-     * the goal mouth as the tilted camera sees it, and anchored on the near post.
+     * Goals as upright sprites standing on the pitch like the players (same art pack). The art's posts
+     * span ~193px from the far post (y≈35) to the near post (y≈228); it is scaled so that span matches
+     * the goal mouth.
      */
     const goalSprite = (side: 'left' | 'right') => {
-        const mouth = cfg.pitch.goalWidth * C * Math.cos((cfg.camera.tiltDeg * Math.PI) / 180);
-        const base = mouth / 193;
-        // wider than tall: more visible net, no tall-cage look
+        const base = (cfg.pitch.goalWidth * C) / 193;
         const sx = base * cfg.sprites.goalScaleX;
         const sy = base * cfg.sprites.goalScaleY;
         const postX = side === 'left' ? 95 : 33;
         const anchorX = side === 'left' ? px(0) : px(0) + cols * C;
-        // The sprite's base sits on the ground (nothing below the grass), on a point chosen so the
-        // middle of the posts lines up with the middle of the mouth as the tilted camera sees it.
-        const cosT = Math.cos((cfg.camera.tiltDeg * Math.PI) / 180);
+        // the sprite's base sits on the ground, placed so the middle of the posts lines up with the mouth
         const midY = (35 + 228) / 2;
-        const anchorY = px(gTop) + (cfg.pitch.goalWidth * C) / 2 + ((256 - midY) * sy) / cosT;
+        const anchorY = px(gTop) + (cfg.pitch.goalWidth * C) / 2 + (256 - midY) * sy;
         const w = 128 * sx;
         const h = 256 * sy;
         const box = `left:${-postX * sx}px;top:${-h}px;width:${w}px;height:${h}px`;
@@ -279,7 +274,7 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             const dy = Math.sqrt(Math.max(0, r * r - (edge - sx) ** 2));
             return `<path d="M ${edge} ${midY - dy} A ${r} ${r} 0 0 ${left ? 1 : 0} ${edge} ${midY + dy}" />`;
         };
-        const stripes = pitchSurface(stadium, { L, T, PW, PH, C, W, H, S: 1, tilt: 0 });
+        const stripes = pitchSurface(stadium, { L, T, PW, PH, C, W, H, S: 1 });
         return `${stripes}
         <svg class="lines" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
           <rect x="${L}" y="${T}" width="${PW}" height="${PH}" />
@@ -538,16 +533,29 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
     const laneOf = (id: AbilityId): Lane => (abilityDef(cfg, id).phase === 'act' ? 'after' : 'before');
     /** What arming the ability asks of you next. */
     const kindOf = (id: AbilityId) =>
-        MOVE_MODES.includes(id) ? 'Pick a cell' : KICK_MODES.includes(id) ? 'Aim a kick' : TARGET_MODES.includes(id) ? 'Pick a player' : 'Instant';
+        MOVE_MODES.includes(id)
+            ? 'Pick a cell'
+            : KICK_MODES.includes(id)
+              ? 'Aim a kick'
+              : TARGET_MODES.includes(id)
+                ? 'Pick a player'
+                : 'Instant';
     const infoFor = grain<AbilityId | null>(null);
     ctl.awaitingHuman.subscribe(() => infoFor.set(null));
     /** While an ability is armed: what to click, and a way out. */
     const armedBar = derived(combined([ctl.mode, ctl.awaitingHuman]), ([mode, awaiting]) => {
         if (!mode || !awaiting) return html``;
         const a = abilityDef(cfg, mode);
-        const what = MOVE_MODES.includes(mode) ? 'Click a highlighted cell' : KICK_MODES.includes(mode) ? 'Aim with the mouse, click to kick' : 'Click a highlighted player';
+        const what = MOVE_MODES.includes(mode)
+            ? 'Click a highlighted cell'
+            : KICK_MODES.includes(mode)
+              ? 'Aim with the mouse, click to kick'
+              : 'Click a highlighted player';
         return html`<div class="armed-bar"><span class="ic">${a.icon}</span><b>${a.label}</b><span>${what}</span>
-            <button class="ghost" ${on('click', () => { ctl.mode.set(null); ctl.bump(); })}>Cancel <kbd>Esc</kbd></button></div>`;
+            <button class="ghost" ${on('click', () => {
+                ctl.mode.set(null);
+                ctl.bump();
+            })}>Cancel <kbd>Esc</kbd></button></div>`;
     });
 
     const phaseAbilities = (p: Piece) => {
@@ -588,7 +596,17 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             const k = keyed.indexOf(id) + 1;
             const st = armed ? 'armed' : !inLane ? 'later' : cd > 0 ? 'wait' : reason ? 'blocked' : 'ready';
             const label =
-                st === 'armed' ? 'Armed' : st === 'later' ? (nowLane === 'before' ? 'After you move' : 'Before moving only') : st === 'wait' ? `Recharging · ${cd}` : st === 'blocked' ? reason : 'Ready';
+                st === 'armed'
+                    ? 'Armed'
+                    : st === 'later'
+                      ? nowLane === 'before'
+                          ? 'After you move'
+                          : 'Before moving only'
+                      : st === 'wait'
+                        ? `Recharging · ${cd}`
+                        : st === 'blocked'
+                          ? reason
+                          : 'Ready';
             const enter = on('mouseenter', () => {
                 infoFor.set(id);
                 if (st === 'ready') ctl.preview.set(id);
@@ -727,12 +745,44 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             html`<button class="ghost focus-chip" title="Which of your players ask for orders" ${on('click', () => ctl.cycleControl())}>Focus: ${CONTROL_MODES.find((c) => c.id === p.controlMode)!.label} <kbd>F</kbd></button>`,
     );
 
-    const muteChip = derived(
-        prefs,
-        (p) =>
-            html`<button class="set-btn" title="Mute (M)" ${on('click', () => setPref('muted', !p.muted))}>${p.muted ? '♪̸' : '♪'}</button>`,
-    );
-    const report = derived(ctl.report, (r) => (r ? MatchReport(ctl, onExit, continueLabel) : html``));
+    const requestExit = () => {
+        if (!finishOdds || m.state.over) return onExit();
+        const wasPaused = ctl.paused();
+        ctl.paused.set(true);
+        showMusic.set(false);
+        exitPrompt.set({ chance: finishOdds(), wasPaused });
+    };
+    const cancelExit = () => {
+        const prompt = exitPrompt();
+        if (!prompt) return;
+        exitPrompt.set(null);
+        ctl.paused.set(prompt.wasPaused);
+    };
+    const focusCancel = mounted<HTMLButtonElement>((button) => {
+        const previous = document.activeElement;
+        button.focus();
+        return () => {
+            if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+        };
+    });
+    const exitDialog = derived(exitPrompt, (prompt) => {
+        if (!prompt) return html``;
+        const percent = prompt.chance * 100;
+        const chance = percent > 0 && percent < 1 ? '<1%' : percent < 100 && percent > 99 ? '>99%' : `${Math.round(percent)}%`;
+        return html`<div class="modal" ${on('click', (e) => {
+            if (e.target === e.currentTarget) cancelExit();
+        })}>
+            <div class="modal-body match-exit" role="dialog" aria-modal="true" aria-labelledby="match-exit-title">
+                <header><h2 id="match-exit-title">Leave match?</h2></header>
+                <div class="modal-scroll">
+                    <p>The rest of the match will be simulated from the current score. The final result will count in your career.</p>
+                    <div class="match-exit-odds"><strong>${chance}</strong><span>Estimated chance of winning if simulated</span></div>
+                </div>
+                <footer><button class="ghost" ${focusCancel} ${on('click', cancelExit)}>Keep playing</button><button class="warn" ${on('click', onExit)}>Simulate and leave</button></footer>
+            </div>
+        </div>`;
+    });
+    const report = derived(ctl.report, (r) => (r ? MatchReport(ctl, onExit, finishOdds ? 'Back to the club' : 'Back to menu') : html``));
 
     const minimap = derived(ctl.tick, () => {
         const s = 4;
@@ -782,25 +832,27 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         };
         return html`<div class="modal-body bench-panel">
             <header><h2>Bench · ${club(team).short}</h2><span class="subs-left">${String(left)} of ${String(cfg.subs.max)} substitutions left</span><button class="ghost" ${on('click', () => showBench.set(false))}>Close <kbd>Esc</kbd></button></header>
-            <div class="bench-grid">
-                <section><h4>On the pitch <small>tiredest first</small></h4><ul class="bench-list">${onPitch.map(
-                    (
-                        p,
-                    ) => html`<li class="${pick.off === p.id ? 'on' : ''}" ${on('click', () => benchPick.set({ ...pick, off: p.id, msg: null }))}>
-                    <div class="sprite still" style="${spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player)}"></div>
-                    <b>#${String(p.player.number)} ${p.player.name}</b><span class="cl">${cfg.classes[p.player.cls].short}</span>${staminaBar(p.stamina)}<span class="num">${String(Math.round(p.stamina))}</span></li>`,
-                )}</ul></section>
-                <section><h4>Bench</h4>${
-                    bench.length
-                        ? html`<ul class="bench-list">${bench.map(
-                              (
-                                  p,
-                              ) => html`<li class="${pick.on === p.id ? 'on' : ''}" ${on('click', () => benchPick.set({ ...pick, on: p.id, msg: null }))}>
-                    <div class="sprite still" style="${spriteStyle(cfg, p.sprite, 'idle', 'down', p)}"></div>
-                    <b>#${String(p.number)} ${p.name}</b><span class="cl">${classLabel(cfg, p)}</span><span class="num">Lv ${String(p.level)}</span></li>`,
-                          )}</ul>`
-                        : html`<p class="muted">Nobody left on the bench.</p>`
-                }</section>
+            <div class="modal-scroll">
+                <div class="bench-grid">
+                    <section><h4>On the pitch <small>tiredest first</small></h4><ul class="bench-list">${onPitch.map(
+                        (
+                            p,
+                        ) => html`<li class="${pick.off === p.id ? 'on' : ''}" ${on('click', () => benchPick.set({ ...pick, off: p.id, msg: null }))}>
+                        <div class="sprite still" style="${spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player)}"></div>
+                        <b>#${String(p.player.number)} ${p.player.name}</b><span class="cl">${cfg.classes[p.player.cls].short}</span>${staminaBar(p.stamina)}<span class="num">${String(Math.round(p.stamina))}</span></li>`,
+                    )}</ul></section>
+                    <section><h4>Bench</h4>${
+                        bench.length
+                            ? html`<ul class="bench-list">${bench.map(
+                                  (
+                                      p,
+                                  ) => html`<li class="${pick.on === p.id ? 'on' : ''}" ${on('click', () => benchPick.set({ ...pick, on: p.id, msg: null }))}>
+                        <div class="sprite still" style="${spriteStyle(cfg, p.sprite, 'idle', 'down', p)}"></div>
+                        <b>#${String(p.number)} ${p.name}</b><span class="cl">${classLabel(cfg, p)}</span><span class="num">Lv ${String(p.level)}</span></li>`,
+                              )}</ul>`
+                            : html`<p class="muted">Nobody left on the bench.</p>`
+                    }</section>
+                </div>
             </div>
             <footer class="bench-foot">
                 <span class="muted">${pick.msg ?? why ?? (!mine ? 'Watching: the AI manages its own bench.' : !awaiting ? 'Substitutions happen on your turn.' : 'Tired players move less (under 50) and react worse (under 25). Pick one off, one on.')}</span>
@@ -812,6 +864,15 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
     // ------------------------------------------------------------ keyboard + resize
     const lifecycle = mounted<HTMLDivElement>(() => {
         const onKey = (e: KeyboardEvent) => {
+            if (exitPrompt()) {
+                if (e.key === 'Escape') cancelExit();
+                return;
+            }
+            if (showMusic() && e.key === 'Escape') {
+                showMusic.set(false);
+                return;
+            }
+            if (e.target instanceof Element && e.target.closest('.match-radio')) return;
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
             if (ctl.tip() && (e.key === 'Enter' || e.code === 'Space' || e.key === 'Escape')) {
                 e.preventDefault();
@@ -846,7 +907,11 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
                 if (id) ctl.useAbility(id);
             }
         };
+        const closeMusic = (e: PointerEvent) => {
+            if (showMusic() && e.target instanceof Element && !e.target.closest('.match-radio')) showMusic.set(false);
+        };
         window.addEventListener('keydown', onKey);
+        window.addEventListener('pointerdown', closeMusic);
         // palette-swapped strips arrive asynchronously: redraw when they land, warm the common ones now
         const unRecolor = recolorVersion.subscribe(() => ctl.bump());
         for (const p of m.state.pieces) prewarmPlayer(p.player.sprite, p.player, p.player.cls === 'keeper');
@@ -860,14 +925,15 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         void ctl.run();
         return () => {
             window.removeEventListener('keydown', onKey);
+            window.removeEventListener('pointerdown', closeMusic);
             window.removeEventListener('wheel', wheel);
             unRecolor();
             ctl.stop();
         };
     });
 
-    return html`<div class="match ${cfg.camera.tiltDeg ? 'cam-3d' : 'cam-2d'}" ${lifecycle}>
-        <div ${attr({ class: shakeClass, style: viewportStyle })}>
+    const matchContent = html`<div ${attr({ inert: derived(exitPrompt, (prompt) => !!prompt) })}>
+        <div ${attr({ class: shakeClass })}>
             <div class="world" ${attr({ style: camera })}>
                 <div class="pitch cond-${stadium.condition}" style="width:${W}px;height:${H}px" ${pitchLayer}></div>
                 <div class="grid" style="width:${W}px;height:${H}px" ${gridLayer}></div>
@@ -892,7 +958,7 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
                         )}
                 </div>
                 <div class="tokens">
-                    ${stadiumProps(stadium, conditions, kitColor(club(0).kit), { L: px(0), T: px(0), PW: cols * C, PH: rows * C, C, W, H, S: cfg.sprites.renderPx / cfg.sprites.framePx, tilt: cfg.camera.tiltDeg })}
+                    ${stadiumProps(stadium, conditions, kitColor(club(0).kit), { L: px(0), T: px(0), PW: cols * C, PH: rows * C, C, W, H, S: cfg.sprites.renderPx / cfg.sprites.framePx })}
                     ${goalSprite('left')}${goalSprite('right')}
                     ${$each(() => m.state.pieces)
                         .$withKey((p) => p.id)
@@ -916,9 +982,9 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         </div>
 
         <header class="hud-top">
-            <div class="team t0 ${isLightKit(club(0).kit) ? 'light' : ''}" style="--kit:${kitColor(club(0).kit)}"><span class="kit"></span>${club(0).name}${ctl.isHuman(0) ? html`<em>you</em>` : html``}</div>
+            <div class="team t0 ${isLightKit(club(0).kit) ? 'light' : ''}" style="--kit:${kitColor(club(0).kit)}"><span class="team-name">${club(0).name}</span>${ctl.isHuman(0) ? html`<em>you</em>` : html``}</div>
             <div class="score"><b>${scoreText(0)}</b><span>–</span><b>${scoreText(1)}</b></div>
-            <div class="team t1 ${isLightKit(club(1).kit) ? 'light' : ''}" style="--kit:${kitColor(club(1).kit)}">${ctl.isHuman(1) ? html`<em>you</em>` : html``}${club(1).name}<span class="kit"></span></div>
+            <div class="team t1 ${isLightKit(club(1).kit) ? 'light' : ''}" style="--kit:${kitColor(club(1).kit)}">${ctl.isHuman(1) ? html`<em>you</em>` : html``}<span class="team-name">${club(1).name}</span></div>
             <div class="round">${roundText}</div>
             ${noTimer ? html`<div class="round notimer">No timer · take your time</div>` : html`<div class="timer"><i ${attr({ style: timerStyle })}></i></div>`}
         </header>
@@ -936,14 +1002,15 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             </div>
         </aside>
         <aside class="hud-right">
-            <div class="tools">
-                <button class="exit" title="Leave the match" ${on('click', onExit)}>Menu</button>
-                <button class="pb-btn" title="Playbook (H)" ${on('click', () => showPlaybook.update((v) => !v))}>?</button>
-                <button class="set-btn" title="Bench & substitutions (B)" ${on('click', () => showBench.update((v) => !v))}>⇄</button>
-                <button class="set-btn" title="Pause (P)" ${on('click', () => ctl.togglePause())}>❚❚</button>
-                ${$render(muteChip)}
-                ${onSettings ? html`<button class="set-btn" title="Settings" ${on('click', onSettings)}>⚙</button>` : html``}
+            <div class="tools" role="group" aria-label="Match controls">
+                <button type="button" class="exit" title="Leave the match" ${on('click', requestExit)}>Menu</button>
+                ${MatchRadioButton(showMusic)}
+                <button type="button" title="Playbook (H)" aria-label="Playbook" ${on('click', () => showPlaybook.update((v) => !v))}>?</button>
+                <button type="button" title="Bench & substitutions (B)" aria-label="Bench and substitutions" ${on('click', () => showBench.update((v) => !v))}>⇄</button>
+                <button type="button" title="Pause (P)" aria-label="Pause" ${on('click', () => ctl.togglePause())}>❚❚</button>
+                ${onSettings ? html`<button type="button" title="Settings" aria-label="Settings" ${on('click', onSettings)}>⚙</button>` : html``}
             </div>
+            ${$if(showMusic).$then(MatchRadioControls)}
             ${$render(focusChip)}
             ${$render(minimap)}${$render(queue)}${$render(log)}</aside>
         <footer class="hud-bottom">
@@ -957,7 +1024,7 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             () => html`<div class="modal" ${on('click', (e) => {
                 if (e.target === e.currentTarget) showPlaybook.set(false);
             })}>
-            <div class="modal-body"><header><h2>Playbook</h2><button class="ghost" ${on('click', () => showPlaybook.set(false))}>Close <kbd>Esc</kbd></button></header>${Playbook(cfg)}</div>
+            <div class="modal-body"><header><h2>Playbook</h2><button class="ghost" ${on('click', () => showPlaybook.set(false))}>Close <kbd>Esc</kbd></button></header><div class="modal-scroll">${Playbook(cfg)}</div></div>
         </div>`,
         )}
         ${$if(showBench).$then(
@@ -973,4 +1040,5 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         ${$render(banner)}
         ${$render(report)}
     </div>`;
+    return html`<div class="match" ${lifecycle}>${matchContent}${$render(exitDialog)}</div>`;
 };

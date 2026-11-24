@@ -55,40 +55,42 @@ export const MatchReport = (ctl: MatchController, onContinue: () => void, contin
 
     return html`<div class="modal report-modal">
         <div class="modal-body report">
-            <div class="report-head">
-                <div class="rteam ${isLightKit(clubs[0].kit) ? 'light' : ''}" style="--kit:${kitColor(clubs[0].kit)}">${clubs[0].name}</div>
-                <div class="rscore">${String(a)}<span>–</span>${String(b)}</div>
-                <div class="rteam ${isLightKit(clubs[1].kit) ? 'light' : ''}" style="--kit:${kitColor(clubs[1].kit)}">${clubs[1].name}</div>
-            </div>
-            <h2 class="verdict">${verdict}</h2>
-            <p class="ref-line">Referee ${m.state.referee.name} · ${m.cfg.referee.styles[m.state.referee.style].label} · ${String([...s.players.values()].reduce((n, l) => n + l.fouls, 0))} fouls</p>
-            <div class="report-grid">
-                <section>
-                    <h4>Goals</h4>
-                    ${s.goals.length ? html`<ul class="goals">${s.goals.map((g) => html`<li class="t${String(g.team)}"><b>${String(g.minute)}'</b> ${name(g.scorer)}${g.how === 'penalty' ? ' (pen)' : g.how === 'header' ? ' (header)' : ''}${g.assist ? html`<em> · assist ${name(g.assist)}</em>` : html``}</li>`)}</ul>` : html`<p class="muted">No goals. The defences won the day.</p>`}
-                    <h4>Match stats</h4>
-                    <div class="rbars">
-                        ${bar('Possession', t[0].possession, t[1].possession, (v) => `${v}%`)}
-                        ${bar('Shots', t[0].shots, t[1].shots)}
-                        ${bar('On target', t[0].onTarget, t[1].onTarget)}
-                        ${bar('Passes completed', t[0].passesOk, t[1].passesOk)}
-                        ${bar('Tackles won', t[0].tacklesWon, t[1].tacklesWon)}
-                        ${bar('Saves', t[0].saves, t[1].saves)}
-                    </div>
-                </section>
-                <section class="motm">
-                    <h4>Man of the Match</h4>
-                    ${
-                        motm
-                            ? html`<div class="motm-card">
-                        <div class="podium"><div class="sprite" style="${spriteStyle(ctl.cfg, motm.player.sprite, 'celebrate', 'down', motm.player)};width:128px;height:128px;background-size:${String((ctl.cfg.animFrames.celebrate ?? 12) * 128)}px 128px;--strip:${String((ctl.cfg.animFrames.celebrate ?? 12) * 128)}px"></div></div>
-                        <b>${motm.player.name}</b><span>${clubs[motm.team].name}</span><em class="rating r-great">${s.rating(motm).toFixed(1)}</em>
-                    </div>`
-                            : html``
-                    }
-                </section>
-                <section><h4>${clubs[0].short} ratings</h4>${ratings(0)}</section>
-                <section><h4>${clubs[1].short} ratings</h4>${ratings(1)}</section>
+            <div class="modal-scroll">
+                <div class="report-head">
+                    <div class="rteam ${isLightKit(clubs[0].kit) ? 'light' : ''}" style="--kit:${kitColor(clubs[0].kit)}">${clubs[0].name}</div>
+                    <div class="rscore">${String(a)}<span>–</span>${String(b)}</div>
+                    <div class="rteam ${isLightKit(clubs[1].kit) ? 'light' : ''}" style="--kit:${kitColor(clubs[1].kit)}">${clubs[1].name}</div>
+                </div>
+                <h2 class="verdict">${verdict}</h2>
+                <p class="ref-line">Referee ${m.state.referee.name} · ${m.cfg.referee.styles[m.state.referee.style].label} · ${String([...s.players.values()].reduce((n, l) => n + l.fouls, 0))} fouls</p>
+                <div class="report-grid">
+                    <section>
+                        <h4>Goals</h4>
+                        ${s.goals.length ? html`<ul class="goals">${s.goals.map((g) => html`<li class="t${String(g.team)}"><b>${String(g.minute)}'</b> ${name(g.scorer)}${g.how === 'penalty' ? ' (pen)' : g.how === 'header' ? ' (header)' : ''}${g.assist ? html`<em> · assist ${name(g.assist)}</em>` : html``}</li>`)}</ul>` : html`<p class="muted">No goals. The defences won the day.</p>`}
+                        <h4>Match stats</h4>
+                        <div class="rbars">
+                            ${bar('Possession', t[0].possession, t[1].possession, (v) => `${v}%`)}
+                            ${bar('Shots', t[0].shots, t[1].shots)}
+                            ${bar('On target', t[0].onTarget, t[1].onTarget)}
+                            ${bar('Passes completed', t[0].passesOk, t[1].passesOk)}
+                            ${bar('Tackles won', t[0].tacklesWon, t[1].tacklesWon)}
+                            ${bar('Saves', t[0].saves, t[1].saves)}
+                        </div>
+                    </section>
+                    <section class="motm">
+                        <h4>Man of the Match</h4>
+                        ${
+                            motm
+                                ? html`<div class="motm-card">
+                            <div class="podium"><div class="sprite" style="${spriteStyle(ctl.cfg, motm.player.sprite, 'celebrate', 'down', motm.player)};width:128px;height:128px;background-size:${String((ctl.cfg.animFrames.celebrate ?? 12) * 128)}px 128px;--strip:${String((ctl.cfg.animFrames.celebrate ?? 12) * 128)}px"></div></div>
+                            <b>${motm.player.name}</b><span>${clubs[motm.team].name}</span><em class="rating r-great">${s.rating(motm).toFixed(1)}</em>
+                        </div>`
+                                : html``
+                        }
+                    </section>
+                    <section><h4>${clubs[0].short} ratings</h4>${ratings(0)}</section>
+                    <section><h4>${clubs[1].short} ratings</h4>${ratings(1)}</section>
+                </div>
             </div>
             <footer><button class="primary" ${on('click', onContinue)}>${continueLabel} →</button></footer>
         </div>

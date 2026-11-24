@@ -3,6 +3,7 @@ import { grain } from '@grainular/grains';
 
 export type FontPreset = 'broadcast' | 'arcade' | 'terminal' | 'clean';
 export type AiSpeed = 'fast' | 'normal' | 'slow';
+export type RadioPosition = { right: number; bottom: number };
 /** Which of your players ask for orders: everyone, those near the ball, or only the key duels. */
 export type ControlMode = 'all' | 'near' | 'key';
 export type Prefs = {
@@ -21,8 +22,6 @@ export type Prefs = {
     autoZoom: boolean;
     /** Draw zones of control during your turns. */
     showZoc: boolean;
-    /** Classic 2D: the art pack's native top-down projection. 3D: tilted broadcast camera. */
-    camera: '2d' | '3d';
     /** The in-game radio (src/ui/radio.ts). */
     radioOn: boolean;
     radioVolume: number;
@@ -32,6 +31,8 @@ export type Prefs = {
     radioDisabled: string[];
     /** The floating radio player is folded down to its ♫ button. */
     radioCollapsed: boolean;
+    /** Radio offsets in logical stage pixels, or null for the default corner. */
+    radioPosition: RadioPosition | null;
 };
 
 export const UI_SCALES = [0.85, 1, 1.15, 1.3, 1.5];
@@ -70,12 +71,12 @@ const DEFAULTS: Prefs = {
     tipsSeen: [],
     autoZoom: true,
     showZoc: true,
-    camera: '2d',
     radioOn: true,
     radioVolume: 0.6,
     radioInMatch: 'quiet',
     radioDisabled: [],
     radioCollapsed: false,
+    radioPosition: null,
 };
 
 const load = (): Prefs => {

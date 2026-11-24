@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultConfig } from '../src/config';
+import { defaultConfig, withOverrides } from '../src/config';
 import {
     autoLineup,
     buy,
@@ -12,6 +12,7 @@ import {
     resolveLetter,
     sell,
     simulateScore,
+    simulatedWinChance,
     table,
     today,
     trainingDay,
@@ -25,6 +26,21 @@ const cfg = defaultConfig;
 const settings = { timerSeconds: 10, rounds: 30, difficulty: 'normal' as const, timeoutPolicy: 'lose' as const };
 
 describe('career', () => {
+    it('estimates a simulated finish from the current score and the player’s side', () => {
+        const oddsCfg = withOverrides({ career: { sim: { baseGoals: 2, exponent: 0, home: 0 } } });
+        const c = newCareer(oddsCfg, 42, settings);
+        const opponent = divisionOf(c, c.userClubId).clubs.find((id) => id !== c.userClubId)!;
+        const home = { id: 'home', round: 0, home: c.userClubId, away: opponent };
+        const away = { ...home, home: opponent, away: c.userClubId };
+        const savedRng = c.rngState;
+
+        expect(simulatedWinChance(oddsCfg, c, home, [0, 0], 0.5)).toBe(0);
+        expect(simulatedWinChance(oddsCfg, c, home, [1, 0], 0.5)).toBeCloseTo(Math.exp(-1), 10);
+        expect(simulatedWinChance(oddsCfg, c, away, [0, 0], 0.5)).toBeCloseTo(1 - Math.exp(-1), 10);
+        expect(simulatedWinChance(oddsCfg, c, away, [0, 2], 0)).toBe(1);
+        expect(c.rngState).toBe(savedRng);
+    });
+
     it('builds a 5×10 pyramid with full squads, fixtures and a market', () => {
         const c = newCareer(cfg, 42, settings);
         expect(c.divisions.length).toBe(5);
@@ -43,6 +59,26 @@ describe('career', () => {
         const [h, a] = fixtureClubs(cfg, c, t.kind === 'match' ? t.fixture : c.divisions[4]!.fixtures[0]!);
         expect(h.squad.length).toBe(11);
         expect(a.kit).not.toBe(h.kit);
+    });
+
+    it('records session and rest reports on the completed days even with a full news feed', () => {
+        const c = newCareer(cfg, 42, settings);
+        const p = userClub(c).squad[0]!;
+        c.plan = { [p.id]: { cls: p.cls, intensity: 'light' } };
+        expect(trainingDay(cfg, c)).toBeUndefined();
+        playMatchday(cfg, c, { score: [0, 0], knocks: {}, played: [] });
+        c.news = Array.from({ length: 80 }, (_, i) => ({ season: c.season, day: 1, text: `Entry ${i}`, tone: 'info' }));
+
+        const day = c.day;
+        const report = trainingDay(cfg, c)!;
+        expect(report.summary).toMatch(/^1 training session completed · \d+ XP earned\.$/);
+        expect(c.news[0]).toMatchObject({ season: c.season, day, text: report.summary });
+
+        c.plan = {};
+        const rest = trainingDay(cfg, c)!;
+        expect(c.news[0]).toMatchObject({ season: c.season, day: day + 1, text: 'Rest day. No training sessions ran.' });
+        expect(rest.summary).toBe(c.news[0]!.text);
+        expect(c.news).toHaveLength(82);
     });
 
     it('plays three seasons headless: money flows, players grow, promotion/relegation move clubs', () => {

@@ -27,6 +27,7 @@ import {
     wageBill,
     type Career,
     type CareerClub,
+    type Fixture,
     type Intensity,
     type SeasonCeremony,
 } from '../../meta/career';
@@ -42,10 +43,12 @@ import { Playbook } from '../Playbook';
 import { recolorVersion } from '../recolor';
 import { spriteStyle } from '../sprites';
 import { prefs, setPref } from '../prefs';
+import { RadioPlayer } from '../RadioUI';
 
-type Tab = 'overview' | 'squad' | 'tactics' | 'training' | 'league' | 'market' | 'finances' | 'playbook';
+type Tab = 'overview' | 'season' | 'squad' | 'tactics' | 'training' | 'league' | 'market' | 'finances' | 'playbook';
 const TABS: Array<[Tab, string, string]> = [
     ['overview', 'Overview', '◈'],
+    ['season', 'Season Plan', '▤'],
     ['squad', 'Squad', '☰'],
     ['tactics', 'Tactics', '▦'],
     ['training', 'Training', '⚒'],
@@ -79,6 +82,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
     const modal = grain<{ title: string; lines: string[] } | null>(notice);
     const flash = grain<string | null>(null);
     const leagueTier = grain<number>(userClub(c).tier);
+    const planDay = grain<number | null>(null);
     const marketFilter = grain<ClassId | 'all'>('all');
     const slotPick = grain<number | null>(null);
     const letterOpen = grain(false);
@@ -99,6 +103,12 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
 
     const u = () => userClub(c);
     const club = (id: string) => c.clubs[id]!;
+    const clubFixtures = () => divisionOf(c, c.userClubId).fixtures.filter((f) => f.home === c.userClubId || f.away === c.userClubId);
+    const clubResult = (f: Fixture) => {
+        if (!f.result) return null;
+        const [gf, ga] = f.home === c.userClubId ? f.result : [f.result[1], f.result[0]];
+        return { gf, ga, outcome: gf > ga ? 'win' : gf < ga ? 'loss' : 'draw' } as const;
+    };
     const portrait = (cl: CareerClub, p: Player, size = 40) =>
         html`<span class="portrait-s" style="width:${size}px;height:${size}px"><span class="sprite still" style="${portraitStyle(cl, p, size)}"></span></span>`;
     /** Crop the sprite to head & shoulders: draw it larger than the frame and shift it up-left. */
@@ -107,8 +117,11 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
         const frames = cfg.animFrames.idle ?? 12;
         return `${spriteStyle(cfg, spriteFor(cl, p), 'idle', 'down', p)};width:${big}px;height:${big}px;background-size:${frames * big}px ${big}px;left:${Math.round((size - big) / 2)}px;top:${Math.round(-big * 0.14)}px`;
     };
-    const stars = (p: Player) =>
-        html`<span class="stars" title="Potential: growth per level-up">${'★'.repeat(potentialStars(cfg, p))}<i>${'★'.repeat(5 - potentialStars(cfg, p))}</i></span>`;
+    const stars = (p: Player) => {
+        const rating = potentialStars(cfg, p);
+        const label = `Potential ${rating} out of 5 · growth per level-up`;
+        return html`<span class="stars" role="img" aria-label="${label}" title="${label}">${'★'.repeat(rating)}<i>${'★'.repeat(5 - rating)}</i></span>`;
+    };
 
     // ------------------------------------------------------------ top bar
     const todayInfo = () => {
@@ -139,22 +152,10 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
             return;
         }
         if (t.kind === 'training') {
-            const before = c.news.length;
-            const sessions = Math.min(cfg.training.slots, u().squad.filter((p) => c.plan[p.id]).length);
-            trainingDay(cfg, c);
+            const report = trainingDay(cfg, c);
+            if (!report) return;
             changed();
-            const fresh = c.news.slice(0, Math.max(0, c.news.length - before));
-            toast(
-                `Training: ${sessions} session${sessions === 1 ? '' : 's'} done.${
-                    fresh.length
-                        ? ' ' +
-                          fresh
-                              .map((n) => n.text)
-                              .slice(0, 3)
-                              .join(' · ')
-                        : ''
-                }`,
-            );
+            toast([report.summary, ...report.updates.slice(0, 3)].join(' '));
             return;
         }
         const result = actions.endSeason();
@@ -164,53 +165,12 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
     };
     const preview = grain(false);
 
-    /** The season as a strip of day tiles: matchdays (with your result), training days, today. */
-    const calendar = () => {
-        const k = cfg.career.daysPerMatchday;
-        const div = divisionOf(c, u().id);
-        return html`<div class="calendar">${Array.from({ length: seasonDays(cfg) }, (_, i) => {
-            const d = i + 1;
-            const isMatch = (d - 1) % k === 0;
-            let res = '';
-            let tip = `Day ${d}: training`;
-            if (isMatch) {
-                const round = (d - 1) / k;
-                const f = div.fixtures.find((x) => x.round === round && (x.home === u().id || x.away === u().id));
-                tip = `Day ${d}: matchday ${round + 1}`;
-                if (f) {
-                    const home = f.home === u().id;
-                    tip += ` ${home ? 'vs' : 'at'} ${club(home ? f.away : f.home).name}`;
-                    if (f.result) {
-                        const [gf, ga] = home ? f.result : [f.result[1], f.result[0]];
-                        res = gf > ga ? 'win' : gf < ga ? 'loss' : 'draw';
-                        tip += ` (${gf}–${ga})`;
-                    }
-                }
-            }
-            const cls = `d ${isMatch ? 'm' : ''} ${d < c.day ? 'past' : ''} ${d === c.day ? 'now' : ''} ${res}`;
-            return html`<div class="${cls}" data-tip="${tip}">${isMatch ? html`<img src="assets/props/ball_classic.png" alt="" />` : html`<i>⚒</i>`}<span>${String(d)}</span></div>`;
-        })}</div>`;
-    };
-
-    const moraleMeter = () => {
-        const m = story(c).morale;
-        const pips = Math.round(m / 10);
-        return html`<div class="money morale" data-tip="Team morale ${String(m)}/100. Wins, quests and good choices lift it; it sharpens reactions and kicks a little (±10%).">
-            <span>Morale</span><b>${moraleLabel(m)}</b><i class="pips">${Array.from({ length: 10 }, (_, k) => html`<em class="${k < pips ? 'on' : ''} ${m < 40 ? 'low' : m >= 70 ? 'high' : ''}"></em>`)}</i></div>`;
-    };
-
+    const radioPlayer = RadioPlayer();
     const topbar = derived(version, () => {
         const t = todayInfo();
-        const cl = u();
         return html`<header class="hub-top">
-            <div class="when"><b>Season ${String(c.season)}</b><span>Day ${String(Math.min(c.day, seasonDays(cfg)))} / ${String(seasonDays(cfg))} · Division ${String(cl.tier + 1)}${(() => {
-                const r = rivalOf(c);
-                return r ? ` · Rival: ${r.name}` : '';
-            })()}</span></div>
-            ${calendar()}
-            ${moraleMeter()}
-            <div class="money"><span>Budget</span><b class="${cl.budget < 0 ? 'neg' : ''}">${money(cl.budget)}</b></div>
-            <div class="money"><span>Wages / matchday</span><b>${money(wageBill(cfg, cl))}</b></div>
+            <div class="when"><b>Season ${String(c.season)}</b><span>${c.day > seasonDays(cfg) ? 'Season review' : `Day ${c.day} of ${seasonDays(cfg)}`}</span></div>
+            ${radioPlayer}
             <button class="primary go" ${on('click', continueDay)}><span><b>${t.label}</b><small>${t.sub}</small></span><i>→</i></button>
         </header>`;
     });
@@ -255,7 +215,8 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
         const planned = Object.keys(c.plan).filter((id) => cl.squad.some((p) => p.id === id)).length;
         if (planned < cfg.training.slots) items.push(html`<li>${String(cfg.training.slots - planned)} training slot(s) unused.</li>`);
         if (!items.length) items.push(html`<li class="good">All good. The squad is fit.</li>`);
-        return html`<div class="card"><h3>Squad status</h3><ul class="alerts">${items}</ul></div>`;
+        const morale = story(c).morale;
+        return html`<div class="card"><h3>Squad status <small title="Team morale ${String(morale)}/100">${moraleLabel(morale)} morale</small></h3><ul class="alerts">${items}</ul></div>`;
     };
 
     const newsFeed = () =>
@@ -297,6 +258,70 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
                 .map((a) => html`<li class="award">★ S${String(a.season)} ${a.title}: ${a.who}</li>`)}</ul>`
                 : html`<p class="muted">Your first season. Top ${String(cfg.career.promote)} go up, bottom ${String(cfg.career.relegate)} go down.</p>`
         }</div>`;
+
+    // ------------------------------------------------------------ season plan
+    const SeasonPlan = () => {
+        const lastDay = seasonDays(cfg) + 1;
+        const rival = rivalOf(c);
+        const inbox = story(c).inbox;
+        const fixtures = new Map(clubFixtures().map((f) => [f.round * cfg.career.daysPerMatchday + 1, f]));
+        const news = c.news.filter((item) => item.season === c.season);
+        const days = Array.from({ length: lastDay }, (_, i) => {
+            const day = i + 1;
+            const fixture = fixtures.get(day);
+            const home = fixture?.home === c.userClubId;
+            const opponent = fixture ? club(home ? fixture.away : fixture.home) : null;
+            const result = fixture && clubResult(fixture);
+            const kind = fixture ? 'match' : day === lastDay ? 'review' : 'training';
+            return {
+                day,
+                kind,
+                title: fixture ? `Matchday ${fixture.round + 1}` : kind === 'review' ? 'Season review' : 'Training',
+                match: opponent ? `${home ? 'vs' : 'at'} ${opponent.name}` : '',
+                derby: !!opponent && opponent.id === rival?.id,
+                score: result ? `${result.gf}–${result.ga} ${result.outcome}` : '',
+                tone: result?.outcome === 'win' ? 'pos' : result?.outcome === 'loss' ? 'neg' : '',
+                letter: day === (inbox?.trainingDay ?? c.day) ? inbox : null,
+                news: news.filter((item) => item.day === day),
+            };
+        });
+        const selectedDay = derived(planDay, (day) => Math.min(day ?? c.day, lastDay));
+        const details = derived(selectedDay, (day) => {
+            const item = days[day - 1]!;
+            const { title, match, score, tone, letter } = item;
+            return html`<section class="season-day-details" aria-live="polite">
+                <h4>Day ${String(day)} · ${title}${item.derby ? ' · Derby' : ''}</h4>
+                ${match ? html`<p>${match}${score ? html` <strong class="${tone}">${score}</strong>` : html``}</p>` : html``}
+                ${item.kind === 'review' ? html`<p>Promotion, relegation and awards</p>` : html``}
+                ${item.kind === 'training' && day < c.day && !item.news.length ? html`<p class="muted">Training completed</p>` : html``}
+                ${letter ? html`<p><button class="ghost" ${on('click', () => letterOpen.set(true))}>Read letter</button> ${letter.title} · ${letter.from}</p>` : html``}
+                ${item.news.length ? html`<ul class="alerts">${item.news.map((event) => html`<li class="${event.tone}">${event.text}</li>`)}</ul>` : html``}
+            </section>`;
+        });
+        return html`<div class="card fill season-calendar">
+            <h3>Season ${String(c.season)} calendar ${rival ? html`<small>Rival · ${rival.name}</small>` : html``}</h3>
+            <div class="scroll">
+                <div class="season-calendar-grid" aria-label="Season days">
+                    ${days.map((item) => {
+                        const { day, kind, title, match, score, tone, letter } = item;
+                        const current = day === c.day;
+                        const pressed = derived(selectedDay, (date) => String(date === day));
+                        return html`<button type="button" class="season-day ${day < c.day ? 'past' : ''}" data-kind="${kind}"
+                            ${attr({ 'aria-pressed': pressed, 'aria-current': current ? 'date' : undefined })}
+                            ${on('click', () => planDay.set(day))}>
+                            <span class="season-day-heading">Day ${String(day)}${current ? html`<small>Today</small>` : html``}</span>
+                            <b>${title}${item.derby ? ' · Derby' : ''}</b>
+                            ${match ? html`<span class="season-opponent">${match}</span>` : html``}
+                            ${score ? html`<strong class="${tone}">${score}</strong>` : html``}
+                            ${letter ? html`<small class="season-event">✉ ${letter.title}</small>` : html``}
+                            ${item.news.length ? html`<small class="season-event">${item.news.length === 1 ? item.news[0]!.text : `${item.news.length} club updates`}</small>` : html``}
+                        </button>`;
+                    })}
+                </div>
+                ${$render(details)}
+            </div>
+        </div>`;
+    };
 
     // ------------------------------------------------------------ league
     const leagueTable = (rows: ReturnType<typeof table>, tier: number, compact = false) => html`<table class="tbl league">
@@ -545,7 +570,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
         return html`<div class="card fill">
             <h3>Training plan <small>${String(planned)}/${String(cfg.training.slots)} sessions · runs every training day${isTraining ? ' (today!)' : ''} · unassigned players rest</small></h3>
             <p class="muted">Each session gives XP in one class. Train a class a player doesn't have yet to start multiclassing. Full intensity is about twice the XP of light. Injured players heal fastest when resting; full training can make it worse.</p>
-            <div class="scroll"><table class="tbl training"><thead><tr><th></th><th>Player</th><th>Classes</th><th>Session</th><th>Intensity</th><th>Progress in class</th><th>Next unlock</th></tr></thead>
+            <div class="scroll"><table class="tbl training"><thead><tr><th></th><th>Player</th><th>Classes</th><th>Potential</th><th>Session</th><th>Intensity</th><th>Progress in class</th><th>Next unlock</th></tr></thead>
             <tbody>${rows.map((p) => {
                 const s = c.plan[p.id];
                 const cls = s?.cls;
@@ -558,6 +583,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
                     <td>${portrait(cl, p, 28)}</td>
                     <td class="name"><b>${p.name}</b>${p.injury ? html`<em class="inj">✚ ${String(p.injury)}d</em>` : html``}</td>
                     <td>${classChips(p)}</td>
+                    <td>${stars(p)}</td>
                     <td><select ${on('change', (e) => setPlan(p, (e.target as HTMLSelectElement).value as ClassId | 'rest'))}>
                         <option value="rest" ${attr({ selected: !s })}>Rest</option>
                         ${CLASSES.map((k) => html`<option value="${k}" ${attr({ selected: cls === k })}>${cfg.classes[k].label}${classLevel(p, k) ? ` (${classLevel(p, k)})` : ' (new)'}</option>`)}
@@ -607,6 +633,63 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
     };
 
     // ------------------------------------------------------------ match preview
+    // ------------------------------------------------------------ coach tips: each screen explained once
+    const HUB_TIPS: Record<string, { title: string; text: string }> = {
+        overview: {
+            title: 'Welcome to the club',
+            text: `This is your hub. A season is ${String(seasonDays(cfg))} days: a matchday, then training days, round and round. The gold button top-right moves the calendar on, or opens match prep on a matchday. Letters land in your inbox now and then; every choice has consequences. Finish in the top two to go up a division.`,
+        },
+        squad: {
+            title: 'Your squad',
+            text: 'Players have levels in one or more classes (GK, DF, MF, WG, ST). Class levels unlock abilities; stats grow with talent and age. Peak age differs per player, so a 25-year-old may still be rising or already fading. Better players are worth more and cost more in wages.',
+        },
+        tactics: {
+            title: 'Pick your XI',
+            text: 'Choose a formation, then click a slot to pick who plays there. Out of position a player is weaker: the number is their fit for that slot. Auto-pick fills every slot with the best fit. Good players left on the bench will come and ask why.',
+        },
+        training: {
+            title: 'Training days',
+            text: `Each training day you can run ${String(cfg.training.slots)} sessions. Pick a player and a class: the XP goes into that class, and training a new class makes a multi-class player. Full sessions give more XP; light ones are kinder to injured players. You can't train everyone, so choose.`,
+        },
+        league: {
+            title: 'The league',
+            text: 'Ten clubs, everyone plays everyone once: 3 points for a win, 1 for a draw. The top two go up, the bottom two go down. Derbies are marked in the season calendar and swing morale twice as hard.',
+        },
+        market: {
+            title: 'Transfers',
+            text: 'A fresh crop of players arrives every season. Buy young, train them up, and sell at a profit, or keep them. Mind the wages: the fee is paid once, wages every matchday.',
+        },
+        finances: {
+            title: 'Money',
+            text: 'Income comes from match fees, win bonuses, season goals (survival, top four, the title) and player sales. Wages go out every matchday. Run dry and the market closes to you.',
+        },
+        playbook: {
+            title: 'The playbook',
+            text: 'Every class and ability in one place. Abilities unlock at class levels; passives are always on.',
+        },
+        prep: {
+            title: 'Match prep',
+            text: 'Read the opponent first: their style, form and danger men. Pick a game plan; your auto-managed players follow it, and countering their style lifts your side on the day. Then a team talk, and play it on the board or quick-sim it.',
+        },
+    };
+    const coachTip = (id: Tab | 'prep', p: ReturnType<typeof prefs>) => {
+        const tip = HUB_TIPS[id];
+        if (!p.tips || !tip || p.tipsSeen.includes(`hub-${id}`)) return html``;
+        const done = (forever: boolean) => {
+            setPref('tipsSeen', [...prefs().tipsSeen, `hub-${id}`]);
+            if (forever) setPref('tips', false);
+        };
+        const size = 96;
+        const frames = cfg.animFrames.shout ?? 12;
+        return html`<div class="tip ${id === 'prep' ? 'prep-tip' : 'hub-tip'}">
+            <div class="coach"><div class="sprite" style="${spriteStyle(cfg, 'coach', 'shout', 'down')};width:${String(size)}px;height:${String(size)}px;background-size:${String(frames * size)}px ${String(size)}px;--strip:${String(frames * size)}px"></div></div>
+            <div class="tip-body"><small>Coach Marlow</small><h3>${tip.title}</h3><p>${tip.text}</p>
+                <div class="tip-actions"><button class="ghost" ${on('click', () => done(true))}>No more tips</button><button class="primary" ${on('click', () => done(false))}>Got it</button></div></div>
+        </div>`;
+    };
+    const hubTip = derived(combined([tab, prefs]), ([id, p]) => coachTip(id, p));
+    const prepTip = derived(prefs, (p) => coachTip('prep', p));
+
     const previewModal = derived(combined([preview, version]), ([open]) => {
         if (!open) return html``;
         const t = today(cfg, c);
@@ -658,25 +741,28 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
         })}>
             <div class="modal-body preview prep">
                 <header><h2>Match prep · Matchday ${String(t.round + 1)}${derby ? html` <span class="derby">Derby</span>` : html``}</h2><button class="ghost" ${on('click', () => preview.set(false))}>✕</button></header>
-                <div class="vs big">${crest(h)}<b>${h.name}</b><span>vs</span><b>${a.name}</b>${crest(a)}</div>
-                <p class="venue">${st.name} · ${sizeLabel(st.size)} · ${conditionsLabel(prep.conditions)} · Referee ${prep.referee.name} (${ref.label})</p>
-                <div class="grid-2">
-                    <div class="card"><h4>Scouting: ${opp.short}</h4>
-                        <div class="kv">
-                            <div><span>Style</span><b>${cfg.ai.styles[oppStyle].label}</b></div>
-                            <div><span>Formation</span><b>${opp.formationId}</b></div>
-                            <div><span>League</span><b>${pos ? `${String(pos)}${['st', 'nd', 'rd'][pos - 1] ?? 'th'}` : '–'}</b></div>
-                            <div><span>Form</span><b class="form">${form.length ? form.map((r) => html`<i class="r${r}">${r}</i>`) : '–'}</b></div>
-                            <div><span>Strength</span><b>${squadOvr(cfg, opp).toFixed(0)} vs your ${squadOvr(cfg, u()).toFixed(0)}</b></div>
+                <div class="modal-scroll">
+                    ${$render(prepTip)}
+                    <div class="vs big">${crest(h)}<b>${h.name}</b><span>vs</span><b>${a.name}</b>${crest(a)}</div>
+                    <p class="venue">${st.name} · ${sizeLabel(st.size)} · ${conditionsLabel(prep.conditions)} · Referee ${prep.referee.name} (${ref.label})</p>
+                    <div class="grid-2">
+                        <div class="card"><h4>Scouting: ${opp.short}</h4>
+                            <div class="kv">
+                                <div><span>Style</span><b>${cfg.ai.styles[oppStyle].label}</b></div>
+                                <div><span>Formation</span><b>${opp.formationId}</b></div>
+                                <div><span>League</span><b>${pos ? `${String(pos)}${['st', 'nd', 'rd'][pos - 1] ?? 'th'}` : '–'}</b></div>
+                                <div><span>Form</span><b class="form">${form.length ? form.map((r) => html`<i class="r${r}">${r}</i>`) : '–'}</b></div>
+                                <div><span>Strength</span><b>${squadOvr(cfg, opp).toFixed(0)} vs your ${squadOvr(cfg, u()).toFixed(0)}</b></div>
+                            </div>
+                            <p class="muted">${cfg.ai.styles[oppStyle].note}${derby ? ' This is the derby: the result swings morale twice as hard.' : ''}</p>
+                            <h5>Watch out for</h5><ul class="xi">${threats.map((p) => html`<li>${portrait(opp, p, 24)}<span>${p.name}</span><em>${classLabel(cfg, p)} · ${String(seasonLine(c, p.id)?.goals ?? 0)} goals</em></li>`)}</ul>
                         </div>
-                        <p class="muted">${cfg.ai.styles[oppStyle].note}${derby ? ' This is the derby: the result swings morale twice as hard.' : ''}</p>
-                        <h5>Watch out for</h5><ul class="xi">${threats.map((p) => html`<li>${portrait(opp, p, 24)}<span>${p.name}</span><em>${classLabel(cfg, p)} · ${String(seasonLine(c, p.id)?.goals ?? 0)} goals</em></li>`)}</ul>
-                    </div>
-                    <div class="card"><h4>Your game plan</h4>
-                        <div class="plan-list">${styles.map((s) => html`<button class="plan ${prep.plan === s ? 'on' : ''}" ${on('click', () => setPlan(s))}><b>${cfg.ai.styles[s].label}</b>${edgeNote(s)}<span>${cfg.ai.styles[s].note}</span></button>`)}</div>
-                        <p class="muted">Your auto-managed players follow the plan. Countering their style lifts the side on the day${COUNTERS[prep.plan] ? `; ${cfg.ai.styles[prep.plan].label} beats ${cfg.ai.styles[COUNTERS[prep.plan]!].label}` : ''}.</p>
-                        <h4>Team talk <small>mood: ${moraleLabel(story(c).morale)}</small></h4>
-                        <div class="plan-list talks">${(Object.keys(TALKS) as TeamTalk[]).map((k) => html`<button class="plan ${prep.talk === k ? 'on' : ''}" ${on('click', () => setTalk(k))}><b>${TALKS[k].label}</b><span>${TALKS[k].note}</span></button>`)}</div>
+                        <div class="card"><h4>Your game plan</h4>
+                            <div class="plan-list">${styles.map((s) => html`<button class="plan ${prep.plan === s ? 'on' : ''}" ${on('click', () => setPlan(s))}><b>${cfg.ai.styles[s].label}</b>${edgeNote(s)}<span>${cfg.ai.styles[s].note}</span></button>`)}</div>
+                            <p class="muted">Your auto-managed players follow the plan. Countering their style lifts the side on the day${COUNTERS[prep.plan] ? `; ${cfg.ai.styles[prep.plan].label} beats ${cfg.ai.styles[COUNTERS[prep.plan]!].label}` : ''}.</p>
+                            <h4>Team talk <small>mood: ${moraleLabel(story(c).morale)}</small></h4>
+                            <div class="plan-list talks">${(Object.keys(TALKS) as TeamTalk[]).map((k) => html`<button class="plan ${prep.talk === k ? 'on' : ''}" ${on('click', () => setTalk(k))}><b>${TALKS[k].label}</b><span>${TALKS[k].note}</span></button>`)}</div>
+                        </div>
                     </div>
                 </div>
                 <footer>
@@ -724,12 +810,14 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
         const icon = { cup: '♛', medal: '◆', boot: '⚑', star: '★' } as const;
         return html`<div class="modal ceremony-modal"><div class="modal-body ceremony ${r.champion || r.promoted ? 'glory' : r.relegated ? 'gloom' : ''}">
             ${r.champion || r.promoted ? html`<div class="confetti">${Array.from({ length: 40 }, (_, i) => html`<i style="left:${String((i * 37) % 100)}%;animation-delay:${String((i % 10) * 120)}ms;--c:${['#f2bf2f', '#56b4e9', '#ffffff', '#cc79a7'][i % 4]!}"></i>`)}</div>` : html``}
-            <small>Season ${String(r.season)} · Division ${String(r.tier + 1)}</small>
-            <h2>${headline}</h2>
-            ${trophy ? html`<img class="trophy" src="assets/props/${trophy}.png" alt="" />` : html``}
-            <p class="placing">Finished ${ordinal(r.position)} of ${String(cfg.career.clubsPerDivision)}</p>
-            <ul class="awards">${r.awards.map((a) => html`<li><span class="aw-ic">${icon[a.icon]}</span><div><b>${a.title}</b><span>${a.who}</span><small>${a.detail}</small></div></li>`)}</ul>
-            <ul class="alerts">${r.lines.map((l) => html`<li>${l}</li>`)}</ul>
+            <div class="modal-scroll">
+                <small>Season ${String(r.season)} · Division ${String(r.tier + 1)}</small>
+                <h2>${headline}</h2>
+                ${trophy ? html`<img class="trophy" src="assets/props/${trophy}.png" alt="" />` : html``}
+                <p class="placing">Finished ${ordinal(r.position)} of ${String(cfg.career.clubsPerDivision)}</p>
+                <ul class="awards">${r.awards.map((a) => html`<li><span class="aw-ic">${icon[a.icon]}</span><div><b>${a.title}</b><span>${a.who}</span><small>${a.detail}</small></div></li>`)}</ul>
+                <ul class="alerts">${r.lines.map((l) => html`<li>${l}</li>`)}</ul>
+            </div>
             <footer><button class="primary" ${on('click', () => ceremony.set(null))}>On to season ${String(r.season + 1)} →</button></footer>
         </div></div>`;
     });
@@ -737,7 +825,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
     const noticeModal = derived(modal, (m) =>
         m
             ? html`<div class="modal"><div class="modal-body notice">
-        <header><h2>${m.title}</h2></header><ul class="alerts">${m.lines.map((l) => html`<li>${l}</li>`)}</ul>
+        <header><h2>${m.title}</h2></header><div class="modal-scroll"><ul class="alerts">${m.lines.map((l) => html`<li>${l}</li>`)}</ul></div>
         <footer><button class="primary" ${on('click', () => modal.set(null))}>Continue</button></footer></div></div>`
             : html``,
     );
@@ -745,6 +833,8 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
     // ------------------------------------------------------------ shell
     const screen = derived(combined([version, tab, leagueTier, marketFilter, slotPick]), ([, t]) => {
         switch (t) {
+            case 'season':
+                return SeasonPlan();
             case 'squad':
                 return Squad();
             case 'tactics':
@@ -771,6 +861,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
             ${TABS.map(
                 ([id, label, icon]) =>
                     html`<button class="${t === id ? 'on' : ''}" ${on('click', () => {
+                        planDay.set(null);
                         tab.set(id);
                         slotPick.set(null);
                     })}><span>${icon}</span>${label}</button>`,
@@ -781,66 +872,11 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
         </nav>`;
     });
 
-    // ------------------------------------------------------------ coach tips: each screen explained once
-    const HUB_TIPS: Record<string, { title: string; text: string }> = {
-        overview: {
-            title: 'Welcome to the club',
-            text: `This is your hub. A season is ${String(seasonDays(cfg))} days: a matchday, then training days, round and round. The gold button top-right moves the calendar on, or opens match prep on a matchday. Letters land in your inbox now and then; every choice has consequences. Finish in the top two to go up a division.`,
-        },
-        squad: {
-            title: 'Your squad',
-            text: 'Players have levels in one or more classes (GK, DF, MF, WG, ST). Class levels unlock abilities; stats grow with talent and age. Peak age differs per player, so a 25-year-old may still be rising or already fading. Better players are worth more and cost more in wages.',
-        },
-        tactics: {
-            title: 'Pick your XI',
-            text: 'Choose a formation, then click a slot to pick who plays there. Out of position a player is weaker: the number is their fit for that slot. Auto-pick fills every slot with the best fit. Good players left on the bench will come and ask why.',
-        },
-        training: {
-            title: 'Training days',
-            text: `Each training day you can run ${String(cfg.training.slots)} sessions. Pick a player and a class: the XP goes into that class, and training a new class makes a multi-class player. Full sessions give more XP; light ones are kinder to injured players. You can't train everyone, so choose.`,
-        },
-        league: {
-            title: 'The league',
-            text: 'Ten clubs, everyone plays everyone once: 3 points for a win, 1 for a draw. The top two go up, the bottom two go down. Your rival is named in the top bar, and derbies swing morale twice as hard.',
-        },
-        market: {
-            title: 'Transfers',
-            text: 'A fresh crop of players arrives every season. Buy young, train them up, and sell at a profit, or keep them. Mind the wages: the fee is paid once, wages every matchday.',
-        },
-        finances: {
-            title: 'Money',
-            text: 'Income comes from match fees, win bonuses, season goals (survival, top four, the title) and player sales. Wages go out every matchday. Run dry and the market closes to you.',
-        },
-        playbook: {
-            title: 'The playbook',
-            text: 'Every class and ability in one place. Abilities unlock at class levels; passives are always on.',
-        },
-        prep: {
-            title: 'Match prep',
-            text: 'Read the opponent first: their style, form and danger men. Pick a game plan; your auto-managed players follow it, and countering their style lifts your side on the day. Then a team talk, and play it on the board or quick-sim it.',
-        },
-    };
-    const hubTip = derived(combined([tab, preview, prefs, version]), ([t, open, p]) => {
-        const id = open ? 'prep' : t;
-        const tip = HUB_TIPS[id];
-        if (!p.tips || !tip || p.tipsSeen.includes(`hub-${id}`)) return html``;
-        const done = (forever: boolean) => {
-            setPref('tipsSeen', [...prefs().tipsSeen, `hub-${id}`]);
-            if (forever) setPref('tips', false);
-        };
-        const size = 96;
-        const frames = cfg.animFrames.shout ?? 12;
-        return html`<div class="tip hub-tip ${open ? 'over-modal' : ''}">
-            <div class="coach"><div class="sprite" style="${spriteStyle(cfg, 'coach', 'shout', 'down')};width:${String(size)}px;height:${String(size)}px;background-size:${String(frames * size)}px ${String(size)}px;--strip:${String(frames * size)}px"></div></div>
-            <div class="tip-body"><small>Coach Marlow</small><h3>${tip.title}</h3><p>${tip.text}</p>
-                <div class="tip-actions"><button class="ghost" ${on('click', () => done(true))}>No more tips</button><button class="primary" ${on('click', () => done(false))}>Got it</button></div></div>
-        </div>`;
-    });
-
     return html`<div class="hub">
         ${$render(sidebar)}
         <main class="hub-main">${$render(topbar)}<section class="hub-content">${$render(screen)}</section></main>
-        ${$render(drawer)}${$render(previewModal)}${$render(noticeModal)}${$render(letterModal)}${$render(ceremonyModal)}${$render(hubTip)}
+        ${$render(drawer)}${$render(previewModal)}${$render(noticeModal)}${$render(letterModal)}${$render(ceremonyModal)}
+        <div class="hub-overlays">${$render(hubTip)}</div>
         ${$if(derived(flash, (f) => !!f)).$then(() => html`<div class="toast">${derived(flash, (f) => f ?? '')}</div>`)}
     </div>`;
 };

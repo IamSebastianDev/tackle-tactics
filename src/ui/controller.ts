@@ -477,6 +477,7 @@ export class MatchController {
             await this.playTurn();
             if (this.stopped) return;
             await this.runSetup();
+            await this.whilePaused();
             if (this.stopped) return;
             const round = m.state.round;
             const ev = m.nextTurn();
@@ -560,6 +561,7 @@ export class MatchController {
             if (!sp || sp.stage !== 'setup' || this.stopped || m.state.over) break;
             const team = sp.next;
             await this.whilePaused();
+            if (this.stopped) return;
             if (this.isHuman(team)) {
                 this.setupSel.set(null);
                 this.timer.set(1);
@@ -571,6 +573,8 @@ export class MatchController {
                 else m.skipPlacements(team);
             } else {
                 await sleep(this.cfg.match.aiThinkMs * 0.7);
+                await this.whilePaused();
+                if (this.stopped) return;
                 const d = this.brains[team].decidePlacement(team);
                 if (d) await this.handle(m.place(d.id, d.to));
                 else m.passPlacement(team);
@@ -601,6 +605,7 @@ export class MatchController {
         }
         const think = autoHuman ? this.cfg.match.aiThinkMs * 0.35 : this.cfg.match.aiThinkMs;
         await this.whilePaused();
+        if (this.stopped) return;
 
         // ---- move phase (a pre ability like Trick keeps us here)
         for (let guard = 0; guard < 4 && m.state.phase === 'move'; guard++) {
@@ -617,6 +622,7 @@ export class MatchController {
             } else {
                 await sleep(think);
                 await this.whilePaused();
+                if (this.stopped) return;
                 d = brain.decideMove(p);
             }
             await this.handle(applyMove(m, d));
@@ -636,6 +642,8 @@ export class MatchController {
             a = i.t === 'act' ? i.d : brain.decideAct(p);
         } else {
             await sleep(think * 0.8);
+            await this.whilePaused();
+            if (this.stopped) return;
             a = brain.decideAct(p);
         }
         await this.handle(applyAct(m, a));

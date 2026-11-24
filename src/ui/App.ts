@@ -1,4 +1,5 @@
 import { combined, derived, grain } from '@grainular/grains';
+import { isDesktop, quitApp } from './desktop';
 import { $if, $render, attr, html, mounted, on } from '@grainular/nord';
 import { defaultConfig, withOverrides, type Difficulty, type GameConfig, type TeamStyle, type TimeoutPolicy } from '../config';
 import { createRng } from '../rng';
@@ -16,6 +17,7 @@ import {
     playMatchday,
     saveCareer,
     simulateScore,
+    simulatedWinChance,
     today,
     userClub,
     userSide,
@@ -35,7 +37,7 @@ import {
 } from '../world/stadium';
 import { SettingsModal } from './Settings';
 import { LESSONS } from './tutorial';
-import { RadioDock } from './RadioUI';
+import { RadioPlayer } from './RadioUI';
 import { radio } from './radio';
 import { applyTalk, matchEdge, prepFor } from '../meta/prep';
 import { audio } from './audio';
@@ -105,15 +107,12 @@ const buildClubs = (cfg: GameConfig, s: Settings): [Club, Club] => {
     ];
 };
 
-/** Weather makes the ball a little less predictable (config.weather); the camera preset comes from Settings. */
+/** Weather makes the ball a little less predictable (config.weather). */
 const weatherCfg = (base: GameConfig, cond: Conditions) => {
     const k = base.weather.scatterMult[cond.weather] ?? 1;
-    const cam = base.camera.modes[prefs().camera] ?? base.camera.modes['2d'];
     return withOverrides(
         {
             ball: { passScatterPerCell: base.ball.passScatterPerCell * k, shotScatterPerCell: base.ball.shotScatterPerCell * k },
-            camera: { tiltDeg: cam.tiltDeg, scale: cam.scale },
-            sprites: { goalScaleX: cam.goalScaleX, goalScaleY: cam.goalScaleY },
         },
         base,
     );
@@ -133,7 +132,7 @@ export const App = () => {
     let career: Career | null = loadCareer();
     let hubNotice: { title: string; lines: string[] } | null = null;
     let matchExit: () => void = () => {};
-    let matchIsCareer = false;
+    let finishOdds: (() => number) | undefined;
 
     const configFor = (s: Settings) =>
         withOverrides({ match: { timerSeconds: s.timerSeconds, rounds: s.rounds, timeoutPolicy: s.timeoutPolicy, ...pacing() } });
@@ -157,7 +156,7 @@ export const App = () => {
         ctl = new MatchController(cfg, clubs, { controllers, difficulty: s.difficulty, seed: s.seed, stadium, conditions });
         if (import.meta.env.DEV) (window as unknown as { __tt: MatchController }).__tt = ctl; // debugging hook
         matchExit = exit;
-        matchIsCareer = false;
+        finishOdds = undefined;
         screen.set('match');
     };
     const startTutorial = () => {
@@ -188,7 +187,7 @@ export const App = () => {
             ctl = null;
             screen.set('title');
         };
-        matchIsCareer = false;
+        finishOdds = undefined;
         screen.set('match');
     };
     const exit = () => {
@@ -240,14 +239,15 @@ export const App = () => {
             plans,
         });
         if (import.meta.env.DEV) (window as unknown as { __tt: MatchController }).__tt = ctl;
-        matchIsCareer = true;
+        const remainingFraction = () => Math.max(0, 1 - (ctl!.match.state.round - 1) / cfg.match.rounds);
+        finishOdds = () => simulatedWinChance(cfg, c, t.fixture, ctl!.match.state.score, remainingFraction());
         matchExit = () => {
             const m = ctl!.match;
             let score = [...m.state.score] as [number, number];
             if (!m.state.over) {
                 // leaving early: the rest of the match is simulated from the current score
                 const rng = careerRng(c);
-                const rest = simulateScore(cfg, rng, c, t.fixture, Math.max(0, 1 - (m.state.round - 1) / cfg.match.rounds));
+                const rest = simulateScore(cfg, rng, c, t.fixture, remainingFraction());
                 c.rngState = rng.state();
                 score = [score[0] + rest[0], score[1] + rest[1]];
             }
@@ -321,128 +321,154 @@ export const App = () => {
             ${on('input', (e) => set(k, Number((e.target as HTMLInputElement).value)))} /><output>${label}</output></div>`;
     };
 
-    const squadPreview = derived(combined([settings, recolorVersion]), ([s]) => {
+    const setupSquads = derived(combined([settings, recolorVersion]), ([s]) => {
         const cfg = configFor(s);
-        const clubs = buildClubs(cfg, s);
-        return html`<div class="squads">${clubs.map(
-            (c, t) => html`<div class="squad" style="--kit:${kitColor(c.kit)}">
-            <h3><span class="kit"></span>${c.name} <small>${c.formationId} · ${defaultConfig.ai.styles[styleOf(c)].label} · ${t === 0 ? (s.mode === 'watch' ? 'AI' : 'You') : s.mode === 'hotseat' ? 'Player 2' : 'AI'}</small></h3>
-            <ul>${c.squad.map(
-                (p) => html`<li>
-                <div class="sprite still" style="${spriteStyle(cfg, p.sprite, 'idle', 'down', p)}"></div>
-                <span class="num">${String(p.number)}</span>
-                <span class="nm">${p.name}</span>
-                <span class="cl" title="${
-                    abilitiesOf(cfg, p)
-                        .map((id) => cfg.abilities[id].label)
-                        .join(', ') || 'No abilities yet'
-                }">${classLabel(cfg, p)}</span>
-                <span class="sp" title="Speed (turn order)">⚡${String(p.stats.speed)}</span>
-            </li>`,
-            )}</ul>
-        </div>`,
-        )}</div>`;
+        return { cfg, clubs: buildClubs(cfg, s), mode: s.mode };
     });
 
     const formations = defaultConfig.formations.map((f) => [f.id, f.label] as [string, string]);
     const kits = defaultConfig.kits.outfield.map((k) => [k, k[0]!.toUpperCase() + k.slice(1)] as [string, string]);
 
-    const Setup = () => html`<div class="setup">
-        <div class="setup-inner">
-            <h1>Tackle <span>Tactics</span></h1>
-            <p class="tag">A turn-based positioning game in a football kit. Make space, deny space, beat the clock.</p>
+    const SetupSquad = (side: 'Home' | 'Away') => {
+        const home = side === 'Home';
+        const heading = derived(setupSquads, ({ clubs, mode }) => {
+            const club = clubs[home ? 0 : 1]!;
+            const controller =
+                mode === 'watch' ? 'AI' : home ? (mode === 'hotseat' ? 'Player 1' : 'You') : mode === 'hotseat' ? 'Player 2' : 'AI';
+            return html`<header class="setup-club" style="--kit:${kitColor(club.kit)}">
+                <div><small>${side} · ${controller}</small><h2>${club.name}</h2></div>
+                <span>${defaultConfig.ai.styles[styleOf(club)].label}</span>
+            </header>`;
+        });
+        const players = derived(
+            setupSquads,
+            ({ cfg, clubs }) => html`<ul class="setup-roster" aria-label="${side} lineup">
+            ${clubs[home ? 0 : 1]!.squad.map((p) => {
+                const abilities = abilitiesOf(cfg, p)
+                    .map((id) => cfg.abilities[id].label)
+                    .join(', ');
+                return html`<li>
+                    <div class="sprite still" style="${spriteStyle(cfg, p.sprite, 'idle', 'down', p)}"></div>
+                    <span class="num">${String(p.number)}</span>
+                    <span class="nm" title="${p.name}">${p.name}</span>
+                    <span class="cl" title="${abilities || 'No abilities yet'}">${classLabel(cfg, p)}</span>
+                    <span class="sp" title="Speed (turn order)">${String(p.stats.speed)}</span>
+                </li>`;
+            })}
+        </ul>`,
+        );
+        return html`<section class="opts squad" aria-label="${side} squad">
+            ${$render(heading)}
+            <div class="pair setup-team-options">
+                <label>Formation ${select(home ? 'homeFormation' : 'awayFormation', formations, (v) => v)}</label>
+                <label>Kit ${select(home ? 'homeKit' : 'awayKit', kits, (v) => v)}</label>
+            </div>
+            <div class="setup-lineup">
+                <div class="setup-roster-head" aria-hidden="true"><span>Player</span><span>Class</span><span>Speed</span></div>
+                ${$render(players)}
+            </div>
+        </section>`;
+    };
+
+    const Setup = () => html`<main class="setup quick-match" aria-label="Quick match">
+        <div class="quick-match-inner">
+            <header class="quick-match-header">
+                <button class="ghost" ${on('click', () => screen.set('title'))}>← Back</button>
+                <h1>Quick match</h1>
+                <button class="ghost" ${on('click', () => showHowto.set(true))}>How to play</button>
+            </header>
             <div class="setup-grid">
-                <section class="opts">
-                    <label>Mode ${select(
-                        'mode',
-                        [
-                            ['ai', 'You vs AI'],
-                            ['hotseat', 'Hotseat (2 players)'],
-                            ['watch', 'Watch AI vs AI'],
-                        ],
-                        (v) => v as Mode,
-                    )}</label>
-                    <label>AI difficulty ${select(
-                        'difficulty',
-                        [
-                            ['easy', 'Easy'],
-                            ['normal', 'Normal'],
-                            ['hard', 'Hard'],
-                        ],
-                        (v) => v as Difficulty,
-                    )}</label>
-                    <label>Action timer ${range('timerSeconds', 0, 45, 1, 's')}</label>
-                    <label>Match length (rounds) ${range('rounds', 6, 40, 2, '')}</label>
-                    <label>On timeout ${select(
-                        'timeoutPolicy',
-                        [
-                            ['lose', 'Lose the action'],
-                            ['auto', 'AI plays it for you'],
-                        ],
-                        (v) => v as TimeoutPolicy,
-                    )}</label>
-                    <div class="pair"><label>Home formation ${select('homeFormation', formations, (v) => v)}</label>
-                    <label>Away formation ${select('awayFormation', formations, (v) => v)}</label></div>
-                    <div class="pair"><label>Home kit ${select('homeKit', kits, (v) => v)}</label>
-                    <label>Away kit ${select('awayKit', kits, (v) => v)}</label></div>
-                    <div class="pair"><label>Ground ${select(
-                        'ground',
-                        [
-                            ['random', 'Random'],
-                            ['village', 'Village'],
-                            ['town', 'Town'],
-                            ['city', 'City'],
-                            ['grand', 'Grand'],
-                        ],
-                        (v) => v as Settings['ground'],
-                    )}</label>
-                    <label>Pitch ${select(
-                        'pitch',
-                        [
-                            ['random', 'Random'],
-                            ['lush', 'Lush'],
-                            ['dry', 'Dry'],
-                            ['muddy', 'Muddy'],
-                            ['frost', 'Frosty'],
-                        ],
-                        (v) => v as Settings['pitch'],
-                    )}</label></div>
-                    <div class="pair"><label>Kick-off ${select(
-                        'time',
-                        [
-                            ['random', 'Random'],
-                            ['day', 'Afternoon'],
-                            ['dusk', 'Dusk'],
-                            ['night', 'Night'],
-                        ],
-                        (v) => v as Settings['time'],
-                    )}</label>
-                    <label>Weather ${select(
-                        'weather',
-                        [
-                            ['random', 'Random'],
-                            ['clear', 'Clear'],
-                            ['rain', 'Rain'],
-                            ['snow', 'Snow'],
-                            ['fog', 'Fog'],
-                        ],
-                        (v) => v as Settings['weather'],
-                    )}</label></div>
-                    <div class="buttons">
-                        <button class="ghost" ${on('click', () => screen.set('title'))}>Back</button>
-                        <button class="ghost" ${on('click', () => showHowto.set(true))}>How to play</button>
-                        <button class="ghost" ${on('click', () => set('seed', Math.floor(Math.random() * 1e9)))}>New squads</button>
-                        <button class="primary" ${on('click', start)}>Kick off</button>
+                <section class="opts setup-rules" aria-label="Match settings">
+                    <h2>Match settings</h2>
+                    <div class="setup-options">
+                        <div class="pair"><label>Mode ${select(
+                            'mode',
+                            [
+                                ['ai', 'You vs AI'],
+                                ['hotseat', 'Hotseat (2 players)'],
+                                ['watch', 'Watch AI vs AI'],
+                            ],
+                            (v) => v as Mode,
+                        )}</label>
+                        <label>AI difficulty ${select(
+                            'difficulty',
+                            [
+                                ['easy', 'Easy'],
+                                ['normal', 'Normal'],
+                                ['hard', 'Hard'],
+                            ],
+                            (v) => v as Difficulty,
+                        )}</label></div>
+                        <label>Action timer ${range('timerSeconds', 0, 45, 1, 's')}</label>
+                        <label>Match length (rounds) ${range('rounds', 6, 40, 2, '')}</label>
+                        <label>On timeout ${select(
+                            'timeoutPolicy',
+                            [
+                                ['lose', 'Lose the action'],
+                                ['auto', 'AI plays it for you'],
+                            ],
+                            (v) => v as TimeoutPolicy,
+                        )}</label>
+                        <h3>Match conditions</h3>
+                        <div class="pair"><label>Ground ${select(
+                            'ground',
+                            [
+                                ['random', 'Random'],
+                                ['village', 'Village'],
+                                ['town', 'Town'],
+                                ['city', 'City'],
+                                ['grand', 'Grand'],
+                            ],
+                            (v) => v as Settings['ground'],
+                        )}</label>
+                        <label>Pitch ${select(
+                            'pitch',
+                            [
+                                ['random', 'Random'],
+                                ['lush', 'Lush'],
+                                ['dry', 'Dry'],
+                                ['muddy', 'Muddy'],
+                                ['frost', 'Frosty'],
+                            ],
+                            (v) => v as Settings['pitch'],
+                        )}</label></div>
+                        <div class="pair"><label>Kick-off ${select(
+                            'time',
+                            [
+                                ['random', 'Random'],
+                                ['day', 'Afternoon'],
+                                ['dusk', 'Dusk'],
+                                ['night', 'Night'],
+                            ],
+                            (v) => v as Settings['time'],
+                        )}</label>
+                        <label>Weather ${select(
+                            'weather',
+                            [
+                                ['random', 'Random'],
+                                ['clear', 'Clear'],
+                                ['rain', 'Rain'],
+                                ['snow', 'Snow'],
+                                ['fog', 'Fog'],
+                            ],
+                            (v) => v as Settings['weather'],
+                        )}</label></div>
                     </div>
                 </section>
-                ${$render(squadPreview)}
+                ${SetupSquad('Home')}
+                ${SetupSquad('Away')}
             </div>
-            ${$if(showHowto).$then(
-                () => html`<div class="modal" ${on('click', (e) => {
-                    if (e.target === e.currentTarget) showHowto.set(false);
-                })}>
-                <div class="modal-body howto-modal"><header><h2>How to play</h2><button class="ghost" ${on('click', () => showHowto.set(false))}>Close</button></header>            
-                <ul>
+            <footer class="quick-match-actions">
+                <button class="ghost" ${on('click', () => set('seed', Math.floor(Math.random() * 1e9)))}>New squads</button>
+                <button class="primary" ${on('click', start)}>Kick off →</button>
+            </footer>
+        </div>
+        ${$if(showHowto).$then(
+            () => html`<div class="modal" ${on('click', (e) => {
+                if (e.target === e.currentTarget) showHowto.set(false);
+            })}>
+                <div class="modal-body howto-modal"><header><h2>How to play</h2><button class="ghost" ${on('click', () => showHowto.set(false))}>Close</button></header>
+                <div class="modal-scroll"><ul>
                     <li>All 22 players act one at a time, fastest first, teams alternating. A <b>round</b> is everyone acting once.</li>
                     <li>Each action has a timer. Act early to pass the baton; hesitate and you lose the action.</li>
                     <li><b>Move</b> (blue). Off-ball runs stop when they enter an opponent's adjacent cell — that's marking.</li>
@@ -451,12 +477,10 @@ export const App = () => {
                     <li>Passes longer than ${String(defaultConfig.ball.loftThreshold)} cells are lofted: only contestable near take-off and landing.</li>
                     <li><b>Abilities</b> come from class levels (hover a player's class for their kit). Wingers sprint, trick and cross; strikers run in behind and pick their shot; midfielders press, thread through balls and set the tempo; defenders slide, man-mark and foul; keepers command and rush out. Multiclass players get both kits. Most have a cooldown in rounds.</li>
                     <li>Keys: <kbd>Space</kbd> hold / end, <kbd>1</kbd>–<kbd>9</kbd> abilities, <kbd>T</kbd> tackle, <kbd>Esc</kbd> cancel, <kbd>A</kbd> let the AI play this action.</li>
-                </ul>
+                </ul></div>
             </div></div>`,
-            )}
-            <p class="credits">Art by bubbabba · Goals in Pixels</p>
-        </div>
-    </div>`;
+        )}
+    </main>`;
 
     // ------------------------------------------------------------ title & new career
     const titleScene = () => {
@@ -491,8 +515,9 @@ export const App = () => {
             }
             <button class="tcard" ${on('click', startTutorial)}><b>Tutorial</b><span>Eight short lessons on the training ground. Start here.</span></button>
             <button class="tcard" ${on('click', () => screen.set('newCareer'))}><b>New career</b><span>Take a club from the bottom division to the top. Train, trade, promote.</span></button>
-            <button class="tcard" ${on('click', () => showSettings.set(true))}><b>Settings</b><span>UI scale, font, pacing and match defaults.</span></button>
             <button class="tcard" ${on('click', () => screen.set('setup'))}><b>Quick match</b><span>One-off match: vs AI, hotseat or watch.</span></button>
+            <button class="tcard" ${on('click', () => showSettings.set(true))}><b>Settings</b><span>UI scale, font, pacing and match defaults.</span></button>
+            ${isDesktop ? html`<button class="tcard exit-card" ${on('click', () => void quitApp())}><b>Exit</b><span>Your career is saved automatically.</span></button>` : html``}
         </div>
         <p class="credits">Art by bubbabba · Goals in Pixels</p>
     </div></div>`;
@@ -558,13 +583,7 @@ export const App = () => {
     };
 
     const view = derived(screen, (s) => {
-        if (s === 'match' && ctl)
-            return MatchView(
-                ctl,
-                () => matchExit(),
-                () => showSettings.set(true),
-                career && ctl.isHuman(0) !== ctl.isHuman(1) && matchIsCareer ? 'Back to the club' : 'Back to menu',
-            );
+        if (s === 'match' && ctl) return MatchView(ctl, { onExit: matchExit, onSettings: () => showSettings.set(true), finishOdds });
         if (s === 'hub' && career) {
             if (import.meta.env.DEV) (window as unknown as { __career: Career }).__career = career; // debugging hook
             const n = hubNotice;
@@ -573,7 +592,7 @@ export const App = () => {
         }
         if (s === 'newCareer') return NewCareer();
         if (s === 'setup') return Setup();
-        return Title();
+        return html`${Title()}${RadioPlayer({ floating: true })}`;
     });
     // ------------------------------------------------------------ settings (one modal over any screen)
     const showSettings = grain(false);
@@ -632,5 +651,5 @@ export const App = () => {
         };
     });
     screen.subscribe((s) => radio.setMatch(s === 'match'));
-    return html`<div class="app-root" ${keys}>${$render(view)}${$render(settingsModal)}${$render(RadioDock())}</div>`;
+    return html`<div class="app-root" ${keys}>${$render(view)}${$render(settingsModal)}</div>`;
 };

@@ -66,16 +66,7 @@ export const defaultConfig = {
     },
     camera: {
         cellPx: 24,
-        perspectivePx: 700,
-        originX: '50%',
-        originY: '35%',
-        tiltDeg: 35,
-        /** Presets selected in Settings → Display → Camera. */
-        modes: {
-            '2d': { tiltDeg: 0, scale: 1.12, goalScaleX: 1, goalScaleY: 1 },
-            '3d': { tiltDeg: 35, scale: 1.18, goalScaleX: 1.6, goalScaleY: 1.12 },
-        } as Record<'2d' | '3d', { tiltDeg: number; scale: number; goalScaleX: number; goalScaleY: number }>,
-        scale: 1.18,
+        scale: 1.12,
     },
     sprites: {
         framePx: 64,
@@ -83,9 +74,9 @@ export const defaultConfig = {
         /** Pixel row of the feet inside a frame, measured on the source art. */
         feetY: 60,
         msPerFrame: 110,
-        /** Goal sprite scale relative to an exact fit of the goal mouth: wider (more net) than tall. */
-        goalScaleX: 1.6,
-        goalScaleY: 1.12,
+        /** Goal sprite scale relative to the goal mouth. */
+        goalScaleX: 1,
+        goalScaleY: 1,
     },
     movement: {
         /** Every `paceStep` points above/below 50 pace adds/removes a move point. */

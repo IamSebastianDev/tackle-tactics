@@ -85,8 +85,9 @@ npm run desktop:build    # release: src-tauri/target/release/bundle/macos/Tackle
 Every audio file in `assets/music/` becomes a song on the in-game radio (`scripts/music-plugin.ts`, read at dev and
 build time). Name files `Artist - Title.ext` (or just `Title.ext`); an optional leading number (`01 `) sets the
 order, and the first song opens the station while the rest shuffle. WAV/AIFF are converted to AAC once (cached in
-`node_modules/.cache/tt-music`); MP3/M4A/OGG are used as-is. In game: the chip on the title screen and in the hub,
-**N** next song, **R** radio on/off; Settings → Sound for volume, the in-match level and switching songs on or off.
+`node_modules/.cache/tt-music`); MP3/M4A/OGG are used as-is. The title screen has a floating player, the career header
+has playback controls, and the match toolbar has a Music button. **N** skips to the next song and **R** toggles the radio.
+Settings → Sound has volume, the in-match level and per-song switches.
 
 ## Look
 
@@ -206,9 +207,7 @@ bubbabba cast gives eight ready-made kits today.
 
 ## Camera & grounds
 
-- **Classic 2D (default)** renders in the art pack's native top-down projection: flat pitch, sprites standing on it,
-  y-sorted. **Tilted 3D** is the concept doc's CSS perspective camera (35°). One `tiltDeg` drives both
-  (`config.camera.modes`, Settings → Display → Camera).
+- Matches use the art pack's top-down projection, with sprites drawn in order of their position on the pitch.
 - Grounds (`src/world/stadium.ts`, drawn by `src/ui/StadiumView.ts`) are generated per club: village / town / city /
   grand, from a fenced bank up to a roofed main stand, end stands, LED boards on both touchlines, four floodlight
   pylons, TV gantry and scoreboard. All pack art is drawn at the players' pixel scale (renderPx / framePx).

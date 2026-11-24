@@ -20,6 +20,7 @@ const settings = { timerSeconds: 10, rounds: 30, difficulty: 'normal' as const, 
 describe('stories and match prep', () => {
     it('runs seasons with prep, derbies, promises and follow-up letters without breaking', () => {
         const kinds = new Set<string>();
+        const resolved = [];
         let derbies = 0;
         for (const seed of [3, 11, 19]) {
             const c = newCareer(cfg, seed, settings);
@@ -33,7 +34,14 @@ describe('stories and match prep', () => {
                     const l = story(c).inbox;
                     if (l) {
                         kinds.add(l.kind);
-                        resolveLetter(cfg, c, (l.kind.length + c.day) % 2);
+                        const outcome = resolveLetter(cfg, c, (l.kind.length + c.day) % 2);
+                        resolved.push({
+                            letter: l,
+                            day: c.day,
+                            plannedClass: l.subject ? c.plan[l.subject]?.cls : undefined,
+                            entry: c.news[0],
+                            outcome,
+                        });
                     }
                     if (t.kind === 'match') {
                         const p = prepFor(cfg, c, t.fixture);
@@ -56,5 +64,17 @@ describe('stories and match prep', () => {
         if (process.env.TT_VERBOSE) console.log('letter kinds', [...kinds].join(', '), 'derbies', derbies);
         expect(derbies).toBeGreaterThan(0);
         expect(kinds.size).toBeGreaterThan(6);
+        expect(kinds).toContain('extra');
+        expect(kinds).toContain('openTraining');
+        for (const { letter, day, entry, outcome } of resolved.filter(
+            (item) => item.letter.kind === 'extra' || item.letter.kind === 'openTraining',
+        )) {
+            expect(letter.trainingDay).toBe(day - 1);
+            expect(entry).toMatchObject({ day: letter.trainingDay, text: `${letter.title} · ${outcome}` });
+        }
+        for (const { letter, plannedClass } of resolved.filter((item) => item.letter.kind === 'extra')) {
+            expect(plannedClass).toBeDefined();
+            expect(letter.trainingClass).toBe(plannedClass);
+        }
     }, 120000);
 });

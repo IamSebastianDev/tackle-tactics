@@ -87,5 +87,8 @@ export const deleteSave = () => {
     }
 };
 
+/** Resolves once every queued save write has reached the disk (call before quitting). */
+export const whenSaved = () => writing;
+
 /** Where the save lives, for the settings screen. */
 export const saveLocation = async (): Promise<string> => (desktop ? invoke<string>('save_path') : 'Browser storage (this browser only)');
