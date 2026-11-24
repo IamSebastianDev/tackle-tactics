@@ -579,7 +579,6 @@ export const App = () => {
         const desc = derived(focus, (f) => items[f]?.desc ?? '');
         return html`<div class="setup title-screen" ${keys}>${titleScene()}<div class="setup-inner">
             <h1>Tackle <span>Tactics</span></h1>
-            <p class="tag">A turn-based positioning game in a football kit. Make space, deny space, beat the clock.</p>
             <nav class="title-menu">${$render(menu)}</nav>
             <p class="title-desc">${desc}</p>
             <p class="credits">Art by bubbabba · Goals in Pixels</p>
