@@ -503,24 +503,85 @@ export const App = () => {
         </div>`;
     };
 
-    const Title = () => html`<div class="setup title-screen">${titleScene()}<div class="setup-inner">
-        <h1>Tackle <span>Tactics</span></h1>
-        <p class="tag">A turn-based positioning game in a football kit. Make space, deny space, beat the clock.</p>
-        <div class="title-cards">
-            ${
-                career
-                    ? html`<button class="tcard primary-card" ${on('click', () => screen.set('hub'))}>
-                <b>Continue career</b><span>${userClub(career).name} · Season ${String(career.season)} · Division ${String(userClub(career).tier + 1)}</span></button>`
-                    : html``
-            }
-            <button class="tcard" ${on('click', startTutorial)}><b>Tutorial</b><span>Eight short lessons on the training ground. Start here.</span></button>
-            <button class="tcard" ${on('click', () => screen.set('newCareer'))}><b>New career</b><span>Take a club from the bottom division to the top. Train, trade, promote.</span></button>
-            <button class="tcard" ${on('click', () => screen.set('setup'))}><b>Quick match</b><span>One-off match: vs AI, hotseat or watch.</span></button>
-            <button class="tcard" ${on('click', () => showSettings.set(true))}><b>Settings</b><span>UI scale, font, pacing and match defaults.</span></button>
-            ${isDesktop ? html`<button class="tcard exit-card" ${on('click', () => void quitApp())}><b>Exit</b><span>Your career is saved automatically.</span></button>` : html``}
-        </div>
-        <p class="credits">Art by bubbabba · Goals in Pixels</p>
-    </div></div>`;
+    /** Title menu: one list, a ▶ on the focused item, its description underneath. Arrows + Enter work too. */
+    const Title = () => {
+        type Item = { id: string; label: string; desc: string; go: () => void; cls?: string };
+        const items: Item[] = [
+            ...(career
+                ? [
+                      {
+                          id: 'continue',
+                          label: 'Continue career',
+                          desc: `${userClub(career).name} · Season ${String(career.season)} · Division ${String(userClub(career).tier + 1)}`,
+                          go: () => screen.set('hub'),
+                          cls: 'primary',
+                      },
+                  ]
+                : []),
+            { id: 'tutorial', label: 'Tutorial', desc: 'Eight short lessons on the training ground. Start here.', go: startTutorial },
+            {
+                id: 'career',
+                label: 'New career',
+                desc: 'Take a club from the bottom division to the top. Train, trade, promote.',
+                go: () => screen.set('newCareer'),
+            },
+            {
+                id: 'quick',
+                label: 'Quick match',
+                desc: 'A one-off match: against the AI, hotseat, or watch the AI play.',
+                go: () => screen.set('setup'),
+            },
+            {
+                id: 'settings',
+                label: 'Settings',
+                desc: 'UI scale, font, sound, pacing and match defaults.',
+                go: () => showSettings.set(true),
+            },
+            ...(isDesktop
+                ? [
+                      {
+                          id: 'exit',
+                          label: 'Exit',
+                          desc: 'Close the game. Your career is saved automatically.',
+                          go: () => void quitApp(),
+                          cls: 'exit',
+                      },
+                  ]
+                : []),
+        ];
+        const focus = grain(0);
+        const keys = mounted<HTMLDivElement>(() => {
+            const onKey = (e: KeyboardEvent) => {
+                if (showSettings() || showHowto()) return;
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    focus.update((f) => (f + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length);
+                    audio.play('click');
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    items[focus()]?.go();
+                }
+            };
+            window.addEventListener('keydown', onKey);
+            return () => window.removeEventListener('keydown', onKey);
+        });
+        const menu = derived(
+            focus,
+            (f) =>
+                html`${items.map(
+                    (it, i) =>
+                        html`<button class="title-item ${it.cls ?? ''} ${i === f ? 'on' : ''}" ${on('mouseenter', () => focus.set(i))} ${on('focus', () => focus.set(i))} ${on('click', it.go)}>${it.label}</button>`,
+                )}`,
+        );
+        const desc = derived(focus, (f) => items[f]?.desc ?? '');
+        return html`<div class="setup title-screen" ${keys}>${titleScene()}<div class="setup-inner">
+            <h1>Tackle <span>Tactics</span></h1>
+            <p class="tag">A turn-based positioning game in a football kit. Make space, deny space, beat the clock.</p>
+            <nav class="title-menu">${$render(menu)}</nav>
+            <p class="title-desc">${desc}</p>
+            <p class="credits">Art by bubbabba · Goals in Pixels</p>
+        </div></div>`;
+    };
 
     const NewCareer = () => {
         const name = grain('');

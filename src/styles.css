@@ -2786,48 +2786,6 @@ a {
     text-shadow: 1px 1px 0 #000;
     letter-spacing: 0.01em;
 }
-.title-cards {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    width: 430px;
-    margin: 28px auto 0;
-}
-.tcard {
-    text-align: left;
-    padding: 4px 14px 6px;
-    border-left-width: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    text-transform: none;
-    letter-spacing: 0;
-    filter: drop-shadow(0 4px 0 var(--ink)) drop-shadow(var(--shadow));
-}
-.tcard b {
-    font-family: var(--display);
-    font-weight: 700;
-    font-size: 20px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-}
-.tcard span {
-    color: #a9aba8;
-    font-family: var(--body);
-    font-size: 13px;
-    text-shadow: none;
-}
-.tcard.primary-card {
-    border-image-source: var(--f-gold);
-    color: var(--on-accent);
-    text-shadow: none;
-}
-.tcard.primary-card:hover {
-    border-image-source: var(--f-gold-hover);
-}
-.tcard.primary-card span {
-    color: #4a3a12;
-}
 .title-screen .credits {
     position: fixed;
     bottom: 14px;
@@ -4429,9 +4387,6 @@ a {
     color: #121314;
 }
 
-.tcard:not(.primary-card):hover b {
-    color: var(--accent);
-}
 .save-path {
     font-family: ui-monospace, monospace;
     font-size: 12px;
@@ -4733,16 +4688,6 @@ a {
     white-space: nowrap;
 }
 
-.tcard.exit-card {
-    filter: none;
-}
-.tcard.exit-card b {
-    color: var(--muted);
-}
-.tcard.exit-card:hover b {
-    color: var(--bad);
-}
-
 .viewport.dragging,
 .viewport.dragging .cell {
     cursor: grabbing;
@@ -4753,4 +4698,80 @@ a {
     border-top: 1px solid var(--line);
     font-size: 11px;
     color: var(--muted);
+}
+
+/* ---- title menu: one list, a ▶ on the focused item, its description underneath */
+.title-menu {
+    display: flex;
+    flex-direction: column;
+    width: 440px;
+    margin: 34px auto 0;
+    padding: 10px 0;
+    border: 8px solid transparent;
+    border-image: var(--f-panel) 4 fill / 8px / 0 stretch;
+    filter: drop-shadow(var(--shadow));
+}
+.title-item {
+    position: relative;
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 9px 20px 9px 52px;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text);
+    background: none;
+    border: 0;
+    border-image: none;
+    filter: none;
+    transform: none;
+}
+.title-item:hover,
+.title-item:active {
+    border-image: none;
+    transform: none;
+}
+.title-item.on {
+    color: var(--accent);
+    background: #d9b45a16;
+}
+.title-item.on::before {
+    content: '▶';
+    position: absolute;
+    left: 22px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 15px;
+    color: var(--accent);
+    animation: blink 0.8s steps(2) infinite;
+}
+.title-item.primary {
+    color: var(--gold-hi);
+}
+.title-item.primary.on {
+    color: var(--accent);
+}
+.title-item.exit {
+    color: var(--muted);
+    font-size: 20px;
+    margin-top: 6px;
+}
+.title-item.exit.on {
+    color: var(--bad);
+    background: #ff5a5f12;
+}
+.title-item.exit.on::before {
+    color: var(--bad);
+}
+.title-desc {
+    min-height: 22px;
+    margin: 14px auto 0;
+    max-width: 560px;
+    text-align: center;
+    font-size: 15px;
+    color: #c9c7c0;
+    text-shadow: 1px 1px 0 #000;
 }
