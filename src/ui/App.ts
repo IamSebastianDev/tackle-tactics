@@ -1,4 +1,5 @@
 import { combined, derived, grain } from '@grainular/grains';
+import { Dropdown } from './Dropdown';
 import { DEFAULT_NATION, NATION_IDS, NATIONS, type NationId } from '../world/nations';
 import { flag } from './flag';
 import { createConfirmation } from './confirm';
@@ -331,9 +332,7 @@ export const App = () => {
     const setting = <K extends keyof Settings>(key: K) => distinct(derived(settings, (s) => s[key]));
     const select = <K extends keyof Settings>(k: K, opts: Array<[string, string]>, cast: (v: string) => Settings[K]) => {
         const value = derived(setting(k), (current) => opts.find(([v]) => current === cast(v))?.[0] ?? opts[0]![0]);
-        return html`<select ${controlValue(value)} ${on('change', (e) => set(k, cast((e.currentTarget as HTMLSelectElement).value)))}>
-            ${opts.map(([v, label]) => html`<option value="${v}" ${attr({ selected: value() === v })}>${label}</option>`)}
-        </select>`;
+        return Dropdown(value, opts, (v) => set(k, cast(v)));
     };
 
     const range = (k: 'timerSeconds' | 'rounds', min: number, max: number, step: number, unit: string) => {
@@ -651,8 +650,8 @@ export const App = () => {
             const clubs = towns.slice(0, 3).map((p) => n.clubName(rng, p));
             const players: string[] = [];
             while (players.length < 3) {
-                const name = n.playerName(rng);
-                if (!players.some((q) => q.split(' ').at(-1) === name.split(' ').at(-1))) players.push(name);
+                const candidate = n.playerName(rng);
+                if (!players.some((q) => q.split(' ').at(-1) === candidate.split(' ').at(-1))) players.push(candidate);
             }
             return { clubs, players };
         };

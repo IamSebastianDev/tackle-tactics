@@ -265,7 +265,6 @@ kbd {
     letter-spacing: 0;
 }
 
-select,
 input[type='text'] {
     font: inherit;
     font-size: 15px;
@@ -276,10 +275,6 @@ input[type='text'] {
     border-image: var(--f-well) 4 fill / 8px / 0 stretch;
     background: none;
     border-radius: 0;
-}
-select option {
-    background: var(--panel);
-    color: var(--text);
 }
 input[type='range'] {
     accent-color: var(--accent);
@@ -2561,7 +2556,7 @@ dialog.drawer-wrap:not([open]) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
 }
-.opts .pair select {
+.opts .pair .dd {
     min-width: 0;
     width: 100%;
 }
@@ -5520,4 +5515,102 @@ td.name .flag {
 }
 .set-version span {
     color: var(--dim);
+}
+
+/* ---- dropdowns (src/ui/Dropdown.ts): a well-framed button, the options in a raised pixel panel */
+.dd {
+    display: block;
+    min-width: 0;
+}
+button.dd-button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 2px 6px;
+    border-image: var(--f-well) 4 fill / 8px / 0 stretch;
+    filter: none;
+    font-family: var(--body);
+    font-weight: 400;
+    font-size: 15px;
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: left;
+}
+button.dd-button:hover,
+button.dd-button.open {
+    border-image-source: var(--f-panel);
+}
+button.dd-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+.dd-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* a pixel caret: two steps of a downward arrow */
+.dd-caret {
+    flex: none;
+    width: 10px;
+    height: 6px;
+    background:
+        linear-gradient(var(--accent), var(--accent)) 0 0 / 10px 2px no-repeat,
+        linear-gradient(var(--accent), var(--accent)) 2px 2px / 6px 2px no-repeat,
+        linear-gradient(var(--accent), var(--accent)) 4px 4px / 2px 2px no-repeat;
+    transition: transform 0.12s steps(2);
+}
+.dd-button.open .dd-caret {
+    transform: scaleY(-1);
+}
+.dd-list {
+    /* a popover: undo the UA's centring, place it from the button (Dropdown.ts sets left/top/scale) */
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 2px 0;
+    max-height: 300px;
+    overflow-y: auto;
+    overscroll-behavior: none;
+    transform-origin: 0 0;
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 15px;
+    font-weight: 400;
+    /* the list sits inside form labels in the DOM: don't inherit their small caps */
+    text-transform: none;
+    letter-spacing: 0;
+    line-height: 1.35;
+    border: 8px solid transparent;
+    border-image: var(--f-panel-raised) 4 fill / 8px / 0 stretch;
+    background: none;
+    filter: drop-shadow(4px 4px 0 #000b);
+}
+.dd-list:popover-open {
+    animation: dd-in 0.1s steps(2) both;
+}
+@keyframes dd-in {
+    from {
+        opacity: 0;
+    }
+}
+.dd-option {
+    position: relative;
+    padding: 4px 12px 4px 22px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.dd-option.hi {
+    background: #ffffff14;
+}
+.dd-option.on {
+    color: var(--accent);
+}
+.dd-option.on::before {
+    content: '▸';
+    position: absolute;
+    left: 7px;
 }
