@@ -2013,6 +2013,9 @@ dialog.drawer-wrap:not([open]) {
 .tbl.league tr.up td:first-child {
     box-shadow: inset 4px 0 0 var(--good);
 }
+.tbl.league tr.intl td:first-child {
+    box-shadow: inset 4px 0 0 var(--accent);
+}
 .tbl.league tr.down td:first-child {
     box-shadow: inset 4px 0 0 var(--bad);
 }
@@ -2035,6 +2038,9 @@ dialog.drawer-wrap:not([open]) {
 }
 .legend-line i.up {
     background: var(--good);
+}
+.legend-line i.intl {
+    background: var(--accent);
 }
 .legend-line i.down {
     background: var(--bad);

@@ -2,18 +2,22 @@ import type { Rng } from '../rng';
 import type { TeamSide } from '../types';
 import type { Fixture } from './career';
 
+/** The domestic knockout, open to every club in the manager's pyramid. */
 export const CUP_NAME = 'Pyramid Cup';
+/** The international knockout: the best two clubs of every nation's top flight. */
+export const INTL_CUP_NAME = 'Champions Cup';
 
+export type CupKey = 'cup' | 'intl';
 export type CupFixture = Fixture & { competition: 'cup'; penalties?: [number, number] };
 export type CupRound = { day: number; label: string; fixtures: CupFixture[]; byes: string[] };
-export type Cup = { rounds: CupRound[]; champion?: string };
+export type Cup = { key: CupKey; name: string; rounds: CupRound[]; champion?: string };
 
 export const isCupFixture = (f: Fixture): f is CupFixture => 'competition' in f && f.competition === 'cup';
 
 export const fixtureForClub = <F extends Fixture>(fixtures: readonly F[], club: string) =>
     fixtures.find((f) => f.home === club || f.away === club);
 
-const draw = (clubs: readonly string[], rng: Rng, season: number, round: number, byeCount = 0) => {
+const draw = (key: CupKey, clubs: readonly string[], rng: Rng, season: number, round: number, byeCount = 0) => {
     const ids = [...clubs];
     for (let i = ids.length - 1; i > 0; i--) {
         const j = rng.int(0, i);
@@ -22,7 +26,7 @@ const draw = (clubs: readonly string[], rng: Rng, season: number, round: number,
     const byes = ids.splice(0, byeCount);
     const fixtures = Array.from({ length: ids.length / 2 }, (_, i): CupFixture => ({
         competition: 'cup',
-        id: `s${season}-cup-r${round}-${i}`,
+        id: `s${season}-${key}-r${round}-${i}`,
         round,
         home: ids[2 * i]!,
         away: ids[2 * i + 1]!,
@@ -37,18 +41,19 @@ const roundLabel = (size: number) => {
     return `Round of ${size}`;
 };
 
-export const createCup = (rng: Rng, season: number, clubs: string[], leagueRounds: number, daysPerRound: number): Cup => {
+/** A knockout for `clubs`; round days are set by the career calendar (see scheduleSeason). */
+export const createCup = (key: CupKey, name: string, rng: Rng, season: number, clubs: string[]): Cup => {
     const count = Math.ceil(Math.log2(clubs.length));
     const fullSize = 2 ** count;
     const byes = fullSize - clubs.length;
     const rounds = Array.from({ length: count }, (_, index): CupRound => ({
-        day: (Math.ceil(((index + 1) * leagueRounds) / count) + index) * daysPerRound + 1,
+        day: 0,
         label: index === 0 && byes ? 'Opening round' : roundLabel(fullSize / 2 ** index),
         fixtures: [],
         byes: [],
     }));
-    if (rounds[0]) Object.assign(rounds[0], draw(clubs, rng, season, 0, byes));
-    return { rounds };
+    if (rounds[0]) Object.assign(rounds[0], draw(key, clubs, rng, season, 0, byes));
+    return { key, name, rounds };
 };
 
 export const cupWinner = (f: CupFixture): string | undefined => {
@@ -77,7 +82,7 @@ export const advanceCup = (cup: Cup, round: CupRound, rng: Rng, season: number) 
     const index = cup.rounds.indexOf(round) + 1;
     const next = cup.rounds[index];
     if (next) {
-        Object.assign(next, draw(qualifiers, rng, season, index));
+        Object.assign(next, draw(cup.key, qualifiers, rng, season, index));
         return next;
     }
     cup.champion = qualifiers[0];
@@ -85,3 +90,6 @@ export const advanceCup = (cup: Cup, round: CupRound, rng: Rng, season: number) 
 
 export const penaltyScore = (f: Fixture, side: TeamSide = 0) =>
     isCupFixture(f) && f.penalties ? `${f.penalties[side]}–${f.penalties[side === 0 ? 1 : 0]} on pens` : '';
+
+/** Which competition a cup fixture belongs to (its id carries the cup's key). */
+export const cupKeyOf = (f: Fixture): CupKey | null => (isCupFixture(f) ? (f.id.includes('-intl-') ? 'intl' : 'cup') : null);

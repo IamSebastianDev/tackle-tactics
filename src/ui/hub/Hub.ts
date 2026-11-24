@@ -47,8 +47,10 @@ import {
     type SeasonCeremony,
     chooseLevelUp,
     choosePerk,
+    cupOf,
+    pyramidOf,
 } from '../../meta/career';
-import { CUP_NAME, cupWinner, isCupFixture, penaltyScore } from '../../meta/cup';
+import { CUP_NAME, INTL_CUP_NAME, cupWinner, isCupFixture, penaltyScore } from '../../meta/cup';
 import { avgRating, moraleLabel, rivalOf, seasonLine, story } from '../../meta/story';
 import { COUNTERS, isDerby, opponentOf, planEdge, prepFor, TALKS, type TeamTalk } from '../../meta/prep';
 import { styleOf } from '../../ai/brain';
@@ -73,7 +75,7 @@ const TABS: Array<[Tab, string, string]> = [
     ['tactics', 'Tactics', '▦'],
     ['training', 'Training', '⚒'],
     ['league', 'League', '♜'],
-    ['cup', 'Cup', '♛'],
+    ['cup', 'Cups', '♛'],
     ['market', 'Market', '⇄'],
     ['finances', 'Finances', '¤'],
     ['playbook', 'Playbook', '✦'],
@@ -118,6 +120,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     const selected = grain<{ id: string; from: 'squad' | 'market' } | null>(null);
     const flash = grain<string | null>(null);
     const leagueTier = grain<number>(userClub(c).tier);
+    const leagueNation = grain<NationId>(c.nation);
     const planDay = grain<number | null>(null);
     const marketFilter = grain<ClassId | 'all'>('all');
     const marketNation = grain<NationId | 'all'>('all');
@@ -193,11 +196,11 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         if (t.kind === 'match') {
             const f = t.fixture;
             const opp = club(f.home === u().id ? f.away : f.home);
-            const label = t.cup ? `Cup · ${t.cup.label}` : `Matchday ${t.round + 1}`;
+            const label = t.cup ? `${cupOf(c, t.cup).name} · ${t.cup.label}` : `Matchday ${t.round + 1}`;
             return { label, sub: `${f.home === u().id ? 'vs' : 'at'} ${opp.name}`, kind: t.kind };
         }
         return {
-            label: t.cup ? 'Cup day · Training' : 'Training day',
+            label: t.cup ? `${cupOf(c, t.cup).name} day · Training` : 'Training day',
             sub: TRAINING_FOCUSES[c.trainingFocus].label,
             kind: t.kind,
         };
@@ -246,7 +249,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
             const f = t.fixture;
             const h = club(f.home);
             const a = club(f.away);
-            const label = t.cup ? `${CUP_NAME} · ${t.cup.label}` : `Matchday ${t.round + 1} of ${roundsPerSeason(c)}`;
+            const label = t.cup ? `${cupOf(c, t.cup).name} · ${t.cup.label}` : `Matchday ${t.round + 1} of ${roundsPerSeason(c)}`;
             return html`<div class="card next">
                 <h3>Next up · ${label}</h3>
                 <div class="vs">${crest(h)}<b>${h.name}</b><span>vs</span><b>${a.name}</b>${crest(a)}</div>
@@ -255,7 +258,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         }
         if (t.kind === 'training') {
             const next = seasonSchedule(cfg, c).find((date) => date.day > c.day && scheduledFixture(c, date));
-            const note = t.cup ? `${CUP_NAME} ${t.cup.label.toLowerCase()} today. Your squad trains.` : '';
+            const note = t.cup ? `${cupOf(c, t.cup).name} ${t.cup.label.toLowerCase()} today. Your squad trains.` : '';
             return html`<div class="card next"><h3>Training day · ${TRAINING_FOCUSES[c.trainingFocus].label}</h3>
                 ${note ? html`<p>${note}</p>` : html``}
                 <p>${next ? `Next match on Day ${next.day}.` : 'Season review follows the last training day.'}</p>
@@ -354,7 +357,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                 kind,
                 trains: kind === 'training' || (!!cup?.fixtures.length && !fixture),
                 title: cup
-                    ? `Cup · ${cup.label}`
+                    ? `${cupOf(c, cup).name} · ${cup.label}`
                     : fixture
                       ? `Matchday ${fixture.round + 1}`
                       : kind === 'review'
@@ -393,7 +396,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                 <h4>Day ${String(day)} · ${title}${item.derby ? ' · Derby' : ''}</h4>
                 ${match ? html`<p>${match}${score ? html` <strong class="${tone}">${score}</strong>` : html``}</p>` : html``}
                 ${item.cupNote ? html`<p>${item.cupNote}</p>` : html``}
-                ${item.kind === 'cup' ? html`<p><button class="ghost" ${on('click', () => tab.set('cup'))}>View cup</button></p>` : html``}
+                ${item.kind === 'cup' ? html`<p><button class="ghost" ${on('click', () => tab.set('cup'))}>View cups</button></p>` : html``}
                 ${item.kind === 'review' ? html`<p>Promotion, relegation and awards</p>` : html``}
                 ${item.trains && day === cal.today ? html`<p>Squad focus · ${TRAINING_FOCUSES[c.trainingFocus].label}</p>` : html``}
                 ${item.trains && day < cal.today && !item.news.length ? html`<p class="muted">Training completed</p>` : html``}
@@ -449,16 +452,22 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     };
 
     // ------------------------------------------------------------ league
-    const leagueTable = (rows: ReturnType<typeof table>, tier: number, compact = false) => html`<table class="tbl league">
+    const leagueTable = (
+        rows: ReturnType<typeof table>,
+        tier: number,
+        compact = false,
+    ) => html`<table class="tbl league ${tier === 0 ? 'top-flight' : ''}">
         <thead><tr><th>#</th><th>Club</th><th>P</th>${compact ? html`` : html`<th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th>`}<th>GD</th><th>Pts</th></tr></thead>
         <tbody>${rows.map((r, i) => {
             const cl = club(r.club);
             const zone =
-                tier > 0 && i < cfg.career.promote
-                    ? 'up'
-                    : tier < cfg.career.divisions - 1 && i >= rows.length - cfg.career.relegate
-                      ? 'down'
-                      : '';
+                tier === 0 && i < cfg.career.intlPerNation
+                    ? 'intl'
+                    : tier > 0 && i < cfg.career.promote
+                      ? 'up'
+                      : tier < cfg.career.divisions - 1 && i >= rows.length - cfg.career.relegate
+                        ? 'down'
+                        : '';
             return html`<tr class="${zone} ${r.club === u().id ? 'me' : ''}">
                 <td>${String(i + 1)}</td><td class="club">${crest(cl)}${cl.name}</td><td>${String(r.p)}</td>
                 ${compact ? html`` : html`<td>${String(r.w)}</td><td>${String(r.d)}</td><td>${String(r.l)}</td><td>${String(r.gf)}</td><td>${String(r.ga)}</td>`}
@@ -481,11 +490,13 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     };
 
     const League = () => {
-        const entries = derived(combined([leagueTier, version]), ([tier]) => {
-            const d = c.divisions[tier]!;
+        const pyramid = (n: NationId) => (n === c.nation ? c.divisions : (c.world[n] ?? c.divisions));
+        const entries = derived(combined([leagueNation, leagueTier, version]), ([n, tier]) => {
+            const d = pyramid(n)[tier] ?? pyramid(n)[0]!;
+            const home = n === c.nation;
             const rounds = Array.from({ length: roundsPerSeason(c) }, (_, r) => d.fixtures.filter((f) => f.round === r));
             return html`            <div class="grid-2 wide-left">
-                <div class="col"><div class="card">${leagueTable(table(d), tier)}<p class="muted legend-line"><i class="up"></i>Promotion <i class="down"></i>Relegation</p></div>${goldenBoot(d)}</div>
+                <div class="col"><div class="card"><h3>${flag(n)} ${NATIONS[n].name} · Division ${String(d.tier + 1)}</h3>${leagueTable(table(d), d.tier)}<p class="muted legend-line">${d.tier === 0 ? html`<i class="intl"></i>${INTL_CUP_NAME} ` : html``}<i class="up"></i>Promotion <i class="down"></i>Relegation</p></div>${home ? goldenBoot(d) : html``}</div>
                 <div class="card fixtures fill"><h3>Fixtures</h3><div class="scroll">${rounds.map(
                     (fs, r) =>
                         html`<div class="round"><h4>Matchday ${String(r + 1)}</h4>${fs.map(
@@ -495,7 +506,12 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                 )}</div></div>
             </div>`;
         });
+        const nationButton = (n: NationId) => {
+            const active = derived(leagueNation, (cur) => cur === n);
+            return html`<button title="${NATIONS[n].name}" ${attr({ class: derived(active, (isActive) => `nation-filter${isActive ? ' on' : ''}`), 'aria-pressed': derived(active, String) })} ${on('click', () => leagueNation.set(n))}>${flag(n)}</button>`;
+        };
         return html`<div class="stack">
+            <div class="seg nation-seg">${[c.nation, ...NATION_IDS.filter((n) => n !== c.nation)].map(nationButton)}</div>
             <div class="seg">${c.divisions.map((division) => {
                 const active = derived(leagueTier, (tier) => tier === division.tier);
                 return html`<button ${attr({ class: derived(active, (isActive) => (isActive ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => leagueTier.set(division.tier))}>Division ${String(division.tier + 1)}${read(() => (division.tier === u().tier ? ' ★' : ''))}</button>`;
@@ -506,7 +522,8 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
 
     const Cup = () => {
         const selectedRound = grain<number | null>(null);
-        const info = read(() => c.cup);
+        const which = grain<'cup' | 'intl'>('cup');
+        const info = derived(combined([which, version]), ([key]) => (key === 'intl' ? c.intl : c.cup));
         const rounds = derived(info, (cup) => cup?.rounds ?? []);
         const activeRound = derived(combined([selectedRound, rounds]), ([picked, dates]) => {
             const scheduled = dates.findIndex((date) => date.day >= c.day);
@@ -514,7 +531,8 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         });
         const roundView = derived(combined([activeRound, rounds]), ([index, dates]) => {
             const round = dates[index];
-            if (!round) return html`<p class="muted">The cup begins next season.</p>`;
+            if (!round)
+                return html`<p class="muted">${which() === 'intl' ? `No ${INTL_CUP_NAME} this season.` : 'The cup begins next season.'}</p>`;
             return html`<h4>${round.label} · Day ${String(round.day)}</h4>
                 ${
                     round.fixtures.length
@@ -524,10 +542,12 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                         const home = club(fixture.home);
                         const away = club(fixture.away);
                         const winner = cupWinner(fixture);
+                        const where = (cl: CareerClub) =>
+                            which() === 'intl' ? flag(cl.nation) : html`<small>Div ${String(cl.tier + 1)}</small>`;
                         return html`<tr class="${home.id === c.userClubId || away.id === c.userClubId ? 'me' : ''}">
-                            <td class="${winner === home.id ? 'cup-winner' : ''}">${crest(home)} ${home.name} <small>Div ${String(home.tier + 1)}</small></td>
+                            <td class="${winner === home.id ? 'cup-winner' : ''}">${crest(home)} ${home.name} ${where(home)}</td>
                             <td>${fixture.result ? `${fixture.result[0]}–${fixture.result[1]}` : 'vs'} <small>${penaltyScore(fixture)}</small></td>
-                            <td class="${winner === away.id ? 'cup-winner' : ''}">${crest(away)} ${away.name} <small>Div ${String(away.tier + 1)}</small></td>
+                            <td class="${winner === away.id ? 'cup-winner' : ''}">${crest(away)} ${away.name} ${where(away)}</td>
                         </tr>`;
                     })}</tbody>
                 </table>`
@@ -536,7 +556,23 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                 ${round.byes.length ? html`<h4>Byes to the next round</h4><p>${round.byes.map((id) => club(id).name).join(' · ')}</p>` : html``}`;
         });
         return html`<div class="card fill">
-            <h3>${CUP_NAME} <small>${derived(info, (cup) => (cup?.champion ? `${club(cup.champion).name} won the cup` : 'Single-match knockout · all five divisions'))}</small></h3>
+            <div class="seg">${(['cup', 'intl'] as const).map((key) => {
+                const active = derived(which, (cur) => cur === key);
+                return html`<button ${attr({ class: derived(active, (isActive) => (isActive ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on(
+                    'click',
+                    () => {
+                        which.set(key);
+                        selectedRound.set(null);
+                    },
+                )}>${key === 'intl' ? INTL_CUP_NAME : CUP_NAME}</button>`;
+            })}</div>
+            <h3>${derived(which, (key) => (key === 'intl' ? INTL_CUP_NAME : CUP_NAME))} <small>${derived(info, (cup) =>
+                cup?.champion
+                    ? `${club(cup.champion).name} won the cup`
+                    : cup?.key === 'intl'
+                      ? `Single-match knockout · the top ${cfg.career.intlPerNation} of every top flight${cup.rounds.some((r) => r.fixtures.some((f) => f.home === c.userClubId || f.away === c.userClubId) || r.byes.includes(c.userClubId)) ? ' · you are in it' : ''}`
+                      : 'Single-match knockout · all five divisions',
+            )}</small></h3>
             <div class="seg" role="group" aria-label="Cup rounds">
                 ${$each(derived(rounds, (dates) => dates.map((_, i) => i)))
                     .$withKey((index) => index)
@@ -948,7 +984,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         const opp = opponentOf(c, t.fixture);
         const oppStyle = styleOf(opp);
         const derby = isDerby(c, t.fixture);
-        const div = c.divisions.find((d) => d.clubs.includes(opp.id))!;
+        const div = pyramidOf(c, opp.id).find((d) => d.clubs.includes(opp.id))!;
         const pos = table(div).findIndex((r) => r.club === opp.id) + 1;
         const form = div.fixtures
             .filter((x) => x.result && (x.home === opp.id || x.away === opp.id))

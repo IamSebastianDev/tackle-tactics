@@ -77,11 +77,20 @@ describe('career', () => {
         const first = c.cup!.rounds[0]!;
         expect(first.fixtures).toHaveLength(18);
         expect(first.byes).toHaveLength(14);
-        expect(new Set([...first.byes, ...first.fixtures.flatMap((f) => [f.home, f.away])])).toEqual(new Set(Object.keys(c.clubs)));
+        expect(new Set([...first.byes, ...first.fixtures.flatMap((f) => [f.home, f.away])])).toEqual(
+            new Set(c.divisions.flatMap((d) => d.clubs)),
+        );
         const schedule = seasonSchedule(cfg, c);
         expect(schedule.filter((date) => !date.cup).map((date) => date.round)).toEqual(Array.from({ length: 18 }, (_, i) => i));
-        expect(schedule.filter((date) => date.cup).map((date) => date.day)).toEqual([10, 22, 34, 46, 58, 70]);
-        expect(seasonDays(cfg, c)).toBe(72);
+        // six domestic and five international cup dates sit between the 18 league matchdays
+        const cupDays = schedule.filter((date) => date.cup).map((date) => date.day);
+        expect(cupDays).toHaveLength(c.cup!.rounds.length + c.intl!.rounds.length);
+        expect(c.intl!.rounds.map((r) => r.label)).toEqual(['Round of 32', 'Round of 16', 'Quarter-finals', 'Semi-finals', 'Final']);
+        expect(new Set(cupDays).size).toBe(cupDays.length);
+        expect(cupDays.every((d) => (d - 1) % cfg.career.daysPerMatchday === 0)).toBe(true);
+        // the domestic final closes the season
+        expect(schedule.at(-1)!.cup).toBe(c.cup!.rounds.at(-1));
+        expect(seasonDays(cfg, c)).toBe((18 + 6 + 5) * cfg.career.daysPerMatchday);
     });
 
     it('decides a drawn cup tie on penalties and draws the next round without changing the league', () => {
@@ -274,7 +283,7 @@ describe('career', () => {
         };
         console.log('avg ovr by tier', [0, 1, 2, 3, 4].map((t) => avg(t).toFixed(1)).join(' '));
         expect(avg(0)).toBeGreaterThan(avg(4));
-    });
+    }, 60_000); // 16 full pyramids: a few seconds a season
 
     it('market: buy and sell move money and players', () => {
         const c = newCareer(cfg, 9, settings);

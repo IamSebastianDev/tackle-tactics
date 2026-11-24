@@ -9,7 +9,7 @@ import type { Player } from '../types';
 import { generatePlayer } from '../world/generate';
 import { NATION_IDS, nationOf } from '../world/nations';
 import type { Career, CareerClub, Fixture } from './career';
-import { CUP_NAME, cupWinner, isCupFixture } from './cup';
+import { CUP_NAME, INTL_CUP_NAME, cupWinner, isCupFixture } from './cup';
 import { gainXp, money, ovr, playerValue } from './player';
 
 // ------------------------------------------------------------------ types
@@ -877,6 +877,8 @@ export const seasonAwards = (c: Career): Array<{ title: string; who: string; det
     const u = c.clubs[c.userClubId]!;
     const out: Array<{ title: string; who: string; detail: string; icon: 'cup' | 'medal' | 'boot' | 'star' }> = [];
     if (c.cup?.champion) out.push({ title: CUP_NAME, who: c.clubs[c.cup.champion]!.name, detail: 'Cup winners', icon: 'cup' });
+    if (c.intl?.champion)
+        out.push({ title: INTL_CUP_NAME, who: c.clubs[c.intl.champion]!.name, detail: 'Champions of the continent', icon: 'cup' });
     const div = c.divisions.find((d) => d.clubs.includes(u.id))!;
     // golden boot across the user's division
     const everyone = div.clubs.flatMap((id) => c.clubs[id]!.squad.map((p) => ({ p, club: c.clubs[id]!, l: s.seasonStats[p.id] })));

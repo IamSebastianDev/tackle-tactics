@@ -5,12 +5,13 @@
  * rival raise the stakes both ways.
  */
 import type { GameConfig, TeamStyle } from '../config';
+import { NATIONS } from '../world/nations';
 import { styleOf } from '../ai/brain';
 import { pickReferee } from '../engine/match';
 import { createRng } from '../rng';
 import type { Referee } from '../types';
 import { rollConditions, type Conditions } from '../world/stadium';
-import { stadiumOf, table, type Career, type Fixture } from './career';
+import { stadiumOf, table, type Career, type Fixture, cupOfFixture } from './career';
 import { CUP_NAME, isCupFixture } from './cup';
 import { moraleLabel, rivalOf, shiftMorale, story } from './story';
 
@@ -109,10 +110,13 @@ export const storyLines = (cfg: GameConfig, c: Career, f: Fixture, p: Prep): str
     const lines: string[] = [];
     if (isDerby(c, f)) lines.push(`It's the derby. ${opp.name} — the town has talked about nothing else all week.`);
     if (isCupFixture(f)) {
-        const round = c.cup?.rounds[f.round];
-        lines.push(
-            `${CUP_NAME}${round ? ` · ${round.label}` : ''}. ${opp.name} play in Division ${opp.tier + 1}. A draw goes to penalties.`,
-        );
+        const cup = cupOfFixture(c, f);
+        const round = cup?.rounds[f.round];
+        const where =
+            cup?.key === 'intl'
+                ? `${opp.name} are ${NATIONS[opp.nation].adjective} top-flight opposition.`
+                : `${opp.name} play in Division ${opp.tier + 1}.`;
+        lines.push(`${cup?.name ?? CUP_NAME}${round ? ` · ${round.label}` : ''}. ${where} A draw goes to penalties.`);
     } else if (div) {
         const rows = table(div);
         const pos = (id: string) => rows.findIndex((r) => r.club === id) + 1;

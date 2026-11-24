@@ -9,12 +9,14 @@ import { classLevel, perkDef, pickPerk, type PerkId } from '../engine/abilities'
 import { createRng, type Rng } from '../rng';
 import type { Club, Player, TeamSide } from '../types';
 import { generatePlayer } from '../world/generate';
-import { DEFAULT_NATION, NATIONS, pickNationality, shortCode, type NationId } from '../world/nations';
+import { DEFAULT_NATION, NATION_IDS, NATIONS, pickNationality, shortCode, type NationId } from '../world/nations';
 import { generateStadium, type Stadium } from '../world/stadium';
 import {
     CUP_NAME,
+    INTL_CUP_NAME,
     advanceCup,
     createCup,
+    cupKeyOf,
     cupWinner,
     fixtureForClub,
     isCupFixture,
@@ -47,6 +49,8 @@ export type Ledger = { season: number; day: number; label: string; amount: numbe
 export type CareerSettings = { timerSeconds: number; rounds: number; difficulty: Difficulty; timeoutPolicy: TimeoutPolicy };
 
 export type CareerClub = Club & {
+    /** The nation whose pyramid the club plays in. */
+    nation: NationId;
     tier: number;
     budget: number;
     /** Player ids in formation-slot order (11). */
@@ -70,9 +74,14 @@ export type Career = {
     day: number;
     userClubId: string;
     clubs: Record<string, CareerClub>;
+    /** The manager's pyramid (top division first). */
     divisions: Division[];
-    /** Absent in saves that are still playing a season from before the cup. */
+    /** Every other nation's pyramid, simulated alongside (same shape as `divisions`). */
+    world: Partial<Record<NationId, Division[]>>;
+    /** The domestic cup ({@link CUP_NAME}). */
     cup?: Cup;
+    /** The international cup ({@link INTL_CUP_NAME}): the best two of every top flight. */
+    intl?: Cup;
     market: Player[];
     news: News[];
     ledger: Ledger[];
@@ -134,12 +143,58 @@ const newPlayer = (
     return p;
 };
 
-const buildSquad = (cfg: GameConfig, rng: Rng, c: Career, tier: number): Player[] => {
+/** A player for a club: mostly from the club's own nation. */
+const clubPlayer = (
+    cfg: GameConfig,
+    rng: Rng,
+    c: Career,
+    club: { nation: NationId; tier: number },
+    cls: ClassId,
+    number: number,
+    ageR?: [number, number],
+) => newPlayer(cfg, rng, c, cls, club.tier, number, ageR, pickNationality(rng, club.nation, cfg.world.foreignShare));
+
+const buildSquad = (cfg: GameConfig, rng: Rng, c: Career, tier: number, nation: NationId): Player[] => {
     const squad: Player[] = [];
     let n = 1;
     for (const [cls, count] of Object.entries(cfg.career.squadMake) as Array<[ClassId, number]>)
-        for (let i = 0; i < count; i++) squad.push(newPlayer(cfg, rng, c, cls, tier, n++));
+        for (let i = 0; i < count; i++) squad.push(clubPlayer(cfg, rng, c, { nation, tier }, cls, n++));
     return squad;
+};
+
+/** A full pyramid of clubs for one nation (ids from `prefix`); returns its divisions, top first. */
+const buildPyramid = (cfg: GameConfig, rng: Rng, c: Career, nationId: NationId, prefix: string, kitStart: number): Division[] => {
+    const nation = NATIONS[nationId];
+    const places = nation.places(rng);
+    const divisions: Division[] = [];
+    let ci = 0;
+    for (let tier = 0; tier < cfg.career.divisions; tier++) {
+        const ids: string[] = [];
+        for (let k = 0; k < cfg.career.clubsPerDivision; k++, ci++) {
+            const id = `${prefix}${ci}`;
+            const kit = kitStart + ci;
+            const club: CareerClub = {
+                id,
+                nation: nationId,
+                name: nation.clubName(rng, places[ci % places.length]!),
+                short: shortCode(places[ci % places.length]!),
+                kit: outfieldKit(cfg, kit),
+                awayKit: awayKitFor(cfg, outfieldKit(cfg, kit), kit + 3),
+                keeperKit: keeperKit(cfg, kit),
+                formationId: cfg.formations[0]!.id,
+                squad: buildSquad(cfg, rng, c, tier, nationId),
+                tier,
+                budget: cfg.career.startingBudget[tier]!,
+                lineup: [],
+            };
+            club.formationId = pickFormation(cfg, rng, club);
+            club.lineup = autoLineup(cfg, club);
+            c.clubs[id] = club;
+            ids.push(id);
+        }
+        divisions.push({ tier, clubs: ids, fixtures: [] });
+    }
+    return divisions;
 };
 
 /** Round robin (circle method): every club plays every other once. */
@@ -162,10 +217,50 @@ const roundRobin = (clubs: string[], rng: Rng, prefix: string): Fixture[] => {
 };
 
 export const roundsPerSeason = (c: Career) => (c.divisions[0]?.fixtures.at(-1)?.round ?? -1) + 1;
-export const seasonDays = (cfg: GameConfig, c: Career) => (roundsPerSeason(c) + (c.cup?.rounds.length ?? 0)) * cfg.career.daysPerMatchday;
+const cupsOf = (c: Career) => [c.cup, c.intl].filter((x): x is Cup => !!x);
+const cupRounds = (c: Career) => cupsOf(c).reduce((n, cup) => n + cup.rounds.length, 0);
+export const seasonDays = (cfg: GameConfig, c: Career) => (roundsPerSeason(c) + cupRounds(c)) * cfg.career.daysPerMatchday;
+
+/** The cup a round belongs to (the domestic or the international one). */
+export const cupOf = (c: Career, round: CupRound): Cup => cupsOf(c).find((cup) => cup.rounds.includes(round))!;
+/** The cup a fixture belongs to. */
+export const cupOfFixture = (c: Career, f: Fixture): Cup | undefined => (cupKeyOf(f) === 'intl' ? c.intl : c.cup);
+
+/** Every pyramid: the manager's and the other nations'. */
+export const allDivisions = (c: Career): Division[] => [...c.divisions, ...Object.values(c.world).flat()];
+/** The pyramid a club plays in. */
+export const pyramidOf = (c: Career, clubId: string): Division[] =>
+    c.divisions.some((d) => d.clubs.includes(clubId))
+        ? c.divisions
+        : (Object.values(c.world).find((p) => p.some((d) => d.clubs.includes(clubId))) ?? c.divisions);
+
+/**
+ * Cup dates between league matchdays: the domestic rounds spread evenly to the last matchday,
+ * the international rounds in between. Sets every round's day.
+ */
+const scheduleCups = (cfg: GameConfig, c: Career) => {
+    const L = roundsPerSeason(c);
+    const dom = c.cup?.rounds ?? [];
+    const intl = c.intl?.rounds ?? [];
+    const slots: Array<CupRound | null> = [];
+    for (let k = 1; k <= L; k++) {
+        slots.push(null);
+        dom.forEach((r, i) => {
+            if (Math.ceil(((i + 1) * L) / dom.length) === k) slots.push(r);
+        });
+        intl.forEach((r, j) => {
+            if (Math.max(1, Math.round(((j + 1) * L) / (intl.length + 1))) === k) slots.push(r);
+        });
+    }
+    slots.forEach((r, index) => {
+        if (r) r.day = index * cfg.career.daysPerMatchday + 1;
+    });
+};
 
 export const seasonSchedule = (cfg: GameConfig, c: Career): ScheduledRound[] => {
-    const cupDates = new Map(c.cup?.rounds.map((round, index) => [round.day, { cup: round, round: index }]));
+    const cupDates = new Map(
+        cupsOf(c).flatMap((cup) => cup.rounds.map((round, index) => [round.day, { cup: round, round: index }] as const)),
+    );
     let leagueRound = 0;
     return Array.from({ length: roundsPerSeason(c) + cupDates.size }, (_, index) => {
         const day = index * cfg.career.daysPerMatchday + 1;
@@ -176,9 +271,29 @@ export const seasonSchedule = (cfg: GameConfig, c: Career): ScheduledRound[] => 
 export const scheduledFixture = (c: Career, date: ScheduledRound) =>
     fixtureForClub(date.cup ? date.cup.fixtures : divisionOf(c, c.userClubId).fixtures.filter((f) => f.round === date.round), c.userClubId);
 
-const buildSeason = (cfg: GameConfig, c: Career, rng: Rng) => {
+/** The best `per` clubs of every top flight: by last season's table, or by squad strength before any. */
+const intlQualifiers = (cfg: GameConfig, c: Career, byTable: boolean): string[] =>
+    [c.divisions, ...Object.values(c.world)].flatMap((pyramid) => {
+        const top = pyramid[0]!;
+        const order = byTable
+            ? table(top).map((r) => r.club)
+            : [...top.clubs].sort((a, b) => squadOvr(cfg, c.clubs[b]!) - squadOvr(cfg, c.clubs[a]!));
+        return order.slice(0, cfg.career.intlPerNation);
+    });
+
+const buildSeason = (cfg: GameConfig, c: Career, rng: Rng, qualifiers: string[]) => {
     for (const d of c.divisions) d.fixtures = roundRobin(d.clubs, rng, `s${c.season}-t${d.tier}`);
-    c.cup = createCup(rng, c.season, Object.keys(c.clubs), roundsPerSeason(c), cfg.career.daysPerMatchday);
+    for (const [nation, pyramid] of Object.entries(c.world))
+        for (const d of pyramid) d.fixtures = roundRobin(d.clubs, rng, `s${c.season}-${nation}-t${d.tier}`);
+    c.cup = createCup(
+        'cup',
+        CUP_NAME,
+        rng,
+        c.season,
+        c.divisions.flatMap((d) => d.clubs),
+    );
+    c.intl = qualifiers.length >= 2 ? createCup('intl', INTL_CUP_NAME, rng, c.season, qualifiers) : undefined;
+    scheduleCups(cfg, c);
 };
 
 export const newCareer = (
@@ -199,6 +314,7 @@ export const newCareer = (
         userClubId: '',
         clubs: {},
         divisions: [],
+        world: {},
         market: [],
         news: [],
         ledger: [],
@@ -207,31 +323,13 @@ export const newCareer = (
         history: [],
         nextId: 1,
     };
-    const places = nation.places(rng);
-    let ci = 0;
-    for (let tier = 0; tier < cfg.career.divisions; tier++) {
-        const ids: string[] = [];
-        for (let k = 0; k < cfg.career.clubsPerDivision; k++, ci++) {
-            const id = `c${ci}`;
-            const club: CareerClub = {
-                id,
-                name: nation.clubName(rng, places[ci % places.length]!),
-                short: shortCode(places[ci % places.length]!),
-                kit: outfieldKit(cfg, ci),
-                awayKit: awayKitFor(cfg, outfieldKit(cfg, ci), ci + 3),
-                keeperKit: keeperKit(cfg, ci),
-                formationId: cfg.formations[0]!.id,
-                squad: buildSquad(cfg, rng, c, tier),
-                tier,
-                budget: cfg.career.startingBudget[tier]!,
-                lineup: [],
-            };
-            club.formationId = pickFormation(cfg, rng, club);
-            club.lineup = autoLineup(cfg, club);
-            c.clubs[id] = club;
-            ids.push(id);
-        }
-        c.divisions.push({ tier, clubs: ids, fixtures: [] });
+    c.divisions = buildPyramid(cfg, rng, c, nation.id, 'c', 0);
+    // every other nation plays its own full pyramid alongside
+    let kitStart = cfg.career.divisions * cfg.career.clubsPerDivision;
+    for (const other of NATION_IDS) {
+        if (other === nation.id) continue;
+        c.world[other] = buildPyramid(cfg, rng, c, other, `${other}-c`, kitStart);
+        kitStart += 7;
     }
     // the user takes over a club in the bottom division
     const bottom = c.divisions.at(-1)!;
@@ -250,7 +348,7 @@ export const newCareer = (
     else if (opts.kit) user.awayKit = awayKitFor(cfg, user.kit);
     if (opts.keeperKit) user.keeperKit = opts.keeperKit;
     c.userClubId = user.id;
-    buildSeason(cfg, c, rng);
+    buildSeason(cfg, c, rng, intlQualifiers(cfg, c, false));
     c.market = buildMarket(cfg, rng, c);
     initStory(c, rng);
     c.news.push({
@@ -320,12 +418,24 @@ export const wageBill = (cfg: GameConfig, club: CareerClub) => club.squad.reduce
 // ------------------------------------------------------------------ lineups & match clubs
 
 /** Strength of a club's best XI in a formation (sum of slot fits). */
-const lineupFit = (cfg: GameConfig, club: Club, formationId: string) => {
-    const lineup = autoLineup(cfg, { ...club, formationId });
+/** Every player's fit for every class, computed once (the lineup picks reuse it a lot). */
+type FitTable = (p: Player, cls: ClassId) => number;
+const fitTable = (cfg: GameConfig): FitTable => {
+    const memo = new Map<string, number>();
+    return (p, cls) => {
+        const k = `${p.id}:${cls}`;
+        let v = memo.get(k);
+        if (v === undefined) memo.set(k, (v = fitFor(cfg, p, cls)));
+        return v;
+    };
+};
+
+const lineupFit = (cfg: GameConfig, club: Club, formationId: string, fit: FitTable) => {
+    const lineup = autoLineup(cfg, { ...club, formationId }, fit);
     const formation = cfg.formations.find((f) => f.id === formationId)!;
     return lineup.reduce((sum, id, i) => {
         const p = club.squad.find((q) => q.id === id);
-        return sum + (p ? fitFor(cfg, p, formation.slots[i]!.cls) : 0);
+        return sum + (p ? fit(p, formation.slots[i]!.cls) : 0);
     }, 0);
 };
 
@@ -334,13 +444,14 @@ const lineupFit = (cfg: GameConfig, club: Club, formationId: string) => {
  * best one, so clubs play to their players without every club converging on the same shape.
  */
 export const pickFormation = (cfg: GameConfig, rng: Rng, club: Club, tolerance = 0.02): string => {
-    const fits = cfg.formations.map((f) => ({ id: f.id, fit: lineupFit(cfg, club, f.id) }));
+    const table = fitTable(cfg);
+    const fits = cfg.formations.map((f) => ({ id: f.id, fit: lineupFit(cfg, club, f.id, table) }));
     const best = Math.max(...fits.map((f) => f.fit));
     return rng.pick(fits.filter((f) => f.fit >= best * (1 - tolerance))).id;
 };
 
 /** Best fit for each formation slot, injured players excluded. */
-export const autoLineup = (cfg: GameConfig, club: Club): string[] => {
+export const autoLineup = (cfg: GameConfig, club: Club, fit: FitTable = fitTable(cfg)): string[] => {
     const formation = cfg.formations.find((f) => f.id === club.formationId) ?? cfg.formations[0]!;
     const used = new Set<string>();
     // fill the most specialised slots (keeper) first
@@ -349,7 +460,7 @@ export const autoLineup = (cfg: GameConfig, club: Club): string[] => {
         .sort((a, b) => (a.s.cls === 'keeper' ? -1 : 0) - (b.s.cls === 'keeper' ? -1 : 0));
     const out: string[] = Array.from({ length: formation.slots.length }, () => '');
     for (const { s, i } of order) {
-        const best = club.squad.filter((p) => !used.has(p.id)).sort((a, b) => fitFor(cfg, b, s.cls) - fitFor(cfg, a, s.cls))[0];
+        const best = club.squad.filter((p) => !used.has(p.id)).sort((a, b) => fit(b, s.cls) - fit(a, s.cls))[0];
         if (best) {
             used.add(best.id);
             out[i] = best.id;
@@ -516,18 +627,21 @@ const playCupRound = (cfg: GameConfig, c: Career, rng: Rng, round: CupRound, use
 };
 
 const finishCupRound = (cfg: GameConfig, c: Career, rng: Rng, round: CupRound) => {
-    const cup = c.cup!;
+    const cup = cupOf(c, round);
     const next = advanceCup(cup, round, rng, c.season);
     if (cup.champion) {
         const won = cup.champion === c.userClubId;
-        if (won) book(c, `${CUP_NAME} winners`, cfg.career.matchFee[userClub(c).tier]! * cfg.career.cupWinnerBonus);
-        news(c, `${c.clubs[cup.champion]!.name} win the ${CUP_NAME}!`, won ? 'good' : 'info');
+        const bonus = cup.key === 'intl' ? cfg.career.intlWinnerBonus : cfg.career.cupWinnerBonus;
+        if (won) book(c, `${cup.name} winners`, cfg.career.matchFee[userClub(c).tier]! * bonus);
+        const champ = c.clubs[cup.champion]!;
+        news(c, `${champ.name}${cup.key === 'intl' ? ` (${NATIONS[champ.nation].name})` : ''} win the ${cup.name}!`, won ? 'good' : 'info');
     }
     const fixture = next && fixtureForClub(next.fixtures, c.userClubId);
     if (fixture) {
         const home = fixture.home === c.userClubId;
         const opponent = c.clubs[home ? fixture.away : fixture.home]!;
-        news(c, `${CUP_NAME} draw · ${next.label}, ${home ? 'home to' : 'away at'} ${opponent.name} on Day ${next.day}.`);
+        const from = cup.key === 'intl' ? ` of ${NATIONS[opponent.nation].name}` : '';
+        news(c, `${cup.name} draw · ${next.label}, ${home ? 'home to' : 'away at'} ${opponent.name}${from} on Day ${next.day}.`);
     }
 };
 
@@ -543,6 +657,9 @@ const playLeagueRound = (cfg: GameConfig, c: Career, rng: Rng, round: number, us
             story.recordFixture(c, simLines(rng, c.clubs[f.away]!, f.result[1], f.result[0]));
         }
     }
+    // the rest of the world plays its matchday too
+    for (const pyramid of Object.values(c.world))
+        for (const d of pyramid) for (const f of d.fixtures) if (f.round === round) f.result = simulateScore(cfg, rng, c, f);
 };
 
 /**
@@ -571,10 +688,10 @@ export const playMatchday = (cfg: GameConfig, c: Career, report: MatchReport) =>
     const score = `${gf}–${ga}${penalties ? ` (${penalties})` : ''}`;
     news(
         c,
-        `${t.cup ? `${CUP_NAME} · ${t.cup.label} · ` : ''}${won ? 'Won' : winner ? 'Lost' : 'Drew'} ${score} ${home ? 'at home to' : 'away at'} ${opp.name}.`,
+        `${t.cup ? `${cupOf(c, t.cup).name} · ${t.cup.label} · ` : ''}${won ? 'Won' : winner ? 'Lost' : 'Drew'} ${score} ${home ? 'at home to' : 'away at'} ${opp.name}.`,
         won ? 'good' : winner ? 'bad' : 'info',
     );
-    if (t.cup && !won) news(c, `Your ${CUP_NAME} run ends in the ${t.cup.label.toLowerCase()}.`, 'bad');
+    if (t.cup && !won) news(c, `Your ${cupOf(c, t.cup).name} run ends in the ${t.cup.label.toLowerCase()}.`, 'bad');
 
     // match XP & injuries for the user's XI
     for (const id of report.played) {
@@ -752,22 +869,28 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
     } else summary.push(`Finished ${ordinal(pos)}.`);
     if (pos <= cfg.career.clubsPerDivision - cfg.career.relegate) book(c, 'Season goal: survival', fee * cfg.career.goalSurvive);
 
-    // promotion / relegation between adjacent tiers
-    const moves: Array<{ id: string; to: number }> = [];
-    for (const d of c.divisions) {
-        const t = table(d);
-        if (d.tier > 0) for (const r of t.slice(0, cfg.career.promote)) moves.push({ id: r.club, to: d.tier - 1 });
-        if (d.tier < c.divisions.length - 1) for (const r of t.slice(-cfg.career.relegate)) moves.push({ id: r.club, to: d.tier + 1 });
-    }
-    for (const mv of moves) {
-        const from = divisionOf(c, mv.id);
-        from.clubs = from.clubs.filter((x) => x !== mv.id);
-        c.divisions[mv.to]!.clubs.push(mv.id);
-        c.clubs[mv.id]!.tier = mv.to;
-        if (mv.id === u.id) {
-            summary.push(mv.to < from.tier ? `PROMOTED to division ${mv.to + 1}!` : `Relegated to division ${mv.to + 1}.`);
-            if (mv.to < from.tier) ceremony.promoted = true;
-            else ceremony.relegated = true;
+    // next season's international cup: the top of every top flight, from the final tables
+    const qualifiers = intlQualifiers(cfg, c, true);
+    if (qualifiers.includes(u.id)) summary.push(`Qualified for the ${INTL_CUP_NAME}!`);
+
+    // promotion / relegation between adjacent tiers, inside every nation's pyramid
+    for (const pyramid of [c.divisions, ...Object.values(c.world)]) {
+        const moves: Array<{ id: string; from: number; to: number }> = [];
+        for (const d of pyramid) {
+            const t = table(d);
+            if (d.tier > 0) for (const r of t.slice(0, cfg.career.promote)) moves.push({ id: r.club, from: d.tier, to: d.tier - 1 });
+            if (d.tier < pyramid.length - 1)
+                for (const r of t.slice(-cfg.career.relegate)) moves.push({ id: r.club, from: d.tier, to: d.tier + 1 });
+        }
+        for (const mv of moves) {
+            pyramid[mv.from]!.clubs = pyramid[mv.from]!.clubs.filter((x) => x !== mv.id);
+            pyramid[mv.to]!.clubs.push(mv.id);
+            c.clubs[mv.id]!.tier = mv.to;
+            if (mv.id === u.id) {
+                summary.push(mv.to < mv.from ? `PROMOTED to division ${mv.to + 1}!` : `Relegated to division ${mv.to + 1}.`);
+                if (mv.to < mv.from) ceremony.promoted = true;
+                else ceremony.relegated = true;
+            }
         }
     }
 
@@ -786,12 +909,12 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
             const classes = Object.keys(cfg.career.squadMake) as ClassId[];
             while (club.squad.length < cfg.career.squadMin) {
                 const needKeeper = !club.squad.some((p) => p.cls === 'keeper');
-                const p = newPlayer(
+                const p = clubPlayer(
                     cfg,
                     rng,
                     c,
+                    club,
                     needKeeper ? 'keeper' : rng.pick(classes),
-                    club.tier,
                     Math.max(0, ...club.squad.map((q) => q.number)) + 1,
                     [17, 19],
                 );
@@ -801,7 +924,7 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
         } else {
             for (const [cls, count] of Object.entries(cfg.career.squadMake) as Array<[ClassId, number]>) {
                 while (club.squad.filter((p) => p.cls === cls).length < count) {
-                    club.squad.push(newPlayer(cfg, rng, c, cls, club.tier, club.squad.length + 1, [17, 20]));
+                    club.squad.push(clubPlayer(cfg, rng, c, club, cls, club.squad.length + 1, [17, 20]));
                 }
             }
             // a new season, a fresh look at the shape that suits the squad
@@ -812,7 +935,7 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
 
     c.season++;
     c.day = 1;
-    buildSeason(cfg, c, rng);
+    buildSeason(cfg, c, rng, qualifiers);
     c.market = buildMarket(cfg, rng, c);
     for (const s of summary) news(c, s, s.includes('Relegated') || s.includes('retired') ? 'bad' : 'good');
     news(c, `Season ${c.season} begins. A fresh crop of players is on the market.`, 'info');

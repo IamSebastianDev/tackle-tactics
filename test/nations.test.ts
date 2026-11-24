@@ -33,9 +33,15 @@ describe('nations', () => {
         expect(c.nation).toBe('nordhavn');
         const players = Object.values(c.clubs).flatMap((club) => club.squad);
         expect(players.every((p) => p.nation)).toBe(true);
-        const local = players.filter((p) => p.nation === 'nordhavn').length / players.length;
+        // every club, at home or abroad, is mostly its own nation's players
+        const clubs = Object.values(c.clubs);
+        const local = clubs.flatMap((club) => club.squad.map((p) => p.nation === club.nation)).filter(Boolean).length / players.length;
         expect(local).toBeGreaterThan(0.7);
         expect(local).toBeLessThan(0.9);
+        // the manager's pyramid is the chosen nation; every other nation has a full pyramid too
+        expect(c.divisions.flatMap((d) => d.clubs).every((id) => c.clubs[id]!.nation === 'nordhavn')).toBe(true);
+        expect(Object.keys(c.world)).toHaveLength(NATION_IDS.length - 1);
+        for (const pyramid of Object.values(c.world)) expect(pyramid).toHaveLength(cfg.career.divisions);
         expect(new Set(c.market.map((p) => p.nation)).size).toBeGreaterThanOrEqual(8);
         expect(c.market.length).toBe(cfg.career.market.size);
     });

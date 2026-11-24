@@ -682,6 +682,9 @@ export const defaultConfig = {
         drawBonus: 0.2,
         /** Cup winner prize as a multiple of the club's match fee. */
         cupWinnerBonus: 4,
+        /** International cup: how many clubs of each top flight qualify, and the winners' bonus (× match fee). */
+        intlPerNation: 2,
+        intlWinnerBonus: 8,
         /** Season-goal lump sums as multiples of the tier's match fee. */
         goalTitle: 6,
         goalTop4: 2.5,
