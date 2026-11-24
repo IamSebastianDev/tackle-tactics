@@ -1,65 +1,12 @@
 import type { ClassId, GameConfig, Stats, StatId } from '../config';
 import type { Club, Player } from '../types';
 import type { Rng } from '../rng';
-
-const SYL_A = [
-    'Bra',
-    'Kel',
-    'Mor',
-    'Tav',
-    'Ul',
-    'Fen',
-    'Dar',
-    'Ise',
-    'Rho',
-    'Sel',
-    'Vak',
-    'Or',
-    'Lio',
-    'Jas',
-    'Ner',
-    'Qua',
-    'Zel',
-    'Ash',
-    'Bel',
-    'Cor',
-];
-const SYL_B = ['an', 'ric', 'o', 'enn', 'is', 'ard', 'ion', 'el', 'us', 'wyn', 'ek', 'ara', 'im', 'oth', 'ay', 'en'];
-const SUR_A = [
-    'Ash',
-    'Stone',
-    'Iron',
-    'Wyn',
-    'Hollow',
-    'Thorn',
-    'Brook',
-    'Gale',
-    'Mire',
-    'Frost',
-    'Oak',
-    'Ember',
-    'Raven',
-    'Silver',
-    'Marsh',
-];
-const SUR_B = ['ford', 'vale', 'wick', 'hart', 'more', 'shaw', 'by', 'well', 'den', 'ley', 'ridge', 'crest'];
-const CLUB_PLACE = [
-    'Mirewick',
-    'Thornvale',
-    'Galehaven',
-    'Emberfall',
-    'Ravenmoor',
-    'Oakshaw',
-    'Frostcrest',
-    'Silverbrook',
-    'Ironridge',
-    'Hollowden',
-];
-const CLUB_SUFFIX = ['Wanderers', 'Rovers', 'Athletic', 'Guild', 'Company', 'Vanguard', 'Wardens', 'Fellowship'];
+import { DEFAULT_NATION, NATIONS, pickNationality, shortCode, type NationId } from './nations';
 
 const STATS: StatId[] = ['speed', 'pace', 'passing', 'shooting', 'dribbling', 'tackling', 'reflexes', 'composure'];
 
-export const playerName = (rng: Rng) => `${rng.pick(SYL_A)}${rng.pick(SYL_B)} ${rng.pick(SUR_A)}${rng.pick(SUR_B)}`;
+/** A name in the naming style of the player's nation. */
+export const playerName = (rng: Rng, nation: NationId = DEFAULT_NATION) => NATIONS[nation].playerName(rng);
 
 /** Weighted pick of a hair colour index (config.looks.hairWeights). */
 export const pickHairIndex = (weights: number[], roll: number) => {
@@ -80,7 +27,7 @@ const distributeLevels = (cfg: GameConfig, rng: Rng, cls: ClassId, total: number
     return { [cls]: total - sub, [second]: sub };
 };
 
-export type GenOpts = { levelRange?: [number, number]; talentShift?: number; age?: [number, number] };
+export type GenOpts = { levelRange?: [number, number]; talentShift?: number; age?: [number, number]; nation?: NationId };
 
 export const generatePlayer = (
     cfg: GameConfig,
@@ -119,9 +66,11 @@ export const generatePlayer = (
     const look = (rng.chance(0.5) ? 1 : 2) as 1 | 2;
     const skin = rng.int(0, cfg.looks.skinTones - 1);
     const hair = pickHairIndex(cfg.looks.hairWeights, rng());
+    const nation = opts.nation ?? DEFAULT_NATION;
     return {
         id,
-        name: playerName(rng),
+        name: playerName(rng, nation),
+        nation,
         cls,
         level,
         levels,
@@ -147,22 +96,25 @@ export const generateClub = (
     keeperKit: string,
     formationId: string,
     nameTaken: Set<string>,
+    nationId: NationId = DEFAULT_NATION,
 ): Club => {
-    let name = '';
-    do name = `${rng.pick(CLUB_PLACE)} ${rng.pick(CLUB_SUFFIX)}`;
-    while (nameTaken.has(name.split(' ')[0]!));
-    nameTaken.add(name.split(' ')[0]!);
+    const nation = NATIONS[nationId];
+    const place = nation.places(rng).find((p) => !nameTaken.has(p))!;
+    nameTaken.add(place);
+    const name = nation.clubName(rng, place);
+    const local = () => pickNationality(rng, nationId, cfg.world.foreignShare);
     const formation = cfg.formations.find((f) => f.id === formationId) ?? cfg.formations[0]!;
     const squad = formation.slots.map((slot, i) => {
         const sprite = slot.cls === 'keeper' ? keeperKit : `${kit}_player_${(i % 2) + 1}`;
-        return generatePlayer(cfg, rng, slot.cls, sprite, i + 1, `${id}-p${i}`);
+        return generatePlayer(cfg, rng, slot.cls, sprite, i + 1, `${id}-p${i}`, { nation: local() });
     });
-    const short = name.split(' ')[0]!.slice(0, 3).toUpperCase();
+    const short = shortCode(place);
     // substitutes: a keeper plus one of each outfield class
     const benchCls: ClassId[] = ['keeper', 'defender', 'midfielder', 'winger', 'striker'].slice(0, cfg.subs.bench) as ClassId[];
     const bench = benchCls.map((cls, i) => {
         const p = generatePlayer(cfg, rng, cls, '', 12 + i, `${id}-b${i}`, {
             levelRange: [Math.max(1, cfg.world.levelRange[0]), Math.max(2, cfg.world.levelRange[1] - 3)],
+            nation: local(),
         });
         p.sprite = cls === 'keeper' ? keeperKit : `${kit}_player_${p.look}`;
         return p;

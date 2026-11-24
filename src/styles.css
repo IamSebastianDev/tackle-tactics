@@ -5327,3 +5327,78 @@ dialog.drawer-wrap:not([open]) {
     font-size: 15px;
     line-height: 1.45;
 }
+
+/* ---- nations: pixel flags, the country picker, the market filter */
+.flag {
+    display: inline-block;
+    flex: none;
+    width: 18px;
+    height: 12px;
+    vertical-align: -1px;
+    box-shadow:
+        0 0 0 1px #000c,
+        1px 1px 0 1px #0008;
+}
+td.name .flag {
+    float: left;
+    margin: 3px 8px 0 0;
+}
+.intro-side .flag,
+.modal h2 + p .flag {
+    margin-right: 2px;
+}
+.flag.big {
+    width: 36px;
+    height: 24px;
+    box-shadow:
+        0 0 0 2px #000c,
+        3px 3px 0 2px #0008;
+}
+.nation-pick {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.nation-flag {
+    display: grid;
+    place-items: center;
+    padding: 8px 2px;
+}
+.nation-name {
+    margin: 0 0 4px;
+    font-family: var(--display);
+    font-size: 20px;
+    color: var(--accent);
+}
+.nation-flag:not(.on) .flag {
+    filter: saturate(0.55) brightness(0.8);
+}
+.nation-flag.on {
+    border-image-source: var(--f-gold);
+    color: var(--on-accent);
+    text-shadow: none;
+}
+.nation-sample {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    margin: 4px 0 6px;
+    font-size: 13px;
+}
+.nation-sample dt {
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    line-height: 18px;
+}
+.nation-sample dd {
+    margin: 0;
+}
+.seg button.nation-filter {
+    display: inline-flex;
+    align-items: center;
+    min-width: 34px;
+    justify-content: center;
+}

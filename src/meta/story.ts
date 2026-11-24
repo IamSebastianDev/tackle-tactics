@@ -8,6 +8,7 @@ import { classLevel } from '../engine/abilities';
 import type { Rng } from '../rng';
 import type { Player } from '../types';
 import { generatePlayer } from '../world/generate';
+import { NATION_IDS, nationOf } from '../world/nations';
 import type { Career, CareerClub, Fixture } from './career';
 import { CUP_NAME, cupWinner, isCupFixture } from './cup';
 import { gainXp, money, ovr, playerValue } from './player';
@@ -395,10 +396,14 @@ const LETTERS: LetterDef[] = [
             if (ch === 1) return 'Mags shrugs and goes back to her pipe.';
             x.pay("Scout's expedition", -v.amount);
             const classes: ClassId[] = ['defender', 'midfielder', 'winger', 'striker'];
-            const gem = generatePlayer(x.cfg, x.rng, x.rng.pick(classes), '', 0, `p${x.c.nextId++}`, { levelRange: [1, 3], age: [17, 18] });
+            const gem = generatePlayer(x.cfg, x.rng, x.rng.pick(classes), '', 0, `p${x.c.nextId++}`, {
+                levelRange: [1, 3],
+                age: [17, 18],
+                nation: x.rng.pick([...NATION_IDS]),
+            });
             gem.growth = x.cfg.career.growthRange[1] + 1 + x.rng() * 1.2;
             x.c.market.unshift(gem);
-            return `Mags is back: ${gem.name} (${gem.cls}, ${gem.age}) is on the market. Five-star potential. Move fast.`;
+            return `Mags is back from ${nationOf(gem.nation).name}: ${gem.name} (${gem.cls}, ${gem.age}) is on the market. Five-star potential. Move fast.`;
         },
     },
     {
@@ -722,6 +727,7 @@ export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng, trainees: read
                 levelRange: cfg.career.tierLevels[u.tier],
                 talentShift: cfg.career.tierTalent[u.tier],
                 age: [17, 20],
+                nation: c.nation,
             });
             amount = 600;
             break;

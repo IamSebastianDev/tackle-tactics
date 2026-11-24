@@ -1,4 +1,6 @@
 import { combined, derived, grain } from '@grainular/grains';
+import { DEFAULT_NATION, NATION_IDS, NATIONS, type NationId } from '../world/nations';
+import { flag } from './flag';
 import { createConfirmation } from './confirm';
 import { controlValue, distinct } from './value';
 import { Dialog } from './Dialog';
@@ -110,8 +112,8 @@ const buildClubs = (cfg: GameConfig, s: Settings): [Club, Club] => {
     const names = new Set<string>();
     const kAway = kitsClash(cfg, s.awayKit, s.homeKit) ? awayKitFor(cfg, s.awayKit, 0, s.homeKit) : s.awayKit;
     return [
-        generateClub(cfg, rng, 'home', s.homeKit, cfg.kits.keepers[0]!, s.homeFormation, names),
-        generateClub(cfg, rng, 'away', kAway, cfg.kits.keepers[1]!, s.awayFormation, names),
+        generateClub(cfg, rng, 'home', s.homeKit, cfg.kits.keepers[0]!, s.homeFormation, names, rng.pick([...NATION_IDS])),
+        generateClub(cfg, rng, 'away', kAway, cfg.kits.keepers[1]!, s.awayFormation, names, rng.pick([...NATION_IDS])),
     ];
 };
 
@@ -596,6 +598,7 @@ export const App = () => {
 
     const NewCareer = () => {
         const name = grain('');
+        const nation = grain<NationId>(DEFAULT_NATION);
         const kit = grain('blue');
         const keeperKit = grain(defaultConfig.kits.keepers[0]!);
         const awayKit = grain('white');
@@ -640,6 +643,33 @@ export const App = () => {
                 ${model(awayKit, (k) => `${k}_player_1`)}${model(awayKit, (k) => `${k}_player_2`)}
             </div>
         </div>`;
+        /** A few example clubs and players, with distinct towns and surnames (fixed per country). */
+        const sample = (id: NationId) => {
+            const n = NATIONS[id];
+            const rng = createRng(NATION_IDS.indexOf(id) * 7919 + 101);
+            const towns = n.places(rng).filter((p, i, all) => all.findIndex((q) => q.slice(-3) === p.slice(-3)) === i);
+            const clubs = towns.slice(0, 3).map((p) => n.clubName(rng, p));
+            const players: string[] = [];
+            while (players.length < 3) {
+                const name = n.playerName(rng);
+                if (!players.some((q) => q.split(' ').at(-1) === name.split(' ').at(-1))) players.push(name);
+            }
+            return { clubs, players };
+        };
+        const samples = Object.fromEntries(NATION_IDS.map((id) => [id, sample(id)])) as Record<NationId, ReturnType<typeof sample>>;
+        const countryPicker = html`<div class="nation-pick" role="radiogroup" aria-label="Country">${NATION_IDS.map(
+            (id) =>
+                html`<button type="button" role="radio" ${attr({
+                    class: derived(nation, (cur) => `nation-flag${cur === id ? ' on' : ''}`),
+                    'aria-checked': derived(nation, (cur) => String(cur === id)),
+                })} title="${NATIONS[id].name}" aria-label="${NATIONS[id].name}" ${on('click', () => nation.set(id))}>${flag(id, 'flag big')}</button>`,
+        )}</div>
+        <p class="nation-name">${derived(nation, (id) => NATIONS[id].name)}</p>
+        <dl class="nation-sample">
+            <dt>Clubs</dt><dd>${derived(nation, (id) => samples[id].clubs.join(' · '))}</dd>
+            <dt>Players</dt><dd>${derived(nation, (id) => samples[id].players.join(' · '))}</dd>
+        </dl>
+        <p class="muted">You start in the bottom division of its 5-tier pyramid. Most players at its clubs are local; the transfer market scouts every country.</p>`;
         const s = settings();
         const startError = grain('');
         const create = async () => {
@@ -668,6 +698,7 @@ export const App = () => {
                     kit: kit(),
                     awayKit: awayKit(),
                     keeperKit: keeperKit(),
+                    nation: nation(),
                 },
             );
             if (!saveCareer(next)) {
@@ -678,7 +709,7 @@ export const App = () => {
             hubNotice.set({
                 title: `Welcome to ${userClub(next).name}`,
                 lines: [
-                    'You start in division 5 of 5. The top 2 clubs are promoted each season.',
+                    `You start in division 5 of 5 of the ${NATIONS[next.nation].adjective} pyramid. The top 2 clubs are promoted each season.`,
                     `The ${seasonDays(defaultConfig, next)}-day season includes home and away league fixtures and the all-division ${CUP_NAME}.`,
                     'Choose a squad focus in Training to develop class skills. Set your XI in Tactics and buy or sell players in the Market.',
                     'Press the yellow button at the top right to move the calendar on.',
@@ -707,6 +738,8 @@ export const App = () => {
                 <div class="kit-grid keepers">${defaultConfig.kits.keepers.map((k) => swatch(k, 'keeper'))}</div>
             </section>
             <section class="opts">
+                <h4>Country</h4>
+                ${countryPicker}
                 <h4>Match settings</h4>
                 <label>Action timer ${range('timerSeconds', 0, 45, 1, 's')}</label>
                 <label>Match length (rounds) ${range('rounds', 6, 40, 2, '')}</label>

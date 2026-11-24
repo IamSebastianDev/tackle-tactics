@@ -1,3 +1,4 @@
+import type { NationId } from './world/nations';
 import type { ClassId, Stats, TeamStyle } from './config';
 
 export type Cell = { x: number; y: number };
@@ -7,6 +8,8 @@ export type TeamSide = 0 | 1;
 export type Player = {
     id: string;
     name: string;
+    /** Nationality; absent on saves from before nations → the career's nation. */
+    nation?: NationId;
     /** Primary class (the one with the most levels). */
     cls: ClassId;
     /** Total level = sum of class levels. */

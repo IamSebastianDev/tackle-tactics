@@ -3,12 +3,13 @@
  * money, transfers, injuries, levelling and aging. Pure data + functions; the UI calls these
  * and persists the `Career` object.
  */
-import type { ClassId, Difficulty, GameConfig, TimeoutPolicy } from '../config';
+import { defaultConfig, type ClassId, type Difficulty, type GameConfig, type TimeoutPolicy } from '../config';
 import { deleteSave, readSave, writeSave } from './storage';
 import { classLevel } from '../engine/abilities';
 import { createRng, type Rng } from '../rng';
 import type { Club, Player, TeamSide } from '../types';
 import { generatePlayer } from '../world/generate';
+import { DEFAULT_NATION, NATION_IDS, NATIONS, pickNationality, shortCode, type NationId } from '../world/nations';
 import { generateStadium, type Stadium } from '../world/stadium';
 import {
     CUP_NAME,
@@ -54,6 +55,8 @@ export type CareerClub = Club & {
 export type Career = {
     version: 1;
     seed: number;
+    /** The nation whose pyramid the career is played in (saves from before nations → Highmarch). */
+    nation: NationId;
     rngState: number;
     season: number;
     /** 1-based day within the season. */
@@ -81,73 +84,6 @@ export type Today =
 
 // ------------------------------------------------------------------ names & kits
 
-const PLACES = [
-    'Mirewick',
-    'Thornvale',
-    'Galehaven',
-    'Emberfall',
-    'Ravenmoor',
-    'Oakshaw',
-    'Frostcrest',
-    'Silverbrook',
-    'Ironridge',
-    'Hollowden',
-    'Ashford',
-    'Brightwater',
-    'Coldharbour',
-    'Duskmere',
-    'Elderglen',
-    'Fallowmere',
-    'Greywatch',
-    'Highcairn',
-    'Ivywood',
-    'Kingsreach',
-    'Larkspur',
-    'Mossbank',
-    'Northmarch',
-    'Oldcastle',
-    'Pinehold',
-    'Quarrydeep',
-    'Redwater',
-    'Stormhaven',
-    'Tallow Cross',
-    'Underhill',
-    'Valewood',
-    'Westerfold',
-    'Yarrowby',
-    'Ambergate',
-    'Blackfen',
-    'Cindervale',
-    'Deepholm',
-    'Eastwatch',
-    'Foxhollow',
-    'Glimmerdell',
-    'Harrowgate',
-    'Ironhaven',
-    'Juniper Bay',
-    'Kestrel Moor',
-    'Lanternfall',
-    'Marrowdeep',
-    'Nettlecombe',
-    'Owlbridge',
-    'Pyrewood',
-    'Ravensgate',
-];
-const SUFFIX = [
-    'Wanderers',
-    'Rovers',
-    'Athletic',
-    'Guild',
-    'Company',
-    'Vanguard',
-    'Wardens',
-    'Fellowship',
-    'Rangers',
-    'United',
-    'Order',
-    'Blades',
-];
-
 const outfieldKit = (cfg: GameConfig, i: number) => cfg.kits.outfield[i % cfg.kits.outfield.length]!;
 const keeperKit = (cfg: GameConfig, i: number) => cfg.kits.keepers[i % cfg.kits.keepers.length]!;
 
@@ -171,11 +107,22 @@ const saveRng = (c: Career, rng: Rng) => {
 
 // ------------------------------------------------------------------ creation
 
-const newPlayer = (cfg: GameConfig, rng: Rng, c: Career, cls: ClassId, tier: number, number: number, ageR?: [number, number]) => {
+/** A new player for the career; mostly from the career's nation unless `nation` says otherwise. */
+const newPlayer = (
+    cfg: GameConfig,
+    rng: Rng,
+    c: Career,
+    cls: ClassId,
+    tier: number,
+    number: number,
+    ageR?: [number, number],
+    nation: NationId = pickNationality(rng, c.nation, cfg.world.foreignShare),
+) => {
     const p = generatePlayer(cfg, rng, cls, '', number, `p${c.nextId++}`, {
         levelRange: cfg.career.tierLevels[tier],
         talentShift: cfg.career.tierTalent[tier],
         age: ageR,
+        nation,
     });
     return p;
 };
@@ -231,12 +178,14 @@ export const newCareer = (
     cfg: GameConfig,
     seed: number,
     settings: CareerSettings,
-    opts: { name?: string; short?: string; kit?: string; awayKit?: string; keeperKit?: string } = {},
+    opts: { name?: string; short?: string; kit?: string; awayKit?: string; keeperKit?: string; nation?: NationId } = {},
 ): Career => {
     const rng = createRng(seed);
+    const nation = NATIONS[opts.nation ?? DEFAULT_NATION];
     const c: Career = {
         version: 1,
         seed,
+        nation: nation.id,
         rngState: 0,
         season: 1,
         day: 1,
@@ -251,7 +200,7 @@ export const newCareer = (
         history: [],
         nextId: 1,
     };
-    const places = [...PLACES].sort(() => rng() - 0.5);
+    const places = nation.places(rng);
     let ci = 0;
     for (let tier = 0; tier < cfg.career.divisions; tier++) {
         const ids: string[] = [];
@@ -260,8 +209,8 @@ export const newCareer = (
             const formation = cfg.formations[Math.floor(rng() * cfg.formations.length)]!.id;
             const club: CareerClub = {
                 id,
-                name: `${places[ci % places.length]} ${rng.pick(SUFFIX)}`,
-                short: places[ci % places.length]!.slice(0, 3).toUpperCase(),
+                name: nation.clubName(rng, places[ci % places.length]!),
+                short: shortCode(places[ci % places.length]!),
                 kit: outfieldKit(cfg, ci),
                 awayKit: awayKitFor(cfg, outfieldKit(cfg, ci), ci + 3),
                 keeperKit: keeperKit(cfg, ci),
@@ -817,15 +766,23 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
 
 // ------------------------------------------------------------------ market
 
-const buildMarket = (cfg: GameConfig, rng: Rng, c: Career): Player[] => {
+/** `count` market players around the user's tier, scouted at home and abroad. */
+const buildMarket = (
+    cfg: GameConfig,
+    rng: Rng,
+    c: Career,
+    count = cfg.career.market.size,
+    foreignShare = cfg.career.market.foreignShare,
+): Player[] => {
     const tier = userClub(c).tier;
     const classes = Object.keys(cfg.career.squadMake) as ClassId[];
     const out: Player[] = [];
-    for (let i = 0; i < cfg.career.market.size; i++) {
+    for (let i = 0; i < count; i++) {
         // mostly around the user's tier, sometimes a tier above or below
         const t = Math.max(0, Math.min(cfg.career.divisions - 1, tier + rng.int(-1, 1)));
         const young = rng.chance(0.4);
-        const p = newPlayer(cfg, rng, c, rng.pick(classes), t, 0, young ? [17, 21] : [21, 32]);
+        const from = pickNationality(rng, c.nation, foreignShare);
+        const p = newPlayer(cfg, rng, c, rng.pick(classes), t, 0, young ? [17, 21] : [21, 32], from);
         out.push(p);
     }
     return out;
@@ -875,9 +832,28 @@ export const loadCareer = (): Career | null => {
         if (c.version !== 1) return null;
         if (!TRAINING_FOCUS_IDS.includes(c.trainingFocus)) c.trainingFocus = DEFAULT_TRAINING_FOCUS;
         delete c.plan;
+        migrateNations(defaultConfig, c);
         return c;
     } catch {
         return null;
+    }
+};
+/**
+ * Saves from before nations: the pyramid is Highmarch, and so is everybody without a nationality.
+ * The market is topped up to its new size with players scouted abroad, so signings from other
+ * countries don't have to wait for next season.
+ */
+export const migrateNations = (cfg: GameConfig, c: Career) => {
+    if (NATION_IDS.includes(c.nation)) return;
+    c.nation = DEFAULT_NATION;
+    for (const club of Object.values(c.clubs)) for (const p of club.squad) p.nation ??= c.nation;
+    for (const p of c.market) p.nation ??= c.nation;
+    const extra = cfg.career.market.size - c.market.length;
+    if (extra > 0) {
+        const rng = careerRng(c);
+        c.market.push(...buildMarket(cfg, rng, c, extra, 1));
+        saveRng(c, rng);
+        news(c, `Your scouts now cover ${NATION_IDS.length - 1} other countries: ${extra} players from abroad join the market.`, 'good');
     }
 };
 export const deleteCareer = () => deleteSave();

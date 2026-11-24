@@ -199,6 +199,8 @@ export const defaultConfig = {
         >,
     },
     world: {
+        /** Share of a club's generated players who come from another nation. */
+        foreignShare: 0.2,
         squadSize: 11,
         /** Total level range per player; a share of players multiclass. */
         levelRange: [2, 12] as [number, number],
@@ -620,7 +622,13 @@ export const defaultConfig = {
             /** Quick sims: each point of edge nudges expected goals by this fraction. */
             simEdge: 0.012,
         },
-        market: { size: 36, priceMarkup: 1.15, saleCut: 0.85 },
+        market: {
+            size: 72,
+            priceMarkup: 1.15,
+            saleCut: 0.85,
+            /** Share of the market scouted from abroad (players from every nation can be signed). */
+            foreignShare: 0.55,
+        },
         /** Player value: base × (ovr/50)^ovrExp × age & growth factors. Wages are value × wageRate per matchday. */
         value: { base: 60_000, ovrExp: 4.2, wageRate: 0.0075 },
     },

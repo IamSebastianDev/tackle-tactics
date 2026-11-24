@@ -3,6 +3,8 @@
  * `changed()`, which publishes the new version of the model and autosaves.
  */
 import { combined, derived, grain, type WritableGrain } from '@grainular/grains';
+import { NATION_IDS, NATIONS, nationOf, type NationId } from '../../world/nations';
+import { flag } from '../flag';
 import type { Confirm } from '../confirm';
 import { $each, $if, $render, $switch, attr, html, mounted, on, type Fragment } from '@grainular/nord';
 import type { ClassId, GameConfig, TeamStyle } from '../../config';
@@ -102,6 +104,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     const leagueTier = grain<number>(userClub(c).tier);
     const planDay = grain<number | null>(null);
     const marketFilter = grain<ClassId | 'all'>('all');
+    const marketNation = grain<NationId | 'all'>('all');
     const slotPick = grain<number | null>(null);
     const letterOpen = grain(false);
     const ceremony = grain<SeasonCeremony | null>(null);
@@ -516,7 +519,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         const injuryLabel = derived(injury, (days) => (days ? `✚ ${days}d` : ''));
         return html`<tr ${attr({ class: derived(injury, (days) => (days ? 'injured' : '')) })} ${on('click', () => selected.set({ id: p.id, from }))}>
             <td>${portrait(u(), p, 32)}</td>
-            <td class="name"><b>${p.name}</b>${$if(derived(injury, Boolean)).$then(() => html`<em class="inj">${injuryLabel}</em>`)}</td>
+            <td class="name">${flag(p.nation)}<b>${p.name}</b>${$if(derived(injury, Boolean)).$then(() => html`<em class="inj">${injuryLabel}</em>`)}</td>
             <td>${modelRegion(() => classChips(p))}</td>
             <td class="num">${read(() => String(p.age))}</td>
             <td class="num"><b>${read(() => String(ovr(cfg, p)))}</b></td>
@@ -616,7 +619,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
             className: 'drawer-wrap',
             dismiss: () => selected.set(null),
             children: html`<aside class="drawer" style="--kit:${kitColor(cl.kit)}">
-                <header>${portrait(cl, p, 64)}<div><h2>${p.name}</h2><p>${classLabel(cfg, p)} · age ${String(p.age)} (peaks ~${String(p.peakAge)})</p></div><button class="ghost" ${on('click', () => selected.set(null))}>✕</button></header>
+                <header>${portrait(cl, p, 64)}<div><h2>${p.name}</h2><p>${flag(p.nation)} ${nationOf(p.nation).adjective} · ${classLabel(cfg, p)} · age ${String(p.age)} (peaks ~${String(p.peakAge)})</p></div><button class="ghost" ${on('click', () => selected.set(null))}>✕</button></header>
                 <div class="kv">
                     <div><span>Overall</span><b>${String(ovr(cfg, p))}</b></div>
                     <div><span>Potential</span><b>${stars(p)}</b></div>
@@ -763,7 +766,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
             });
             return html`<tr ${attr({ class: read(() => (p.injury ? 'injured' : '')) })}>
                 <td>${portrait(u(), p, 28)}</td>
-                <td class="name"><b>${p.name}</b>${$if(derived(injury, Boolean)).$then(() => html`<em class="inj">${injury}</em>`)}</td>
+                <td class="name">${flag(p.nation)}<b>${p.name}</b>${$if(derived(injury, Boolean)).$then(() => html`<em class="inj">${injury}</em>`)}</td>
                 <td>${modelRegion(() => classChips(p))}</td>
                 <td>${modelRegion(() => stars(p))}</td>
                 <td><span ${attr({ class: derived(gain, (result) => (result ? 'training-xp' : 'muted')) })}>${derived(gain, (result) =>
@@ -787,15 +790,22 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
 
     // ------------------------------------------------------------ market
     const Market = () => {
-        const list = derived(combined([marketFilter, version]), ([filter]) =>
-            c.market.filter((p) => filter === 'all' || p.cls === filter).sort((a, b) => ovr(cfg, b) - ovr(cfg, a)),
+        const list = derived(combined([marketFilter, marketNation, version]), ([filter, from]) =>
+            c.market
+                .filter((p) => (filter === 'all' || p.cls === filter) && (from === 'all' || nationOf(p.nation).id === from))
+                .sort((a, b) => ovr(cfg, b) - ovr(cfg, a)),
         );
+        const nationButton = (k: NationId | 'all') => {
+            const active = derived(marketNation, (cur) => cur === k);
+            return html`<button title="${k === 'all' ? 'Every country' : NATIONS[k].name}" ${attr({ class: derived(active, (isOn) => `nation-filter${isOn ? ' on' : ''}`), 'aria-pressed': derived(active, String) })} ${on('click', () => marketNation.set(k))}>${k === 'all' ? 'All' : flag(k)}</button>`;
+        };
         return html`<div class="card fill">
             <h3>Transfer market <small>${read(() => String(c.market.length))} players · refreshed each season · budget ${read(() => money(u().budget))}</small></h3>
             <div class="seg">${(['all', ...CLASSES] as const).map((k) => {
                 const active = derived(marketFilter, (filter) => filter === k);
                 return html`<button ${attr({ class: derived(active, (isActive) => (isActive ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => marketFilter.set(k))}>${k === 'all' ? 'All' : cfg.classes[k].label}</button>`;
             })}</div>
+            <div class="seg nation-seg">${(['all', ...NATION_IDS] as const).map(nationButton)}</div>
             <div class="scroll"><table class="tbl players"><thead><tr><th></th><th>Name</th><th>Classes</th><th>Age</th><th>OVR</th><th>Potential</th><th>Abilities</th><th>Price</th><th>Wage</th></tr></thead>
             <tbody>${$each(list)
                 .$withKey((p) => p.id)
