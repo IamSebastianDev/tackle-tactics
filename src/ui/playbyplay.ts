@@ -7,7 +7,21 @@ import { dist } from '../engine/grid';
 import type { Match } from '../engine/match';
 import type { MatchEvent, TeamSide } from '../types';
 
-export type PlayKind = 'pass' | 'carry' | 'duel' | 'shot' | 'save' | 'goal' | 'foul' | 'card' | 'setpiece' | 'sub' | 'period';
+/** `turnover` is any change of possession (tackle won, pass cut out or given away). */
+export type PlayKind = 'pass' | 'carry' | 'duel' | 'turnover' | 'shot' | 'save' | 'goal' | 'foul' | 'card' | 'setpiece' | 'sub' | 'period';
+
+/** What the highlights feed keeps: chances, set pieces, discipline and changes of possession. */
+export const HIGHLIGHT_KINDS: ReadonlySet<PlayKind> = new Set([
+    'turnover',
+    'shot',
+    'save',
+    'goal',
+    'foul',
+    'card',
+    'setpiece',
+    'sub',
+    'period',
+]);
 export type Play = { kind: PlayKind; text: string; team: TeamSide | null };
 
 export const describePlays = (m: Match, events: MatchEvent[]): Play[] => {
@@ -39,7 +53,7 @@ export const describePlays = (m: Match, events: MatchEvent[]): Play[] => {
                 break;
             case 'tackle':
                 add(
-                    'duel',
+                    e.success ? 'turnover' : 'duel',
                     e.success
                         ? `${name(e.by)} wins the ball off ${name(e.on)}${e.reaction ? '' : ' with a crunching tackle'}`
                         : `${name(e.on)} rides ${name(e.by)}'s tackle`,
@@ -58,11 +72,11 @@ export const describePlays = (m: Match, events: MatchEvent[]): Play[] => {
                 const recv = next.find((x) => x.t === 'receive' || x.t === 'header' || x.t === 'runOnto');
                 const loose = next.find((x) => x.t === 'loose' || x.t === 'out');
                 if (caught && caught.t === 'intercept')
-                    add('pass', `${name(e.by)}'s pass is cut out by ${name(caught.by)}`, team(caught.by));
+                    add('turnover', `${name(e.by)}'s pass is cut out by ${name(caught.by)}`, team(caught.by));
                 else if (recv && (recv.t === 'receive' || recv.t === 'header' || recv.t === 'runOnto')) {
                     const to = recv.by;
                     add(
-                        'pass',
+                        team(to) === team(e.by) ? 'pass' : 'turnover',
                         team(to) === team(e.by)
                             ? `${name(e.by)} ${d > 14 ? 'lofts it' : 'passes'} to ${name(to)}${recv.t === 'header' ? ', who heads it on' : ''}`
                             : `${name(e.by)}'s pass goes straight to ${name(to)}`,

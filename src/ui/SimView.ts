@@ -6,18 +6,37 @@
 import { derived, grain } from '@grainular/grains';
 import { $each, $if, attr, html, mounted, on } from '@grainular/nord';
 import type { MatchController, SimLine } from './controller';
+import { HIGHLIGHT_KINDS, type PlayKind } from './playbyplay';
 import { isLightKit, kitColor } from './kits';
 import type { TeamSide } from '../types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** How long a batch of lines stays before the next turn (ms at normal speed). */
-const pause = (lines: SimLine[]) => {
-    if (lines.some((l) => l.kind === 'goal')) return 1800;
-    if (lines.some((l) => l.kind === 'card' || l.kind === 'period')) return 1100;
-    if (lines.some((l) => l.kind === 'shot' || l.kind === 'save' || l.kind === 'foul' || l.kind === 'setpiece')) return 750;
-    return 280 + lines.filter((l) => l.voice).length * 260;
+/**
+ * What a turn adds to the feed. Highlights: chances, set pieces, discipline and changes of
+ * possession, with at most one commentator line, and only when something happened. Everything: the
+ * full play-by-play plus every commentator line.
+ */
+const pick = (lines: SimLine[], everything: boolean): SimLine[] => {
+    if (everything) return lines;
+    const plays = lines.filter((l) => !l.voice && HIGHLIGHT_KINDS.has(l.kind as PlayKind));
+    if (!plays.length) return [];
+    const voice = lines.find((l) => l.voice);
+    return voice ? [...plays, voice] : plays;
 };
+
+/** How long a batch stays before play moves on (ms at Normal; Fast is a third). */
+const pause = (lines: SimLine[]) => {
+    const has = (...k: string[]) => lines.some((l) => k.includes(l.kind));
+    const voice = lines.some((l) => l.voice) ? 700 : 0;
+    if (has('goal')) return 3200 + voice;
+    if (has('card', 'period')) return 2000 + voice;
+    if (has('shot', 'save', 'foul', 'setpiece')) return 1500 + voice;
+    if (has('turnover', 'sub')) return 1100 + voice;
+    return 500 + lines.length * 150 + voice;
+};
+/** A turn with nothing worth showing still lets the clock tick over. */
+const QUIET_MS = 30;
 
 export const SimView = (ctl: MatchController, opts: { title: string; doneLabel: string; onDone: () => void }) => {
     const m = ctl.match;
@@ -25,6 +44,7 @@ export const SimView = (ctl: MatchController, opts: { title: string; doneLabel: 
     type Entry = SimLine & { id: number };
     const feed = grain<Entry[]>([]);
     const fast = grain(false);
+    const everything = grain(false);
     const finished = grain(m.state.over);
     let nextId = 0;
     /** Flags the buttons and unmount flip while the loop runs. */
@@ -37,20 +57,19 @@ export const SimView = (ctl: MatchController, opts: { title: string; doneLabel: 
     };
 
     const loop = async () => {
-        let quiet = 0;
         while (!m.state.over && !run.stopped) {
             if (run.skipping) {
                 const rest: SimLine[] = [];
-                while (!m.state.over) rest.push(...ctl.simTurn());
+                while (!m.state.over) rest.push(...pick(ctl.simTurn(), everything()));
                 // the last stretch of the feed, so the ending still reads
                 push(rest.slice(-60));
                 break;
             }
-            const lines = ctl.simTurn();
+            const lines = pick(ctl.simTurn(), everything());
             if (lines.length) {
                 push(lines);
                 await sleep(pause(lines) / (fast() ? 3 : 1));
-            } else if (++quiet % 6 === 0) await sleep(16);
+            } else await sleep(QUIET_MS / (fast() ? 3 : 1));
         }
         if (!run.stopped) finished.set(true);
     };
@@ -132,9 +151,15 @@ export const SimView = (ctl: MatchController, opts: { title: string; doneLabel: 
                 </aside>
             </div>
             <footer class="sim-foot">
-                <div class="seg">
-                    <button ${attr({ class: derived(fast, (f) => (f ? '' : 'on')) })} ${on('click', () => fast.set(false))}>Normal</button>
-                    <button ${attr({ class: derived(fast, (f) => (f ? 'on' : '')) })} ${on('click', () => fast.set(true))}>Fast</button>
+                <div class="sim-controls">
+                    <div class="seg">
+                        <button ${attr({ class: derived(everything, (e) => (e ? '' : 'on')) })} ${on('click', () => everything.set(false))}>Highlights</button>
+                        <button ${attr({ class: derived(everything, (e) => (e ? 'on' : '')) })} ${on('click', () => everything.set(true))}>Everything</button>
+                    </div>
+                    <div class="seg">
+                        <button ${attr({ class: derived(fast, (f) => (f ? '' : 'on')) })} ${on('click', () => fast.set(false))}>Normal</button>
+                        <button ${attr({ class: derived(fast, (f) => (f ? 'on' : '')) })} ${on('click', () => fast.set(true))}>Fast</button>
+                    </div>
                 </div>
                 ${$if(finished)
                     .$then(() => html`<button class="primary" autofocus ${on('click', opts.onDone)}>${opts.doneLabel} →</button>`)

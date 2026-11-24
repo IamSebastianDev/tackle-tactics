@@ -6000,3 +6000,8 @@ button.lvl-ready {
 .sim-foot .primary {
     min-width: 180px;
 }
+
+.sim-controls {
+    display: flex;
+    gap: 16px;
+}
