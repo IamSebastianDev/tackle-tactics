@@ -717,56 +717,73 @@ export const App = () => {
             });
             screen.set('hub');
         };
+        // two steps, both built once and toggled, so the kit sprites never rebuild
+        const step = grain<1 | 2>(1);
+        const shownOn = (n: 1 | 2) => attr({ hidden: derived(step, (cur) => cur !== n) });
+        const stepChip = (n: 1 | 2, label: string) =>
+            html`<li><button type="button" ${attr({ class: derived(step, (cur) => (cur === n ? 'on' : '')), 'aria-current': derived(step, (cur) => (cur === n ? 'step' : 'false')) })} ${on('click', () => step.set(n))}><b>${String(n)}</b>${label}</button></li>`;
         return html`<div class="setup"><div class="setup-inner new-career">
-            <h1>New <span>career</span></h1>
-            <div class="nc-grid">
-            <section class="opts kit-editor">
-                <h4>Your club</h4>
-                <div class="nc-names">
-                    <label>Club name <input type="text" maxlength="28" placeholder="Leave empty for a random club" ${on('input', (e) => name.set((e.target as HTMLInputElement).value))} /></label>
-                    <label>Short <input type="text" class="short-input" maxlength="3" ${attr({ value: shownShort })} ${on('input', (e) => {
-                        shortEdited.set(true);
-                        short.set((e.target as HTMLInputElement).value.toUpperCase());
-                    })} /></label>
-                </div>
-                ${preview}
-                <h4>Home kit</h4>
-                <div class="kit-grid">${kits.map(([k]) => swatch(k, 'home'))}</div>
-                <h4>Away kit <small>worn when the home kit clashes with the hosts'</small></h4>
-                <div class="kit-grid">${kits.map(([k]) => swatch(k, 'away'))}</div>
-                <h4>Goalkeeper</h4>
-                <div class="kit-grid keepers">${defaultConfig.kits.keepers.map((k) => swatch(k, 'keeper'))}</div>
-            </section>
-            <section class="opts">
-                <h4>Country</h4>
-                ${countryPicker}
-                <h4>Match settings</h4>
-                <label>Action timer ${range('timerSeconds', 0, 45, 1, 's')}</label>
-                <label>Match length (rounds) ${range('rounds', 6, 40, 2, '')}</label>
-                <label>AI difficulty ${select(
-                    'difficulty',
-                    [
-                        ['easy', 'Easy'],
-                        ['normal', 'Normal'],
-                        ['hard', 'Hard'],
-                    ],
-                    (v) => v as Difficulty,
-                )}</label>
-                <label>On timeout ${select(
-                    'timeoutPolicy',
-                    [
-                        ['lose', 'Lose the action'],
-                        ['auto', 'AI plays it for you'],
-                    ],
-                    (v) => v as TimeoutPolicy,
-                )}</label>
-                <p class="muted">Match settings apply to every match you play in this career. Default ${String(s.rounds)} rounds; 12–16 is a brisk match.</p>
-            </section>
+            <header class="nc-head">
+                <h1>New <span>career</span></h1>
+                <ol class="nc-steps">${stepChip(1, 'Country')}${stepChip(2, 'Your club')}</ol>
+            </header>
+            <div class="nc-step nc-country" ${shownOn(1)}>
+                <section class="opts">
+                    <h4>Country</h4>
+                    ${countryPicker}
+                </section>
+                <section class="opts">
+                    <h4>Match settings</h4>
+                    <label>Action timer ${range('timerSeconds', 0, 45, 1, 's')}</label>
+                    <label>Match length (rounds) ${range('rounds', 6, 40, 2, '')}</label>
+                    <label>AI difficulty ${select(
+                        'difficulty',
+                        [
+                            ['easy', 'Easy'],
+                            ['normal', 'Normal'],
+                            ['hard', 'Hard'],
+                        ],
+                        (v) => v as Difficulty,
+                    )}</label>
+                    <label>On timeout ${select(
+                        'timeoutPolicy',
+                        [
+                            ['lose', 'Lose the action'],
+                            ['auto', 'AI plays it for you'],
+                        ],
+                        (v) => v as TimeoutPolicy,
+                    )}</label>
+                    <p class="muted">Match settings apply to every match you play in this career. Default ${String(s.rounds)} rounds; 12–16 is a brisk match.</p>
+                </section>
+            </div>
+            <div class="nc-step nc-club" ${shownOn(2)}>
+                <section class="opts">
+                    <h4>Your club</h4>
+                    <div class="nc-names">
+                        <label>Club name <input type="text" maxlength="28" placeholder="Leave empty for a random club" ${on('input', (e) => name.set((e.target as HTMLInputElement).value))} /></label>
+                        <label>Short <input type="text" class="short-input" maxlength="3" ${attr({ value: shownShort })} ${on(
+                            'input',
+                            (e) => {
+                                shortEdited.set(true);
+                                short.set((e.target as HTMLInputElement).value.toUpperCase());
+                            },
+                        )} /></label>
+                    </div>
+                    ${preview}
+                    <h4>Goalkeeper</h4>
+                    <div class="kit-grid">${defaultConfig.kits.keepers.map((k) => swatch(k, 'keeper'))}</div>
+                </section>
+                <section class="opts">
+                    <h4>Home kit</h4>
+                    <div class="kit-grid">${kits.map(([k]) => swatch(k, 'home'))}</div>
+                    <h4>Away kit <small>worn when the home kit clashes with the hosts'</small></h4>
+                    <div class="kit-grid">${kits.map(([k]) => swatch(k, 'away'))}</div>
+                </section>
             </div>
             <footer class="nc-actions">
-                <button class="ghost" ${on('click', () => screen.set('title'))}>Back</button>
+                <button class="ghost" ${on('click', () => (step() === 1 ? screen.set('title') : step.set(1)))}>${derived(step, (cur) => (cur === 1 ? 'Back' : '← Country'))}</button>
                 <p class="neg" role="status" ${attr({ hidden: derived(startError, (message) => !message) })}>${startError}</p>
-                <button class="primary" ${on('click', create)}>Start career</button>
+                <button class="primary" ${on('click', () => (step() === 1 ? step.set(2) : void create()))}>${derived(step, (cur) => (cur === 1 ? 'Next: your club →' : 'Start career'))}</button>
             </footer>
         </div></div>`;
     };

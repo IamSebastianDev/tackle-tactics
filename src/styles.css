@@ -5160,7 +5160,7 @@ dialog.drawer-wrap:not([open]) {
 }
 
 /* ---- new career: kit editor */
-/* fixed to the window like quick match: the two columns scroll inside, the actions stay pinned */
+/* new career: two steps (country, your club), each fitting the window */
 .setup-inner.new-career {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
@@ -5171,17 +5171,83 @@ dialog.drawer-wrap:not([open]) {
     padding-bottom: 20px;
     box-sizing: border-box;
 }
-.nc-grid {
+.nc-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+}
+.nc-steps {
+    display: flex;
+    gap: 6px;
+    margin: 0 0 6px;
+    padding: 0;
+    list-style: none;
+}
+.nc-steps button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+.nc-steps button b {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    background: var(--well);
+    color: var(--muted);
+}
+.nc-steps button.on {
+    border-image-source: var(--f-gold);
+    color: var(--on-accent);
+    text-shadow: none;
+}
+.nc-steps button.on b {
+    background: #0003;
+    color: var(--on-accent);
+}
+.nc-step {
+    display: grid;
+    align-items: start;
     gap: 16px;
     min-height: 0;
 }
-.nc-grid > .opts {
+.nc-step[hidden] {
+    display: none;
+}
+.nc-country {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+}
+.nc-club {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+}
+/* panels hug their content; on a short window they cap at the step's height and scroll */
+.nc-step > .opts {
     min-height: 0;
+    max-height: 100%;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: none;
+}
+.nc-step .opts h4 {
+    margin: 6px 0 2px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+}
+.nc-club .kit-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.nc-country .nation-pick {
+    gap: 8px;
+}
+.nc-country .flag.big {
+    width: 54px;
+    height: 36px;
+}
+.nc-country .nation-flag {
+    padding: 12px 4px;
 }
 .nc-actions {
     display: flex;
@@ -5201,13 +5267,6 @@ dialog.drawer-wrap:not([open]) {
 }
 .nc-actions .primary {
     min-width: 150px;
-}
-.kit-editor h4,
-.nc-grid .opts h4 {
-    margin: 6px 0 2px;
-    font-size: 12px;
-    letter-spacing: 0.1em;
-    color: var(--accent);
 }
 .nc-names {
     display: grid;
@@ -5255,9 +5314,11 @@ dialog.drawer-wrap:not([open]) {
 }
 .kit-pitch {
     display: flex;
-    gap: 18px;
+    justify-content: space-around;
+    gap: 2px;
+    min-width: 0;
     height: 70px;
-    padding-left: 6px;
+    padding: 0 6px;
     background: url(/assets/tiles/grass_001.png) 0 0 / 32px 32px;
     box-shadow: inset 0 0 0 2px #0006;
 }
@@ -5276,22 +5337,6 @@ dialog.drawer-wrap:not([open]) {
     display: grid;
     grid-template-columns: repeat(8, minmax(0, 1fr));
     gap: 6px;
-}
-.kit-grid.keepers {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    max-width: 50%;
-}
-/* eight swatches need ~540px; below that the rows split evenly into two rows of four */
-.kit-editor {
-    container-type: inline-size;
-}
-@container (max-width: 540px) {
-    .kit-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-    .kit-grid.keepers {
-        max-width: none;
-    }
 }
 .kit-swatch {
     display: flex;
@@ -5327,14 +5372,13 @@ dialog.drawer-wrap:not([open]) {
 }
 .kit-away-label {
     align-self: center;
-    margin-left: 10px;
     font-family: var(--display);
     font-size: 11px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted);
 }
-.kit-editor h4 small {
+.nc-step h4 small {
     font-family: var(--body);
     font-weight: 400;
     text-transform: none;
