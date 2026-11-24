@@ -128,6 +128,9 @@ export const SettingsModal = (props: SettingsProps) => {
     type Tab = 'display' | 'sound' | 'gameplay' | 'career';
     const tab = grain<Tab>('display');
     const pref = <K extends keyof ReturnType<typeof prefs>>(key: K) => distinct(derived(prefs, (p) => p[key]));
+    /** How many coach tips have been seen (match and hub), and the confirmation after a reset. */
+    const seenTips = derived(pref('tipsSeen'), (seen) => seen.length);
+    const tipsReset = grain('');
     const toggle = (key: 'autoZoom' | 'reduceMotion' | 'muted' | 'radioOn' | 'matchIntro' | 'tips') =>
         derived(pref(key), (value) => (value ? 'on' : 'off'));
     const Display = () => {
@@ -233,7 +236,7 @@ export const SettingsModal = (props: SettingsProps) => {
     };
     const Gameplay = () => {
         return html`<div>
-                <div class="set-rows"><div class="set-row"><span>Match intro<small>Commentators, the ground, both line-ups and the story before kick-off. Esc skips it.</small></span>
+                <div class="set-rows"><div class="set-row"><span>Match intro<small>Both squads on the pitch, the commentators and the ground before kick-off. Enter or Esc kicks off.</small></span>
                     ${seg(
                         toggle('matchIntro'),
                         [
@@ -262,10 +265,17 @@ export const SettingsModal = (props: SettingsProps) => {
                             ['off', 'Off'],
                         ],
                         (v) => setPref('tips', v === 'on'),
-                    )}<button class="ghost" ${on('click', () => {
-                        setPref('tipsSeen', []);
-                        setPref('tips', true);
-                    })}>Replay all tips</button></div></div>
+                    )}</div></div>
+                <div class="set-row"><span>Tutorial messages<small>Show every coach tip again, in matches and in the career hub.</small></span>
+                    <div class="set-reset">
+                        <button class="ghost" ${attr({ disabled: derived(seenTips, (n) => n === 0) })} ${on('click', () => {
+                            const n = seenTips();
+                            setPref('tipsSeen', []);
+                            setPref('tips', true);
+                            tipsReset.set(`${n} tip${n === 1 ? '' : 's'} will show again.`);
+                        })}>Reset tutorial messages</button>
+                        <small role="status">${derived(combined([seenTips, tipsReset]), ([n, done]) => done || (n ? `${n} seen so far` : 'None seen yet'))}</small>
+                    </div></div>
                 </div>
                 <h4>Match defaults <small>quick matches & new careers</small></h4>
                 ${matchOptions(props.defaults.get, props.defaults.set)}

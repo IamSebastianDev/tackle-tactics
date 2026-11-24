@@ -2938,6 +2938,15 @@ dialog.drawer-wrap:not([open]) {
     padding: 8px 6px;
     border-bottom: 2px dashed #ffffff0d;
 }
+.set-reset {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.set-reset small {
+    color: var(--muted);
+    font-size: 13px;
+}
 .set-row.top {
     align-items: start;
 }
