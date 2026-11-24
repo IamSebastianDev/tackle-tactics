@@ -62,7 +62,7 @@ export type CareerClub = Club & {
  * Save format version. Breaking changes bump it; an older save is simply not loaded (no
  * migrations: the manager starts a new career).
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export type Career = {
     version: typeof SAVE_VERSION;
