@@ -5142,3 +5142,11 @@ a {
     color: var(--muted);
     margin-left: 6px;
 }
+/* the name inputs fill their grid columns (inputs otherwise keep their ~20-character default width) */
+.nc-names label {
+    min-width: 0;
+}
+.nc-names input {
+    width: 100%;
+    min-width: 0;
+}
