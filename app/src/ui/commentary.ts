@@ -100,6 +100,7 @@ const L = {
     advantage: ["{o} clips {p}, but {r} waves play on. Advantage!", "Foul by {o} — {r} lets it run. Lovely refereeing."],
     corner: ["Corner to {team}. Big bodies forward!", "{team} win a corner. This is where the set-piece coach earns their wage.", "Corner kick. Everyone into the box, elbows sharpened."],
     freekick: ["Free kick to {team} in a dangerous spot. The wall assembles.", "{team} have a free kick within range. Who's standing over it?"],
+    bonus: ["{p} wins it and goes again — away from the scrum!", "Won it, and {p} is off before anyone can blink.", "{p} has the ball and the jump on everyone."],
     sub: ["Change for {team}: {on} comes on for {off}.", "{off} makes way, {on} on. Fresh legs for {team}.", "{team} roll the dice — {on} replaces a weary {off}."],
     styleIntro: ["{team} line up as a {style} side. {note}", "Expect {team} to play it {style}: {note}"],
     chase: ["{team} are throwing bodies forward now. Needs must.", "Time's running out for {team} — everyone up!"],
@@ -147,6 +148,7 @@ export class Commentator {
         for (const e of events) {
             switch (e.t) {
                 case 'kickoff': out.push(this.line('kickoff', { team: this.teamName(e.team) }, 'info', e.team)); break;
+                case 'bonus': out.push(this.line('bonus', { p: this.name(e.id) }, 'good', this.m.piece(e.id).team)); break;
                 case 'sub': out.push(this.line('sub', { team: this.teamName(e.team), on: this.name(e.on), off: this.name(e.off) }, 'info', e.team)); break;
                 case 'setpiece': out.push(this.line(e.kind, { team: this.teamName(e.team) }, 'info', e.team, e.kind === 'corner' ? 'CORNER' : 'FREE KICK')); break;
                 case 'ability':

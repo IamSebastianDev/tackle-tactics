@@ -9,7 +9,7 @@ import { generateClub } from './world/generate';
 export type SimStats = {
     score: [number, number]; actions: number; passes: number; completed: number; shots: number; goals: number;
     tackles: number; tacklesWon: number; intercepts: number; turnovers: number; abilities: Record<string, number>;
-    cards: number; reds: number; subs: number; fouls: number; corners: number; freeKicks: number; avgSpell: number; ownHalfTurnovers: number;
+    cards: number; reds: number; subs: number; chains: number; longestChain: number; fouls: number; corners: number; freeKicks: number; avgSpell: number; ownHalfTurnovers: number;
 };
 
 export const simulate = (cfg: GameConfig, seed: number, difficulty: Difficulty = 'normal', formations: [string, string] = ['4-3-3', '4-4-2'], styles?: [TeamStyle, TeamStyle]) => {
@@ -22,9 +22,11 @@ export const simulate = (cfg: GameConfig, seed: number, difficulty: Difficulty =
     const brains = [new Brain(m, createRng(seed + 1), difficulty), new Brain(m, createRng(seed + 2), difficulty)];
     const st: SimStats = {
         score: [0, 0], actions: 0, passes: 0, completed: 0, shots: 0, goals: 0, tackles: 0, tacklesWon: 0, intercepts: 0,
-        turnovers: 0, abilities: {}, cards: 0, reds: 0, subs: 0, fouls: 0, corners: 0, freeKicks: 0, avgSpell: 0, ownHalfTurnovers: 0,
+        turnovers: 0, abilities: {}, cards: 0, reds: 0, subs: 0, chains: 0, longestChain: 0, fouls: 0, corners: 0, freeKicks: 0, avgSpell: 0, ownHalfTurnovers: 0,
     };
     const stats = new MatchStats(m);
+    let run = 0;
+    let lastWin = -99;
     let owner = m.carrier()?.team;
     let spellStart = 0;
     const spells: number[] = [];
@@ -68,7 +70,17 @@ export const simulate = (cfg: GameConfig, seed: number, difficulty: Difficulty =
                 const k = events.find((x) => x.t === 'kick');
                 if (k && k.t === 'kick' && m.piece(k.by).team === r.team) st.completed++;
             }
-            if (e.t === 'tackle') { st.tackles++; if (e.success) st.tacklesWon++; }
+            if (e.t === 'tackle') {
+                st.tackles++;
+                if (e.success) {
+                    st.tacklesWon++;
+                    // a chain: the ball changes hands by tackle again within a couple of actions
+                    run = st.actions - lastWin <= 2 ? run + 1 : 1;
+                    lastWin = st.actions;
+                    if (run === 2) st.chains++;
+                    st.longestChain = Math.max(st.longestChain, run);
+                }
+            }
             if (e.t === 'intercept' && e.success) st.intercepts++;
             if (e.t === 'ability') st.abilities[e.ability] = (st.abilities[e.ability] ?? 0) + 1;
             if (e.t === 'move' && e.ability) st.abilities[e.ability] = (st.abilities[e.ability] ?? 0) + 1;

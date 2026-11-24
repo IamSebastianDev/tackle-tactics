@@ -437,6 +437,11 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             return `${what} setup (${left} move${left === 1 ? '' : 's'} left). ${role} Click a highlighted player, then a cell. Space when you're happy.`;
         }
         const p = m.active();
+        if (m.state.bonusTurn === p.id && awaiting && !mode) {
+            return m.state.phase === 'move'
+                ? 'Extra turn for winning the ball: carry it clear of the scrum (or Space to stay).'
+                : 'Extra turn: pass it on, or Space to keep it. Shooting waits for your normal turn.';
+        }
         if (sp?.stage === 'take' && sp.taker === p.id && awaiting) {
             return sp.kind === 'corner'
                 ? 'Corner: aim into the box — teammates within 2 of the drop attack a header. Or play it short.'
@@ -519,7 +524,8 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
     });
 
     const queue = derived(ctl.tick, () => {
-        const ids = m.state.order.slice(m.state.turnIndex, m.state.turnIndex + 12);
+        // a tackle winner's extra turn sits in front of the normal order
+        const ids = m.state.bonusTurn ? [m.state.bonusTurn, ...m.state.order.slice(m.state.turnIndex + 1, m.state.turnIndex + 12)] : m.state.order.slice(m.state.turnIndex, m.state.turnIndex + 12);
         return html`<div class="queue">${ids.map((id, i) => {
             const p = m.piece(id);
             const auto = ctl.isHuman(p.team) && !ctl.needsOrders(p);

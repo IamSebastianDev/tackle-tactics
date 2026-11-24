@@ -42,6 +42,10 @@ export const defaultConfig = {
         timeoutPolicy: 'lose' as TimeoutPolicy,
         /** Delay before an AI-controlled player acts, so humans can follow. ms */
         aiThinkMs: 320,
+        /** Winning the ball in a tackle earns an immediate extra turn (carry it out of the scrum). */
+        tackleBonusTurn: true,
+        /** What the extra turn allows: 'full', 'noShot' (move and pass, no shooting) or 'move' (a run only). */
+        tackleBonusMode: 'noShot' as 'full' | 'noShot' | 'move',
         /** Extra pause after an action resolves, so the animation reads. ms */
         resolvePauseMs: 260,
         goalPauseMs: 1900,

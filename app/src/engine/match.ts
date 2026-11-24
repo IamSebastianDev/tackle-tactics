@@ -81,7 +81,7 @@ export class Match {
     };
     /** Everyone who took part: on the pitch, sent off, or substituted. */
     everyone = () => [...this.state.pieces, ...this.state.sentOff, ...this.state.subbedOff];
-    active = () => this.piece(this.state.order[Math.max(0, this.state.turnIndex)]!);
+    active = () => this.piece(this.state.bonusTurn ?? this.state.order[Math.max(0, this.state.turnIndex)]!);
     pieceAt = (c: Cell) => this.state.pieces.find((p) => eq(p.pos, c));
     carrier = () => (this.state.ball.kind === 'held' ? this.piece(this.state.ball.by) : undefined);
     ballCell = (): Cell => (this.state.ball.kind === 'held' ? this.piece(this.state.ball.by).pos : this.state.ball.at);
@@ -143,7 +143,10 @@ export class Match {
                 if (!holds) return 'Needs the ball';
                 if (p.status.tricked) return 'Already used this turn';
                 return this.opponents(p.team).some((o) => this.canReact(o) && cheb(o.pos, p.pos) === 1) ? null : 'No defender next to you with a reaction';
-            case 'placed': case 'power': case 'chip': case 'through': return holds ? null : 'Needs the ball';
+            case 'placed': case 'power': case 'chip':
+                if (!holds) return 'Needs the ball';
+                return this.shotBlocked(p) ? 'Extra turn: no shooting' : null;
+            case 'through': return holds ? null : 'Needs the ball';
             case 'cross':
                 if (!holds) return 'Needs the ball';
                 return this.crossZone(p) ? null : 'Get wide in the final third first';
@@ -252,6 +255,7 @@ export class Match {
         const gx = attackGoalX(cfg, p.team);
         const [top, bottom] = goalRows(cfg);
         const isGoal = target.x === gx && target.y >= top && target.y <= bottom;
+        if (isGoal && this.shotBlocked(p)) return null;
         if (ability && SHOT_ABILITIES.includes(ability)) return isGoal && dist(p.pos, target) <= cfg.ball.maxShotRange ? 'shot' : null;
         if (isGoal) {
             if (ability) return null;
@@ -282,6 +286,14 @@ export class Match {
     };
 
     // ---------------------------------------------------------------- turn flow
+
+    /** The extra turn after winning a tackle is for getting clear, not for shooting (match.tackleBonusMode). */
+    shotBlocked = (p: Piece) => this.state.bonusTurn === p.id && this.cfg.match.tackleBonusMode !== 'full';
+
+    /** The winner of a tackle gets an extra turn straight after this one (config: match.tackleBonusTurn). */
+    private wonTackle(winner: Piece) {
+        if (this.cfg.match.tackleBonusTurn) this.state.bonusNext = winner.id;
+    }
 
     private knock(id: string) {
         this.state.knocks[id] = (this.state.knocks[id] ?? 0) + 1;
@@ -344,6 +356,7 @@ export class Match {
 
     private afterMove(p: Piece) {
         if (this.state.phase === 'done') return;
+        if (this.state.bonusTurn === p.id && this.cfg.match.tackleBonusMode === 'move') { this.state.phase = 'done'; return; }
         this.state.phase = 'act';
         const holds = this.carrier()?.id === p.id;
         if (holds || this.canTackle(p)) return;
@@ -358,6 +371,16 @@ export class Match {
         // a headless caller skipping the setup simply takes the default arrangement
         if (s.setPiece?.stage === 'setup') s.setPiece.stage = 'take';
         this.endTurnCleanup();
+        // a tackle winner takes their extra turn now, before the order moves on
+        // (a bonus turn sits between two order slots: once it ends, the order simply moves on)
+        const owed = s.bonusNext;
+        delete s.bonusNext;
+        delete s.bonusTurn;
+        if (owed && !s.setPiece && s.pieces.some((p) => p.id === owed) && this.carrier()?.id === owed) {
+            s.bonusTurn = owed;
+            this.beginTurn();
+            return [{ t: 'bonus', id: owed }];
+        }
         s.turnIndex++;
         if (s.turnIndex >= s.order.length) {
             const half = Math.floor(this.cfg.match.rounds / 2);
@@ -450,6 +473,7 @@ export class Match {
                     if (success) {
                         this.state.ball = { kind: 'held', by: d.id };
                         this.knock(p.id);
+                        this.wonTackle(d);
                         this.log(`${d.player.name} steps in and wins it off ${p.player.name}!`, d.team);
                     } else {
                         d.staggered = true;
@@ -535,6 +559,7 @@ export class Match {
         if (success) {
             this.state.ball = { kind: 'held', by: p.id };
             this.knock(c.id);
+            this.wonTackle(p);
             if (slide && cheb(p.pos, c.pos) > 1) {
                 // slide carries you towards the ball
                 const step = line(p.pos, c.pos)[1];
@@ -624,6 +649,7 @@ export class Match {
         const advantage = !penalty && !o.cynical && this.carrier()?.id === victim.id
             && forward(cfg, victim.team, victim.pos) >= 0.5 && this.rng.chance(st.advantage);
         this.knock(victim.id);
+        if (!advantage) delete this.state.bonusNext; // the ball goes back: no reward for a foul
         const events: MatchEvent[] = [{ t: 'foul', by: fouler.id, on: victim.id, penalty, advantage, tackle: !o.cynical }];
         if (o.cynical) this.log(penalty ? `${fouler.player.name} brings ${victim.player.name} down in the box — penalty!` : `${fouler.player.name} cynically stops ${victim.player.name}.`, fouler.team);
         else if (advantage) this.log(`${this.state.referee.name} plays advantage after ${fouler.player.name}'s foul.`, victim.team);
@@ -832,6 +858,7 @@ export class Match {
         if (success) {
             this.state.ball = { kind: 'held', by: marker.id };
             this.knock(receiver.id);
+            this.wonTackle(marker);
             this.log(`${marker.player.name} was waiting for that — nicks it off ${receiver.player.name}.`, marker.team);
         } else {
             marker.staggered = true;
@@ -979,6 +1006,8 @@ export class Match {
     kickoff = (team: TeamSide) => {
         const cfg = this.cfg;
         this.state.setPiece = null;
+        delete this.state.bonusNext;
+        delete this.state.bonusTurn;
         const { cols, rows } = cfg.pitch;
         const taken = new Set<string>();
         for (const p of this.state.pieces) {

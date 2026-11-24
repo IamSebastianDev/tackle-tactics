@@ -311,6 +311,7 @@ export class Brain {
         const [top, bottom] = goalRows(cfg);
         const keeper = m.keeperOf((1 - p.team) as TeamSide);
         const out: Scored<{ target: Cell; ability?: KickAbility }>[] = [];
+        if (m.shotBlocked(p)) return out;
         for (let y = top; y <= bottom; y++) {
             const target = { x: gx, y };
             const d = dist(p.pos, target);

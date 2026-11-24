@@ -415,6 +415,11 @@ export class MatchController {
                 this.moods[t] = mood;
             }
             for (const e of ev) {
+                if (e.t === 'bonus') {
+                    this.popup(m.piece(e.id).pos, '⚡ Extra turn', 'good');
+                    audio.play('ability');
+                    await sleep(450);
+                }
                 if (e.t === 'halftime') {
                     audio.play('whistleEnd');
                     await this.showBanner('Half time', `${m.state.score[0]} – ${m.state.score[1]}`, 1800);
