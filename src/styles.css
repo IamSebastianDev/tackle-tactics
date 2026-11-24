@@ -4742,3 +4742,15 @@ a {
 .tcard.exit-card:hover b {
     color: var(--bad);
 }
+
+.viewport.dragging,
+.viewport.dragging .cell {
+    cursor: grabbing;
+}
+.legend-cam {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--line);
+    font-size: 11px;
+    color: var(--muted);
+}

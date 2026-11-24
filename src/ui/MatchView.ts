@@ -190,6 +190,29 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
 
     // ------------------------------------------------------------ camera
     const zoomBias = grain(1);
+    /**
+     * Free camera: a pan offset (viewport px) on top of the automatic framing. Drag the pitch, use the
+     * arrow keys, C recentres; it also recentres when the turn passes to another player or a kick flies.
+     */
+    const pan = grain({ x: 0, y: 0 });
+    const dragging = grain(false);
+    const clampPan = (x: number, y: number) => {
+        const k = cfg.camera.scale * zoomBias();
+        const mx = (W * k) / 2;
+        const my = (H * k) / 2;
+        return { x: Math.max(-mx, Math.min(mx, x)), y: Math.max(-my, Math.min(my, y)) };
+    };
+    const nudge = (dx: number, dy: number) => pan.update((o) => clampPan(o.x + dx, o.y + dy));
+    let framedFor = '';
+    ctl.tick.subscribe(() => {
+        // a new player on the ball or a kick in the air: give the camera back to the game
+        const key = m.state.over ? '' : `${m.active().id}${ctl.followBall ? ':ball' : ''}`;
+        if (key !== framedFor) {
+            framedFor = key;
+            const o = pan();
+            if (o.x || o.y) pan.set({ x: 0, y: 0 });
+        }
+    });
     /** How much the camera leans in: crowded balls get a closer look (Settings → auto zoom). */
     const autoZoom = (): { zoom: number; focus: Cell | null } => {
         if (!prefs().autoZoom || m.state.over) return { zoom: 1, focus: null };
@@ -199,7 +222,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         if (crowd < 4 || cheb(a.pos, b) > 8) return { zoom: 1, focus: null };
         return { zoom: 1 + 0.13 * Math.min(crowd - 3, 4), focus: { x: (a.pos.x + b.x) / 2, y: (a.pos.y + b.y) / 2 } };
     };
-    const camera = derived(combined([ctl.tick, viewport, zoomBias, prefs]), ([, vp, bias]) => {
+    const camera = derived(combined([ctl.tick, viewport, zoomBias, prefs, pan, dragging]), ([, vp, bias, , off, drag]) => {
         const p = m.state.over ? undefined : m.active();
         const az = autoZoom();
         // during a kick the camera rides with the ball, on the ball's own timing and easing
@@ -220,10 +243,11 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         const fy = f ? (f.y + margin) * C + C / 2 : H / 2;
         return [
             `transform-origin:${fx}px ${fy}px`,
-            `transform:translate(${vp.w / 2 - fx}px, ${vp.h / 2 - fy}px) scale(${cfg.camera.scale * az.zoom * bias})`,
+            `transform:translate(${vp.w / 2 - fx + off.x}px, ${vp.h / 2 - fy + off.y}px) scale(${cfg.camera.scale * az.zoom * bias})`,
             `width:${W}px`,
             `height:${H}px`,
-            ride,
+            // while dragging, the pitch follows the mouse directly
+            drag ? 'transition:none' : ride,
         ]
             .filter(Boolean)
             .join(';');
@@ -692,7 +716,10 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             : html``,
     );
 
-    const shakeClass = derived(ctl.shake, (n) => `viewport ${n ? (n % 2 ? 'shake-a' : 'shake-b') : ''}`);
+    const shakeClass = derived(
+        combined([ctl.shake, dragging]),
+        ([n, drag]) => `viewport ${n ? (n % 2 ? 'shake-a' : 'shake-b') : ''}${drag ? ' dragging' : ''}`,
+    );
 
     const ballImgStyle = derived(ctl.ballArc, (a) => {
         if (!a) return '';
@@ -901,7 +928,16 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             else if (e.key === '+' || e.key === '=') zoomBias.update((z) => Math.min(1.8, z * 1.12));
             else if (e.key === '-' || e.key === '_') zoomBias.update((z) => Math.max(0.6, z / 1.12));
             else if (e.key === '0') zoomBias.set(1);
-            else if (e.key === 'm' || e.key === 'M') setPref('muted', !prefs().muted);
+            else if (e.key === 'c' || e.key === 'C') pan.set({ x: 0, y: 0 });
+            else if (e.key.startsWith('Arrow')) {
+                e.preventDefault();
+                const step = e.shiftKey ? 240 : 90;
+                // arrows move the view, so the pitch slides the other way
+                nudge(
+                    e.key === 'ArrowLeft' ? step : e.key === 'ArrowRight' ? -step : 0,
+                    e.key === 'ArrowUp' ? step : e.key === 'ArrowDown' ? -step : 0,
+                );
+            } else if (e.key === 'm' || e.key === 'M') setPref('muted', !prefs().muted);
             else if (/^[1-9]$/.test(e.key)) {
                 const id = phaseAbilities(m.active())[Number(e.key) - 1];
                 if (id) ctl.useAbility(id);
@@ -921,12 +957,62 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             zoomBias.update((z) => Math.max(0.6, Math.min(1.8, z * (e.deltaY < 0 ? 1.08 : 1 / 1.08))));
         };
         window.addEventListener('wheel', wheel, { passive: false });
+        // drag to pan: right/middle button at once, left button after a short move (so clicks still work)
+        let drag: { x: number; y: number; px: number; py: number; moved: boolean; button: number } | null = null;
+        let swallowClick = false;
+        const stageScale = () => {
+            const app = document.getElementById('app');
+            return app ? app.getBoundingClientRect().width / app.offsetWidth || 1 : 1;
+        };
+        const down = (e: PointerEvent) => {
+            if (!(e.target as HTMLElement).closest('.viewport') || e.button > 2) return;
+            const o = pan();
+            drag = { x: e.clientX, y: e.clientY, px: o.x, py: o.y, moved: e.button !== 0, button: e.button };
+            if (drag.moved) dragging.set(true);
+        };
+        const move = (e: PointerEvent) => {
+            if (!drag) return;
+            const dx = e.clientX - drag.x;
+            const dy = e.clientY - drag.y;
+            if (!drag.moved && Math.hypot(dx, dy) > 6) {
+                drag.moved = true;
+                dragging.set(true);
+            }
+            if (drag.moved) {
+                const sc = stageScale();
+                pan.set(clampPan(drag.px + dx / sc, drag.py + dy / sc));
+            }
+        };
+        const up = () => {
+            if (drag?.moved && drag.button === 0) swallowClick = true;
+            drag = null;
+            dragging.set(false);
+        };
+        const click = (e: MouseEvent) => {
+            if (!swallowClick) return;
+            swallowClick = false;
+            e.stopPropagation();
+            e.preventDefault();
+        };
+        const noMenu = (e: MouseEvent) => {
+            if ((e.target as HTMLElement).closest('.viewport')) e.preventDefault();
+        };
+        window.addEventListener('pointerdown', down);
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+        window.addEventListener('click', click, true);
+        window.addEventListener('contextmenu', noMenu);
         audio.unlock();
         void ctl.run();
         return () => {
             window.removeEventListener('keydown', onKey);
             window.removeEventListener('pointerdown', closeMusic);
             window.removeEventListener('wheel', wheel);
+            window.removeEventListener('pointerdown', down);
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerup', up);
+            window.removeEventListener('click', click, true);
+            window.removeEventListener('contextmenu', noMenu);
             unRecolor();
             ctl.stop();
         };
@@ -999,6 +1085,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 <div><i class="sw pick"></i>Pick a target / run-in zone</div>
                 <div ${on('click', () => setPref('showZoc', !prefs().showZoc))} class="legend-toggle"><i class="sw zoc"></i>Their zone of control <kbd>Z</kbd></div>
                 <div><i class="sw zoc-own"></i>Your cover</div>
+                <div class="legend-cam">Drag or arrows: move the view · wheel: zoom · <kbd>C</kbd> recentre</div>
             </div>
         </aside>
         <aside class="hud-right">

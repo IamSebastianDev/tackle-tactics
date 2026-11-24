@@ -200,6 +200,8 @@ bubbabba cast gives eight ready-made kits today.
 | Z                 | Show/hide zones of control (pink = their reaction-ready cover, grey = spent, blue dots = yours) |
 | P                 | Pause (the clock freezes)                                                                       |
 | Wheel, + / − / 0  | Zoom in / out / reset (the camera also leans in on crowded balls)                               |
+| Drag, arrow keys  | Move the view (right/middle-drag or a left-drag on the pitch; Shift+arrow moves further)        |
+| C                 | Recentre the view (it also recentres when the turn passes to another player)                    |
 | H                 | Playbook · M mute · Esc cancel                                                                  |
 | B                 | Bench and substitutions                                                                         |
 | N / R             | Radio: next song / radio on-off (anywhere)                                                      |
