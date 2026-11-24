@@ -51,12 +51,17 @@ describe('engine', () => {
         expect(c.match.rounds).toBe(defaultConfig.match.rounds);
     });
 
-    it('abilities unlock by class level, multiclass grants both kits', () => {
+    it('abilities come from the perks picked at each class tier; multiclass players pick in both', () => {
         const { clubs } = setup(3);
-        const p = { ...clubs[0].squad[5]!, levels: { midfielder: 6, striker: 3 } };
+        const p = { ...clubs[0].squad[5]!, levels: { midfielder: 6, striker: 3 }, perks: ['press', 'tempo', 'run'] };
         const ab = abilitiesOf(defaultConfig, p);
-        expect(ab).toEqual(expect.arrayContaining(['press', 'through', 'tempo', 'run', 'placed']));
-        expect(ab).not.toContain('power');
+        expect(ab).toEqual(expect.arrayContaining(['press', 'tempo', 'run']));
+        // the other option at each tier is gone, and higher tiers need the class level
+        expect(ab).not.toContain('through');
+        expect(ab).not.toContain('placed');
+        expect(abilitiesOf(defaultConfig, { ...p, levels: { midfielder: 6, striker: 3 }, perks: [...p.perks, 'power'] })).not.toContain(
+            'power',
+        );
     });
 
     it('sprint only reaches straight lines', () => {

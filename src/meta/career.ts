@@ -3,13 +3,13 @@
  * money, transfers, injuries, levelling and aging. Pure data + functions; the UI calls these
  * and persists the `Career` object.
  */
-import { defaultConfig, type ClassId, type Difficulty, type GameConfig, type TimeoutPolicy } from '../config';
+import type { ClassId, Difficulty, GameConfig, TimeoutPolicy } from '../config';
 import { deleteSave, readSave, writeSave } from './storage';
-import { classLevel } from '../engine/abilities';
+import { classLevel, perkDef, pickPerk, type PerkId } from '../engine/abilities';
 import { createRng, type Rng } from '../rng';
 import type { Club, Player, TeamSide } from '../types';
 import { generatePlayer } from '../world/generate';
-import { DEFAULT_NATION, NATION_IDS, NATIONS, pickNationality, shortCode, type NationId } from '../world/nations';
+import { DEFAULT_NATION, NATIONS, pickNationality, shortCode, type NationId } from '../world/nations';
 import { generateStadium, type Stadium } from '../world/stadium';
 import {
     CUP_NAME,
@@ -23,11 +23,12 @@ import {
     type Cup,
     type CupRound,
 } from './cup';
-import { ageOneSeason, fitFor, gainXp, money, ovr, playerValue, wage } from './player';
+import { ageOneSeason, autoLevel, fitFor, gainXp, levelUp, money, ovr, playerValue, wage } from './player';
 import {
     afterMatchday,
     afterTraining,
     answerLetter,
+    bumpQuest,
     initStory,
     resetSeason,
     seasonAwards,
@@ -52,8 +53,14 @@ export type CareerClub = Club & {
     lineup: string[];
 };
 
+/**
+ * Save format version. Breaking changes bump it; an older save is simply not loaded (no
+ * migrations: the manager starts a new career).
+ */
+export const SAVE_VERSION = 2;
+
 export type Career = {
-    version: 1;
+    version: typeof SAVE_VERSION;
     seed: number;
     /** The nation whose pyramid the career is played in (saves from before nations → Highmarch). */
     nation: NationId;
@@ -183,7 +190,7 @@ export const newCareer = (
     const rng = createRng(seed);
     const nation = NATIONS[opts.nation ?? DEFAULT_NATION];
     const c: Career = {
-        version: 1,
+        version: SAVE_VERSION,
         seed,
         nation: nation.id,
         rngState: 0,
@@ -492,7 +499,9 @@ export type MatchReport = {
 const aiMatchXp = (cfg: GameConfig, rng: Rng, club: CareerClub) => {
     for (const id of club.lineup) {
         const p = club.squad.find((q) => q.id === id);
-        if (p) gainXp(cfg, rng, p, p.cls, cfg.career.matchXp * 0.8);
+        if (!p) continue;
+        gainXp(cfg, p, cfg.career.matchXp * 0.8);
+        autoLevel(cfg, rng, p);
     }
 };
 
@@ -571,8 +580,7 @@ export const playMatchday = (cfg: GameConfig, c: Career, report: MatchReport) =>
     for (const id of report.played) {
         const p = u.squad.find((q) => q.id === id);
         if (!p) continue;
-        const ups = gainXp(cfg, rng, p, p.cls, cfg.career.matchXp);
-        if (ups) news(c, `${p.name} reached ${cfg.classes[p.cls].short} ${classLevel(p, p.cls)} through match experience.`, 'good');
+        if (gainXp(cfg, p, cfg.career.matchXp)) news(c, `${p.name} is ready to level up: choose their class.`, 'good');
         for (let k = 0; k < (report.knocks[id] ?? 0); k++) {
             if (rng.chance(cfg.training.knockInjuryChance)) {
                 const days = rng.int(cfg.training.injuryDays[0], cfg.training.injuryDays[1]);
@@ -612,6 +620,39 @@ export const playMatchday = (cfg: GameConfig, c: Career, report: MatchReport) =>
     c.day++;
 };
 
+/**
+ * The manager spends a player's banked level on `cls`: an existing class or a new outfield one.
+ * Returns the news line, or null if the player can't level up into that class right now.
+ */
+export const chooseLevelUp = (cfg: GameConfig, c: Career, playerId: string, cls: ClassId): string | null => {
+    const p = userClub(c).squad.find((q) => q.id === playerId);
+    if (!p) return null;
+    const rng = careerRng(c);
+    const isNew = classLevel(p, cls) === 0;
+    if (!levelUp(cfg, rng, p, cls)) return null;
+    saveRng(c, rng);
+    const text = isNew
+        ? `${p.name} takes up a new class: ${cfg.classes[cls].label}!`
+        : `${p.name} reaches ${cfg.classes[cls].short} ${classLevel(p, cls)}.`;
+    news(c, text, 'good');
+    if (isNew)
+        bumpQuest(cfg, c, 'newclass', 1, 'add', (amount, title) => {
+            book(c, `Quest complete: ${title}`, amount);
+            news(c, `Quest complete: ${title}! +${money(amount)}.`, 'good');
+        });
+    return text;
+};
+
+/** The manager picks a perk from one of a player's pending tiers. Returns the news line, or null. */
+export const choosePerk = (cfg: GameConfig, c: Career, playerId: string, perk: PerkId): string | null => {
+    const p = userClub(c).squad.find((q) => q.id === playerId);
+    if (!p || !pickPerk(cfg, p, perk)) return null;
+    const d = perkDef(cfg, perk);
+    const text = `${p.name} learns ${d.label}${d.kind === 'passive' ? ' (passive)' : ''}.`;
+    news(c, text, 'good');
+    return text;
+};
+
 /** Run one drill per club and rest injured players. */
 export const trainingDay = (cfg: GameConfig, c: Career) => {
     const t = today(cfg, c);
@@ -626,7 +667,6 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
     };
     let recovering = 0;
     let xp = 0;
-    let newClass = false;
     const cupClubs = new Set(t.cup?.fixtures.flatMap((f) => [f.home, f.away]));
     for (const club of Object.values(c.clubs)) {
         if (cupClubs.has(club.id)) continue;
@@ -644,27 +684,22 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
                 continue;
             }
             const { cls, amount } = gain;
-            const before = classLevel(p, cls);
-            const ups = gainXp(cfg, rng, p, cls, amount);
-            if (!isUser) continue;
+            const ready = gainXp(cfg, p, amount);
+            // AI clubs level up on the spot; the manager chooses the class for their own players
+            if (!isUser) {
+                autoLevel(cfg, rng, p);
+                continue;
+            }
             trainees.push({ player: p, cls });
             xp += amount;
-            if (ups) {
-                if (before === 0) newClass = true;
-                announce(
-                    before === 0
-                        ? `${p.name} picked up a new class: ${cfg.classes[cls].label}!`
-                        : `${p.name} reached ${cfg.classes[cls].short} ${classLevel(p, cls)}.`,
-                    'good',
-                );
-            }
+            if (ready) announce(`${p.name} is ready to level up: choose their class.`, 'good');
         }
     }
     if (t.cup) {
         playCupRound(cfg, c, rng, t.cup);
         finishCupRound(cfg, c, rng, t.cup);
     }
-    const letter = afterTraining(cfg, c, rng, { trainees, newClass }, (label, amount) => book(c, label, amount), announce);
+    const letter = afterTraining(cfg, c, rng, { trainees });
     if (letter) {
         letter.trainingDay = c.day;
         updates.unshift(`New letter · ${letter.title}`);
@@ -850,32 +885,11 @@ export const loadCareer = (): Career | null => {
     try {
         const raw = readSave();
         if (!raw) return null;
-        const c = JSON.parse(raw) as Career & { plan?: unknown };
-        if (c.version !== 1) return null;
-        if (!TRAINING_FOCUS_IDS.includes(c.trainingFocus)) c.trainingFocus = DEFAULT_TRAINING_FOCUS;
-        delete c.plan;
-        migrateNations(defaultConfig, c);
-        return c;
+        const c = JSON.parse(raw) as Career;
+        // an older format isn't migrated: it's ignored and a new career takes its place
+        return c.version === SAVE_VERSION ? c : null;
     } catch {
         return null;
-    }
-};
-/**
- * Saves from before nations: the pyramid is Highmarch, and so is everybody without a nationality.
- * The market is topped up to its new size with players scouted abroad, so signings from other
- * countries don't have to wait for next season.
- */
-export const migrateNations = (cfg: GameConfig, c: Career) => {
-    if (NATION_IDS.includes(c.nation)) return;
-    c.nation = DEFAULT_NATION;
-    for (const club of Object.values(c.clubs)) for (const p of club.squad) p.nation ??= c.nation;
-    for (const p of c.market) p.nation ??= c.nation;
-    const extra = cfg.career.market.size - c.market.length;
-    if (extra > 0) {
-        const rng = careerRng(c);
-        c.market.push(...buildMarket(cfg, rng, c, extra, 1));
-        saveRng(c, rng);
-        news(c, `Your scouts now cover ${NATION_IDS.length - 1} other countries: ${extra} players from abroad join the market.`, 'good');
     }
 };
 export const deleteCareer = () => deleteSave();

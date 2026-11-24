@@ -31,8 +31,10 @@ export type Player = {
     /** Stat points gained per level-up (the growth lever; talent is the base lever). */
     growth: number;
     peakAge: number;
-    /** XP banked towards the next level, per class. */
-    xp: Partial<Record<ClassId, number>>;
+    /** XP banked towards the next level; the manager picks the class when it's spent (AI clubs: their main class). */
+    xp: number;
+    /** Perks picked at each class tier (config.perkTiers): ability or passive ids. Absent on old data. */
+    perks?: string[];
     /** Days until fit; absent when fit. */
     injury?: number;
 };

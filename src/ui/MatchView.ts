@@ -500,8 +500,9 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 const a = abilityDef(cfg, id);
                 const have = owned.includes(id);
                 const cd = cooldownLeft(p, id, m.state.round);
-                const tip = `${a.label}: ${a.desc}${have ? '' : ` (unlocks at ${cfg.classes[a.cls].short} ${a.unlock}; has ${classLevel(p.player, a.cls)})`}`;
-                return html`<span class="chip ${have ? '' : 'locked'}" data-tip="${tip}">${a.icon} ${a.label}${have ? (cd ? html` <b>${String(cd)}</b>` : html``) : html` <i>${cfg.classes[a.cls].short}${String(a.unlock)}</i>`}</span>`;
+                const passed = classLevel(p.player, a.cls) >= a.unlock;
+                const tip = `${a.label}: ${a.desc}${have ? '' : passed ? ' (not picked: they chose the other option at this level)' : ` (a choice at ${cfg.classes[a.cls].short} ${a.unlock}; has ${classLevel(p.player, a.cls)})`}`;
+                return html`<span class="chip ${have ? '' : 'locked'}" data-tip="${tip}">${a.icon} ${a.label}${have ? (cd ? html` <b>${String(cd)}</b>` : html``) : html` <i>${passed ? '—' : `${cfg.classes[a.cls].short}${String(a.unlock)}`}</i>`}</span>`;
             })}
             ${passives.map((id) => html`<span class="chip passive" data-tip="${cfg.passives[id].label} (passive): ${cfg.passives[id].desc}">◆ ${cfg.passives[id].label}</span>`)}
         </div>`;

@@ -1,6 +1,6 @@
 /** Player-level meta formulas: rating, value, wage, XP & level-ups, aging. All tunables in config.career. */
 import type { ClassId, GameConfig, StatId, Stats } from '../config';
-import { classLevel } from '../engine/abilities';
+import { classLevel, settlePerks } from '../engine/abilities';
 import type { Rng } from '../rng';
 import type { Player } from '../types';
 
@@ -54,7 +54,23 @@ export const playerValue = (cfg: GameConfig, p: Player) => {
 export const wage = (cfg: GameConfig, p: Player) =>
     Math.max(500, Math.round((playerValue(cfg, p) * cfg.career.value.wageRate) / 100) * 100);
 
-export const xpToNext = (cfg: GameConfig, p: Player, cls: ClassId) => cfg.career.xpBase + cfg.career.xpPerLevel * classLevel(p, cls);
+/** XP needed for the player's next level (whichever class it goes into). */
+export const xpToNext = (cfg: GameConfig, p: Player) => cfg.career.xpBase + cfg.career.xpPerLevel * p.level;
+
+/** How many level-ups the banked XP pays for right now (each one costs more than the last). */
+export const levelsReady = (cfg: GameConfig, p: Player) => {
+    let xp = p.xp;
+    let n = 0;
+    while (xp >= cfg.career.xpBase + cfg.career.xpPerLevel * (p.level + n))
+        xp -= cfg.career.xpBase + cfg.career.xpPerLevel * (p.level + n++);
+    return n;
+};
+
+const OUTFIELD: ClassId[] = ['defender', 'midfielder', 'winger', 'striker'];
+
+/** The classes a level-up can go into: keepers stay keepers; outfielders can take up any outfield class. */
+export const levelUpOptions = (p: Player): ClassId[] =>
+    p.cls === 'keeper' ? ['keeper'] : [...OUTFIELD].sort((a, b) => classLevel(p, b) - classLevel(p, a));
 
 /** Hand out stat points for one level, weighted by the class profile. */
 const growStats = (cfg: GameConfig, rng: Rng, p: Player, cls: ClassId) => {
@@ -72,22 +88,37 @@ const growStats = (cfg: GameConfig, rng: Rng, p: Player, cls: ClassId) => {
     }
 };
 
-/** Bank XP in a class; returns how many levels were gained (stats grow per level). */
-export const gainXp = (cfg: GameConfig, rng: Rng, p: Player, cls: ClassId, amount: number): number => {
-    let gained = 0;
-    p.xp[cls] = (p.xp[cls] ?? 0) + amount;
-    for (;;) {
-        const need = xpToNext(cfg, p, cls);
-        if ((p.xp[cls] ?? 0) < need) break;
-        p.xp[cls] = (p.xp[cls] ?? 0) - need;
-        p.levels[cls] = classLevel(p, cls) + 1;
-        p.level += 1;
-        growStats(cfg, rng, p, cls);
-        gained++;
-    }
+/**
+ * Bank XP (it belongs to no class until the level-up is chosen). Returns true when this gift made
+ * the player ready for a level-up they weren't ready for before.
+ */
+export const gainXp = (cfg: GameConfig, p: Player, amount: number): boolean => {
+    const before = levelsReady(cfg, p);
+    p.xp += amount;
+    return levelsReady(cfg, p) > before;
+};
+
+/** Spend one level's XP on `cls`: the class level rises and stats grow along its profile. */
+export const levelUp = (cfg: GameConfig, rng: Rng, p: Player, cls: ClassId): boolean => {
+    const need = xpToNext(cfg, p);
+    if (p.xp < need || !levelUpOptions(p).includes(cls)) return false;
+    p.xp -= need;
+    p.levels[cls] = classLevel(p, cls) + 1;
+    p.level += 1;
+    growStats(cfg, rng, p, cls);
     // primary class follows the most levels
     p.cls = (Object.entries(p.levels) as Array<[ClassId, number]>).sort((a, b) => b[1] - a[1])[0]![0];
-    return gained;
+    // a tier with a single option is simply granted; real choices wait for the manager
+    settlePerks(cfg, p, rng, false);
+    return true;
+};
+
+/** AI clubs (and anyone not managed by the player) level up straight away in their main class. */
+export const autoLevel = (cfg: GameConfig, rng: Rng, p: Player): number => {
+    let n = 0;
+    while (levelUp(cfg, rng, p, p.cls)) n++;
+    settlePerks(cfg, p, rng);
+    return n;
 };
 
 /** End-of-season aging; returns the average stat delta applied. */

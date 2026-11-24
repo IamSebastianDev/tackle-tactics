@@ -115,7 +115,9 @@ Token rendering: a 128×64 viewport with `overflow:hidden` shows one frame; the 
 ### Season loop
 
 - **72-day season:** a league or cup matchday followed by two training days. There are 18 league matchdays and six Pyramid Cup dates. Clubs with a bye or a cup exit train on cup dates.
-- Choose one training focus per day for the whole squad. Fit players earn class XP based on their attributes and experience in that class. Outfielders can learn another outfield class. Keepers and outfielders do lighter position drills when the focus is for the other group.
+- Choose one training focus per day for the whole squad. Fit players earn XP; players suited to the drill (class and its attributes) earn more. XP belongs to no class.
+- **Level-ups are explicit.** When a player has enough XP, the manager chooses which class the level goes into: one they have, or a new outfield class (keepers stay keepers). AI clubs level in their main class.
+- **Perk choices.** At certain class levels (2, 5, 8) the player picks one of two perks, an active ability or a passive, and the other is gone for good, so players of the same class differ. AI and generated players pick at random. See `config.perkTiers`.
 - **Injured players** sit out training and recover automatically.
 - New players enter the market at season start — no scouting or youth academy; a fresh randomly-generated pool appears each season.
 

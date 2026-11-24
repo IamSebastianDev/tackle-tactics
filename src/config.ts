@@ -417,7 +417,7 @@ export const defaultConfig = {
         },
         trick: {
             cls: 'winger',
-            unlock: 4,
+            unlock: 2,
             phase: 'pre',
             cooldown: 2,
             label: 'Trick',
@@ -431,7 +431,7 @@ export const defaultConfig = {
         },
         cross: {
             cls: 'winger',
-            unlock: 6,
+            unlock: 5,
             phase: 'act',
             cooldown: 0,
             label: 'Cross',
@@ -460,7 +460,7 @@ export const defaultConfig = {
         },
         placed: {
             cls: 'striker',
-            unlock: 3,
+            unlock: 2,
             phase: 'act',
             cooldown: 0,
             label: 'Placed shot',
@@ -520,7 +520,7 @@ export const defaultConfig = {
         },
         through: {
             cls: 'midfielder',
-            unlock: 3,
+            unlock: 2,
             phase: 'act',
             cooldown: 2,
             label: 'Through ball',
@@ -533,7 +533,7 @@ export const defaultConfig = {
         },
         tempo: {
             cls: 'midfielder',
-            unlock: 6,
+            unlock: 5,
             phase: 'act',
             cooldown: 4,
             label: 'Set tempo',
@@ -560,7 +560,7 @@ export const defaultConfig = {
         },
         mark: {
             cls: 'defender',
-            unlock: 4,
+            unlock: 2,
             phase: 'act',
             cooldown: 0,
             label: 'Man-mark',
@@ -573,7 +573,7 @@ export const defaultConfig = {
         },
         foul: {
             cls: 'defender',
-            unlock: 6,
+            unlock: 5,
             phase: 'act',
             cooldown: 0,
             label: 'Tactical foul',
@@ -587,7 +587,7 @@ export const defaultConfig = {
         // ---- Keeper
         command: {
             cls: 'keeper',
-            unlock: 3,
+            unlock: 2,
             phase: 'act',
             cooldown: 3,
             label: 'Command',
@@ -616,15 +616,44 @@ export const defaultConfig = {
     },
     /** Passive traits, unlocked by class level like abilities. Applied inside rules.ts. */
     passives: {
-        distributor: { cls: 'keeper', unlock: 1, label: 'Distributor', desc: 'Keeper kicks scatter 35% less.', passScatter: 0.65 },
-        shotStopper: { cls: 'keeper', unlock: 8, label: 'Shot-stopper', desc: '+10% save chance.', save: 0.1 },
-        stopper: { cls: 'defender', unlock: 8, label: 'Stopper', desc: '+8% tackle chance.', tackle: 0.08 },
+        distributor: { cls: 'keeper', unlock: 2, label: 'Distributor', desc: 'Keeper kicks scatter 35% less.', passScatter: 0.65 },
+        shotStopper: { cls: 'keeper', unlock: 5, label: 'Shot-stopper', desc: '+10% save chance.', save: 0.1 },
+        stopper: { cls: 'defender', unlock: 5, label: 'Stopper', desc: '+8% tackle chance.', tackle: 0.08 },
         vision: { cls: 'midfielder', unlock: 5, label: 'Vision', desc: 'Passes scatter 20% less.', passScatter: 0.8 },
-        reader: { cls: 'midfielder', unlock: 9, label: 'Reader', desc: '+10% intercept chance.', intercept: 0.1 },
-        elusive: { cls: 'winger', unlock: 8, label: 'Elusive', desc: 'Tackles against you are 10% less likely.', evade: 0.1 },
-        aerial: { cls: 'striker', unlock: 6, label: 'Aerial threat', desc: 'Headers scatter 30% less.', headerScatter: 0.7 },
-        clinical: { cls: 'striker', unlock: 10, label: 'Clinical', desc: 'Shots scatter 20% less.', shotScatter: 0.8 },
+        reader: { cls: 'midfielder', unlock: 8, label: 'Reader', desc: '+10% intercept chance.', intercept: 0.1 },
+        elusive: { cls: 'winger', unlock: 5, label: 'Elusive', desc: 'Tackles against you are 10% less likely.', evade: 0.1 },
+        aerial: { cls: 'striker', unlock: 5, label: 'Aerial threat', desc: 'Headers scatter 30% less.', headerScatter: 0.7 },
+        clinical: { cls: 'striker', unlock: 8, label: 'Clinical', desc: 'Shots scatter 20% less.', shotScatter: 0.8 },
     },
+    /**
+     * Perk choices: at each of these class levels the player picks ONE of the options (an active
+     * ability or a passive) and the other is gone for good, so two wingers can play differently.
+     * A tier with a single option is granted automatically. Unlock levels above match these tiers.
+     */
+    perkTiers: {
+        keeper: [
+            { level: 2, options: ['command', 'distributor'] },
+            { level: 5, options: ['rush', 'shotStopper'] },
+        ],
+        defender: [
+            { level: 2, options: ['slide', 'mark'] },
+            { level: 5, options: ['foul', 'stopper'] },
+        ],
+        midfielder: [
+            { level: 2, options: ['press', 'through'] },
+            { level: 5, options: ['tempo', 'vision'] },
+            { level: 8, options: ['reader'] },
+        ],
+        winger: [
+            { level: 2, options: ['sprint', 'trick'] },
+            { level: 5, options: ['cross', 'elusive'] },
+        ],
+        striker: [
+            { level: 2, options: ['run', 'placed'] },
+            { level: 5, options: ['power', 'aerial'] },
+            { level: 8, options: ['chip', 'clinical'] },
+        ],
+    } as Record<ClassId, Array<{ level: number; options: string[] }>>,
     /** The manager layer. Tier 0 is the top division. */
     career: {
         divisions: 5,

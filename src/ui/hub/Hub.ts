@@ -8,7 +8,18 @@ import { flag } from '../flag';
 import type { Confirm } from '../confirm';
 import { $each, $if, $render, $switch, attr, html, mounted, on, type Fragment } from '@grainular/nord';
 import type { ClassId, GameConfig, TeamStyle } from '../../config';
-import { abilitiesOf, abilityDef, allAbilities, classLabel, classLevel, passivesOf } from '../../engine/abilities';
+import {
+    abilitiesOf,
+    abilityDef,
+    classLabel,
+    classLevel,
+    passivesOf,
+    nextPerkTier,
+    pendingPerks,
+    perkDef,
+    type PerkId,
+    type AbilityId,
+} from '../../engine/abilities';
 import {
     askingPrice,
     autoLineup,
@@ -34,6 +45,8 @@ import {
     type CareerClub,
     type Fixture,
     type SeasonCeremony,
+    chooseLevelUp,
+    choosePerk,
 } from '../../meta/career';
 import { CUP_NAME, cupWinner, isCupFixture, penaltyScore } from '../../meta/cup';
 import { avgRating, moraleLabel, rivalOf, seasonLine, story } from '../../meta/story';
@@ -41,7 +54,7 @@ import { COUNTERS, isDerby, opponentOf, planEdge, prepFor, TALKS, type TeamTalk 
 import { styleOf } from '../../ai/brain';
 import { audio } from '../audio';
 import { conditionsLabel, sizeLabel } from '../../world/stadium';
-import { fitFor, money, ovr, playerValue, potentialStars, wage, xpToNext } from '../../meta/player';
+import { fitFor, levelsReady, levelUpOptions, money, ovr, playerValue, potentialStars, wage, xpToNext } from '../../meta/player';
 import { TRAINING_FOCUSES, TRAINING_FOCUS_IDS, trainingGain } from '../../meta/training';
 import type { Player } from '../../types';
 import { kitColor } from '../MatchView';
@@ -96,6 +109,9 @@ const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ([
 
 const crest = (cl: CareerClub) => html`<span class="crest" style="--kit:${kitColor(cl.kit)}">${cl.short}</span>`;
 
+/** The day (seed:season:day) the level-up prompt last opened on its own: once a day is enough. */
+let promptedOn = '';
+
 export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: WritableGrain<HubNotice | null>) => {
     const version = grain(0);
     const tab = grain<Tab>('overview');
@@ -108,11 +124,20 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     const slotPick = grain<number | null>(null);
     const letterOpen = grain(false);
     const ceremony = grain<SeasonCeremony | null>(null);
+    /** The level-up prompt: open for a given player, or for whoever is next in line (id null). */
+    const levelUp = grain<{ id: string | null } | null>(null);
 
     const read = <T>(value: () => T) => derived(version, value);
     const modelRegion = (view: () => Fragment) => $render(read(view));
     let toastTimer: ReturnType<typeof setTimeout>;
-    const clearToast = mounted(() => () => clearTimeout(toastTimer));
+    const clearToast = mounted(() => {
+        // back from a match (or a fresh load): anyone ready to level up gets the prompt
+        const t = setTimeout(() => promptLevelUps(), 400);
+        return () => {
+            clearTimeout(t);
+            clearTimeout(toastTimer);
+        };
+    });
 
     const changed = () => {
         saveCareer(c);
@@ -126,6 +151,15 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     };
 
     const u = () => userClub(c);
+    /** A player with a level to spend, or a perk tier still to choose from. */
+    const isReady = (p: Player) => levelsReady(cfg, p) > 0 || pendingPerks(cfg, p).length > 0;
+    /** Open the level-up prompt once a day when someone is ready (after training, back from a match). */
+    const promptLevelUps = () => {
+        const key = `${c.seed}:${c.season}:${c.day}`;
+        if (promptedOn === key || !u().squad.some(isReady)) return;
+        promptedOn = key;
+        levelUp.set({ id: null });
+    };
     const club = (id: string) => c.clubs[id]!;
     const clubResult = (f: Fixture) => {
         if (!f.result) return null;
@@ -185,6 +219,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
             if (!report) return;
             changed();
             toast([report.summary, ...report.updates.slice(0, 3)].join(' '));
+            promptLevelUps();
             return;
         }
         const result = actions.endSeason();
@@ -243,6 +278,11 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         if (injured.length)
             items.push(
                 html`<li class="bad">${String(injured.length)} injured: ${injured.map((p) => `${p.name} (${p.injury}d)`).join(', ')}</li>`,
+            );
+        const ready = cl.squad.filter(isReady);
+        if (ready.length)
+            items.push(
+                html`<li class="good lvl-alert">▲ ${String(ready.length)} ready to level up: ${ready.map((p) => p.name).join(', ')} <button class="ghost" ${on('click', () => levelUp.set({ id: null }))}>Choose</button></li>`,
             );
         if (cl.budget < 0) items.push(html`<li class="bad">You're in debt. Sell a player or win some matches.</li>`);
         if (cl.squad.length < cfg.career.squadMin + 1)
@@ -519,7 +559,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         const injuryLabel = derived(injury, (days) => (days ? `✚ ${days}d` : ''));
         return html`<tr ${attr({ class: derived(injury, (days) => (days ? 'injured' : '')) })} ${on('click', () => selected.set({ id: p.id, from }))}>
             <td>${portrait(u(), p, 32)}</td>
-            <td class="name">${flag(p.nation)}<b>${p.name}</b>${$if(derived(injury, Boolean)).$then(() => html`<em class="inj">${injuryLabel}</em>`)}</td>
+            <td class="name">${flag(p.nation)}<b>${p.name}</b>${$if(read(() => from === 'squad' && isReady(p))).$then(() => html`<em class="lvl-badge" title="Ready to level up">▲</em>`)}${$if(derived(injury, Boolean)).$then(() => html`<em class="inj">${injuryLabel}</em>`)}</td>
             <td>${modelRegion(() => classChips(p))}</td>
             <td class="num">${read(() => String(p.age))}</td>
             <td class="num"><b>${read(() => String(ovr(cfg, p)))}</b></td>
@@ -559,10 +599,10 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     };
 
     // ------------------------------------------------------------ player drawer
-    const xpBar = (p: Player, cl: ClassId) => {
-        const need = xpToNext(cfg, p, cl);
-        const have = p.xp[cl] ?? 0;
-        return html`<span class="xpbar" title="${String(Math.round(have))} / ${String(need)} XP"><i style="width:${Math.min(100, (have / need) * 100)}%"></i></span>`;
+    const xpBar = (p: Player) => {
+        const need = xpToNext(cfg, p);
+        const have = Math.round(p.xp);
+        return html`<span class="xpbar ${have >= need ? 'full' : ''}" title="${String(have)} / ${String(need)} XP to the next level"><i style="width:${Math.min(100, (have / need) * 100)}%"></i></span>`;
     };
 
     const drawer = derived(selected, (sel) => {
@@ -573,15 +613,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         const cl = u();
         const owned = abilitiesOf(cfg, p);
         const classes = (Object.entries(p.levels) as Array<[ClassId, number]>).sort((a, b) => b[1] - a[1]);
-        const nextUnlocks = allAbilities(cfg)
-            .filter((id) => classes.some(([k]) => k === abilityDef(cfg, id).cls) && !owned.includes(id))
-            .sort(
-                (a, b) =>
-                    abilityDef(cfg, a).unlock -
-                    classLevel(p, abilityDef(cfg, a).cls) -
-                    (abilityDef(cfg, b).unlock - classLevel(p, abilityDef(cfg, b).cls)),
-            )
-            .slice(0, 3);
+        const ahead = classes.map(([k]) => nextPerkTier(cfg, p, k)).filter((t) => t !== null);
         const stat = (k: keyof Player['stats'], label: string) =>
             html`<div class="stat"><span>${label}</span><i style="--v:${String(Math.min(100, p.stats[k]))}%"></i><b>${String(p.stats[k])}</b></div>`;
         const feedback = grain('');
@@ -634,8 +666,16 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                             : html``;
                     })()}
                 </div>
-                <h4>Class levels</h4>
-                <div class="levels">${classes.map(([k, l]) => html`<div class="lvl"><span class="cls cls-${k}">${cfg.classes[k].label}</span><b>${String(l)}</b>${xpBar(p, k)}</div>`)}</div>
+                <h4>Class levels <small>level ${String(p.level)} · ${String(Math.round(p.xp))} / ${String(xpToNext(cfg, p))} XP</small></h4>
+                <div class="levels">${classes.map(([k, l]) => html`<div class="lvl"><span class="cls cls-${k}">${cfg.classes[k].label}</span><b>${String(l)}</b></div>`)}</div>
+                <div class="lvl-xp">${xpBar(p)}${
+                    !fromMarket && isReady(p)
+                        ? html`<button class="primary" ${on('click', () => {
+                              selected.set(null);
+                              levelUp.set({ id: p.id });
+                          })}>▲ Level up</button>`
+                        : html``
+                }</div>
                 <h4>Abilities</h4>
                 <div class="ab-list">${
                     owned.length
@@ -643,15 +683,15 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                               const a = abilityDef(cfg, id);
                               return html`<div class="ab"><span class="ic">${a.icon}</span><div><b>${a.label}</b><p>${a.desc}</p></div></div>`;
                           })
-                        : html`<p class="muted">None yet. Abilities unlock as class levels rise.</p>`
+                        : html`<p class="muted">None yet. At certain class levels you choose an ability or passive.</p>`
                 }
                     ${passivesOf(cfg, p).map((id) => html`<div class="ab passive"><span class="ic">◆</span><div><b>${cfg.passives[id].label}</b><p>${cfg.passives[id].desc}</p></div></div>`)}</div>
                 ${
-                    nextUnlocks.length
-                        ? html`<h4>Next unlocks</h4><div class="ab-list">${nextUnlocks.map((id) => {
-                              const a = abilityDef(cfg, id);
-                              return html`<div class="ab locked"><span class="ic">${a.icon}</span><div><b>${a.label} <em>at ${cfg.classes[a.cls].short} ${String(a.unlock)} (now ${String(classLevel(p, a.cls))})</em></b><p>${a.short}</p></div></div>`;
-                          })}</div>`
+                    ahead.length
+                        ? html`<h4>Choices ahead</h4><div class="ab-list">${ahead.map(
+                              (t) =>
+                                  html`<div class="ab locked"><span class="ic">◇</span><div><b>${cfg.classes[t.cls].short} ${String(t.level)} <em>(now ${String(classLevel(p, t.cls))})</em></b><p>${t.options.map((o) => perkDef(cfg, o).label).join(' or ')}</p></div></div>`,
+                          )}</div>`
                         : html``
                 }
                 <h4>Stats</h4>
@@ -736,9 +776,6 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     const Training = () => {
         const focus = read(() => c.trainingFocus);
         const rows = read(() => [...u().squad].sort((a, b) => ovr(cfg, b) - ovr(cfg, a)));
-        const abilities = allAbilities(cfg)
-            .map((id) => abilityDef(cfg, id))
-            .sort((a, b) => a.unlock - b.unlock);
         const focusButtons = TRAINING_FOCUS_IDS.map((id) => {
             const active = derived(focus, (value) => value === id);
             const drill = TRAINING_FOCUSES[id];
@@ -754,16 +791,14 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         const row = (p: Player) => {
             const gain = read(() => trainingGain(cfg, p, c.trainingFocus));
             const injury = read(() => (p.injury ? `✚ ${p.injury}d` : ''));
-            const progress = derived(gain, (result) => {
-                if (!result) return html``;
-                const level = classLevel(p, result.cls);
-                return html`<span class="prog">${cfg.classes[result.cls].short} ${level ? String(level) : '(new)'} ${xpBar(p, result.cls)}</span>`;
-            });
-            const nextUnlock = derived(gain, (result) => {
-                if (!result) return '';
-                const level = classLevel(p, result.cls);
-                const next = abilities.find((ability) => ability.cls === result.cls && ability.unlock > level);
-                return next ? `${next.icon} ${next.label} at ${next.unlock}` : '';
+            const progress = read(() =>
+                isReady(p)
+                    ? html`<button class="lvl-ready" ${on('click', () => levelUp.set({ id: p.id }))}>▲ Level up</button>`
+                    : html`<span class="prog">Lv ${String(p.level)} ${xpBar(p)}</span>`,
+            );
+            const nextUnlock = read(() => {
+                const t = nextPerkTier(cfg, p, p.cls);
+                return t ? `${cfg.classes[t.cls].short} ${t.level}: ${t.options.map((o) => perkDef(cfg, o).label).join(' or ')}` : '';
             });
             return html`<tr ${attr({ class: read(() => (p.injury ? 'injured' : '')) })}>
                 <td>${portrait(u(), p, 28)}</td>
@@ -771,7 +806,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                 <td>${modelRegion(() => classChips(p))}</td>
                 <td>${modelRegion(() => stars(p))}</td>
                 <td><span ${attr({ class: derived(gain, (result) => (result ? 'training-xp' : 'muted')) })}>${derived(gain, (result) =>
-                    result ? `+${result.amount} ${cfg.classes[result.cls].short} XP` : 'Recovering',
+                    result ? `+${result.amount} XP` : 'Recovering',
                 )}</span></td>
                 <td>${$render(progress)}</td>
                 <td><span class="muted">${nextUnlock}</span></td>
@@ -781,8 +816,8 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         return html`<div class="card fill">
             <h3>Squad training <small>One focus per training day</small></h3>
             <div class="training-focus" role="group" aria-label="Training focus">${focusButtons}</div>
-            <p class="muted training-note">XP depends on class, ${derived(focus, (id) => TRAINING_FOCUSES[id].stats.join(' and '))}. Injured players recover.</p>
-            <div class="scroll"><table class="tbl training"><thead><tr><th></th><th>Player</th><th>Classes</th><th>Potential</th><th>Session XP</th><th>Class progress</th><th>Next unlock</th></tr></thead>
+            <p class="muted training-note">Players suited to the drill (class, ${derived(focus, (id) => TRAINING_FOCUSES[id].stats.join(' and '))}) earn more XP. You choose the class each level goes into. Injured players recover.</p>
+            <div class="scroll"><table class="tbl training"><thead><tr><th></th><th>Player</th><th>Classes</th><th>Potential</th><th>Session XP</th><th>Next level</th><th>Next choice</th></tr></thead>
             <tbody>${$each(rows)
                 .$withKey((p) => p.id)
                 .$as(row)}</tbody></table></div>
@@ -1047,6 +1082,76 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         });
     };
 
+    // ------------------------------------------------------------ level-up prompt
+    const STAT_SHORT: Record<string, string> = {
+        speed: 'SPD',
+        pace: 'PAC',
+        passing: 'PAS',
+        shooting: 'SHO',
+        dribbling: 'DRI',
+        tackling: 'TAC',
+        reflexes: 'REF',
+        composure: 'COM',
+    };
+    const LevelUpDialog = () => {
+        const view = derived(combined([version, levelUp]), ([, want]) => {
+            const queue = u().squad.filter(isReady);
+            const p = (want?.id ? queue.find((q) => q.id === want.id) : null) ?? queue[0];
+            if (!p) {
+                queueMicrotask(() => levelUp.set(null));
+                return html``;
+            }
+            const others = queue.length - 1;
+            const head = html`<div class="lu-player">${portrait(u(), p, 56)}<div><h3>${p.name}</h3><p>${classLabel(cfg, p)} · level ${String(p.level)} · ${String(Math.round(p.xp))} XP banked</p></div></div>`;
+            const perks = pendingPerks(cfg, p);
+            if (perks.length) {
+                const t = perks[0]!;
+                const card = (id: PerkId) => {
+                    const d = perkDef(cfg, id);
+                    const ab = d.kind === 'ability' ? abilityDef(cfg, id as AbilityId) : null;
+                    const desc = ab ? ab.desc : cfg.passives[id as keyof typeof cfg.passives].desc;
+                    return html`<button class="lu-card" ${on('click', () => {
+                        const text = choosePerk(cfg, c, p.id, id);
+                        if (text) {
+                            audio.play('ability');
+                            toast(text);
+                            changed();
+                        }
+                    })}><span class="lu-ic">${ab ? ab.icon : '◆'}</span><b>${d.label}</b><small>${ab ? `Ability · ${ab.phase === 'act' ? 'after moving' : 'before moving'}${ab.cooldown ? ` · recharges ${String(ab.cooldown)} rounds` : ''}` : 'Passive · always on'}</small><p>${desc}</p></button>`;
+                };
+                return html`${head}<p class="lu-step">${cfg.classes[t.cls].label} ${String(t.level)}: choose one. The other is gone for good.</p>
+                    <div class="lu-cards perks">${t.options.map(card)}</div>${foot(others, false)}`;
+            }
+            const card = (cls: ClassId) => {
+                const now = classLevel(p, cls);
+                const prof = cfg.classes[cls].statProfile;
+                const top = (Object.keys(prof) as Array<keyof typeof prof>).sort((a, b) => prof[b] - prof[a]).slice(0, 3);
+                const tier = (cfg.perkTiers[cls] ?? []).find((x) => x.level === now + 1);
+                return html`<button class="lu-card cls-card" ${on('click', () => {
+                    const text = chooseLevelUp(cfg, c, p.id, cls);
+                    if (text) {
+                        audio.play('goal');
+                        toast(text);
+                        changed();
+                    }
+                })}><b>${cfg.classes[cls].label}</b><small>${now ? `${cfg.classes[cls].short} ${String(now)} → ${String(now + 1)}` : 'New class'}</small>
+                    <p>Grows ${top.map((k) => STAT_SHORT[k]).join(', ')}</p>
+                    ${tier ? html`<p class="lu-tier">${tier.options.length > 1 ? 'Choose' : 'Gain'}: ${tier.options.map((o) => perkDef(cfg, o as PerkId).label).join(' or ')}</p>` : html``}
+                </button>`;
+            };
+            return html`${head}<p class="lu-step">Which class does this level go into?</p>
+                <div class="lu-cards">${levelUpOptions(p).map(card)}</div>${foot(others, true)}`;
+        });
+        const foot = (others: number, classStep: boolean) =>
+            html`<footer class="lu-foot"><span class="muted">${others ? `${String(others)} more ready after this` : classStep ? 'New classes start at level 1: no abilities until level 2.' : ''}</span><button class="ghost" ${on('click', () => levelUp.set(null))}>Decide later</button></footer>`;
+        return Dialog({
+            label: 'Level up',
+            dismiss: () => levelUp.set(null),
+            className: 'modal levelup-modal',
+            children: html`<div class="modal-body levelup"><header><h2>▲ Level up</h2></header><div class="modal-scroll">${$render(view)}</div></div>`,
+        });
+    };
+
     const NoticeDialog = () => {
         const m = modal()!;
         return Dialog({
@@ -1094,7 +1199,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         <main class="hub-main">${topbar}<section class="hub-content">${screen}</section></main>
         ${$render(drawer)}
         ${$if(preview).$then(PreviewDialog)}${$if(derived(modal, Boolean)).$then(NoticeDialog)}
-        ${$if(letterOpen).$then(LetterDialog)}${$if(derived(ceremony, Boolean)).$then(CeremonyDialog)}
+        ${$if(letterOpen).$then(LetterDialog)}${$if(derived(ceremony, Boolean)).$then(CeremonyDialog)}${$if(derived(levelUp, Boolean)).$then(LevelUpDialog)}
         <div class="hub-overlays">${$render(hubTip)}</div>
         ${$if(derived(flash, (f) => !!f)).$then(() => html`<div class="toast">${derived(flash, (f) => f ?? '')}</div>`)}
     </div>`;

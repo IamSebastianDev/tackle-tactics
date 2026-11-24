@@ -32,6 +32,7 @@ describe('abilities', () => {
         const mf = byCls(m, 0, 'midfielder');
         const st = byCls(m, 0, 'striker');
         mf.player.levels = { midfielder: 5 };
+        delete mf.player.perks;
         mf.player.stats.passing = 99;
         mf.pos = { x: 20, y: 15 };
         st.pos = { x: 28, y: 15 };
@@ -48,6 +49,7 @@ describe('abilities', () => {
         const wg = byCls(m, 0, 'winger');
         const st = byCls(m, 0, 'striker');
         wg.player.levels = { winger: 7 };
+        delete wg.player.perks;
         wg.pos = { x: 40, y: 3 };
         st.pos = { x: 45, y: 14 };
         m.state.ball = { kind: 'held', by: wg.id };
@@ -69,6 +71,7 @@ describe('abilities', () => {
         const df = byCls(m, 1, 'defender');
         const st = byCls(m, 0, 'striker');
         df.player.levels = { defender: 8 };
+        delete df.player.perks;
         df.yellows = 1;
         st.pos = { x: 45, y: 15 }; // in team 1's box
         df.pos = { x: 46, y: 15 };
@@ -91,6 +94,7 @@ describe('abilities', () => {
         const df = byCls(m, 1, 'defender');
         const st = byCls(m, 0, 'striker');
         df.player.levels = { defender: 8 };
+        delete df.player.perks;
         st.pos = { x: 25, y: 15 };
         df.pos = { x: 26, y: 15 };
         m.state.ball = { kind: 'held', by: st.id };
@@ -105,6 +109,7 @@ describe('abilities', () => {
         const m = setup(5);
         const mf = byCls(m, 0, 'midfielder');
         mf.player.levels = { midfielder: 7 };
+        delete mf.player.perks;
         giveTurn(m, mf, 'act');
         const target = m.tempoTargets(mf).at(-1)!;
         m.tempo(target.id);
@@ -118,6 +123,7 @@ describe('abilities', () => {
         const st = byCls(m, 0, 'striker');
         const mf = byCls(m, 0, 'midfielder');
         df.player.levels = { defender: 5 };
+        delete df.player.perks;
         st.pos = { x: 30, y: 15 };
         df.pos = { x: 32, y: 15 };
         mf.pos = { x: 22, y: 15 };
@@ -137,6 +143,7 @@ describe('abilities', () => {
         const wg = byCls(m, 0, 'winger');
         const df = byCls(m, 1, 'defender');
         wg.player.levels = { winger: 5 };
+        delete wg.player.perks;
         wg.pos = { x: 25, y: 15 };
         df.pos = { x: 26, y: 15 };
         m.state.ball = { kind: 'held', by: wg.id };

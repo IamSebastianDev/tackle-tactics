@@ -5716,3 +5716,122 @@ button.dd-button:focus-visible {
     padding: 0 6px;
     font-size: 13px;
 }
+
+/* ---- level-up prompt (hub) */
+.modal-body.levelup {
+    width: min(760px, 100%);
+}
+.lu-player {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.lu-player h3 {
+    margin: 0;
+    font-size: 22px;
+}
+.lu-player p {
+    margin: 2px 0 0;
+    color: var(--muted);
+}
+.lu-step {
+    margin: 14px 0 8px;
+    font-family: var(--display);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+.lu-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+}
+.lu-cards.perks {
+    grid-template-columns: 1fr 1fr;
+}
+button.lu-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 10px 12px;
+    text-align: left;
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: var(--body);
+    font-weight: 400;
+    font-size: 14px;
+}
+.lu-card b {
+    font-family: var(--display);
+    font-size: 18px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.lu-card small {
+    color: var(--accent);
+    font-size: 12px;
+}
+.lu-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.35;
+}
+.lu-card .lu-tier {
+    color: var(--text);
+}
+.lu-ic {
+    font-size: 22px;
+}
+.lu-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+}
+.lvl-xp {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+.lvl-xp .xpbar {
+    flex: 1;
+}
+.xpbar.full i {
+    background: var(--accent);
+}
+.lvl-badge {
+    margin-left: 6px;
+    font-style: normal;
+    color: var(--accent);
+}
+button.lvl-ready {
+    font-size: 11px;
+    padding: 0 8px;
+    border-image-source: var(--f-gold);
+    color: var(--on-accent);
+}
+.lvl-alert button {
+    margin-left: 8px;
+    font-size: 11px;
+    padding: 0 8px;
+}
+/* playbook: picked, passed over, and the "or" between a tier's options */
+.playbook li.gone {
+    opacity: 0.4;
+}
+.playbook li.gone b::after {
+    content: ' (not picked)';
+    font-weight: 400;
+    color: var(--muted);
+}
+.playbook li.pick .lv::after {
+    content: 'or';
+    display: block;
+    font-size: 9px;
+    color: var(--muted);
+}

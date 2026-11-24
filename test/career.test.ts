@@ -12,7 +12,6 @@ import {
     newCareer,
     playMatchday,
     resolveLetter,
-    roundsPerSeason,
     saveCareer,
     seasonDays,
     seasonSchedule,
@@ -24,9 +23,10 @@ import {
     trainingDay,
     userClub,
     wageBill,
+    SAVE_VERSION,
 } from '../src/meta/career';
 import { CUP_NAME, cupWinner, isCupFixture, type CupFixture } from '../src/meta/cup';
-import { ovr, playerValue, wage } from '../src/meta/player';
+import { ovr, playerValue, wage, autoLevel } from '../src/meta/player';
 import { story } from '../src/meta/story';
 import { trainingGain } from '../src/meta/training';
 
@@ -159,15 +159,17 @@ describe('career', () => {
         const day = c.day;
         const expectedGains = squad.slice(1).map((p) => trainingGain(cfg, p, c.trainingFocus)!);
         const expectedXp = expectedGains.reduce((total, gain) => total + gain.amount, 0);
-        const injuredXp = { ...injured.xp };
+        const injuredXp = injured.xp;
+        const before = squad.map((p) => ({ xp: p.xp, levels: { ...p.levels } }));
         const report = trainingDay(cfg, c)!;
         expect(report.summary).toBe(`Tackling · 15 trained · ${expectedXp} XP earned · 1 recovering.`);
         expect(injured.injury).toBeUndefined();
         expect(injured.xp).toEqual(injuredXp);
         expect(report.updates).toContain(`${injured.name} is fit again.`);
+        // XP goes into the player's pool; no class levels change until the manager chooses one
         for (const [i, p] of squad.slice(1).entries()) {
-            const { cls, amount } = expectedGains[i]!;
-            expect(p.xp[cls]).toBe(amount);
+            expect(p.xp).toBe(before[i + 1]!.xp + expectedGains[i]!.amount);
+            expect(p.levels).toEqual(before[i + 1]!.levels);
         }
         expect(c.news[0]).toMatchObject({ season: c.season, day, text: report.summary });
 
@@ -196,37 +198,23 @@ describe('career', () => {
         expect(trainingGain(cfg, p, 'goalkeeping')).toEqual({ cls: 'defender', amount: cfg.training.xp.base });
     });
 
-    it('loads a legacy season intact and adds the expanded schedule at the turnover', () => {
+    it('saves round-trip intact; an older save format is not loaded (no migrations)', () => {
         const c = newCareer(cfg, 42, settings);
-        const p = userClub(c).squad[0]!;
-        delete c.cup;
-        for (const division of c.divisions) division.fixtures = division.fixtures.slice(0, 45);
-        divisionOf(c, c.userClubId).fixtures[0]!.result = [3, 2];
-        let raw = JSON.stringify({ ...c, trainingFocus: undefined, plan: { [p.id]: { cls: p.cls, intensity: 'full' } } });
+        let raw = '';
         vi.stubGlobal('localStorage', {
             getItem: () => raw,
             setItem: (_key: string, data: string) => {
                 raw = data;
             },
         });
-        const loaded = loadCareer()!;
-        const initialFocus = loaded.trainingFocus;
-        loaded.trainingFocus = 'goalkeeping';
-        saveCareer(loaded);
+        c.trainingFocus = 'goalkeeping';
+        saveCareer(c);
         const reloaded = loadCareer();
+        raw = JSON.stringify({ ...c, version: SAVE_VERSION - 1 });
+        const old = loadCareer();
         vi.unstubAllGlobals();
-
-        expect(initialFocus).toBe('passing');
-        expect(reloaded).toEqual({ ...c, trainingFocus: 'goalkeeping' });
-        expect(reloaded).not.toHaveProperty('plan');
-        expect(seasonDays(cfg, loaded)).toBe(27);
-        expect(roundsPerSeason(loaded)).toBe(9);
-        expect(loaded.cup).toBeUndefined();
-        loaded.day = 28;
-        expect(today(cfg, loaded).kind).toBe('seasonEnd');
-        endSeason(cfg, loaded);
-        expect(seasonDays(cfg, loaded)).toBe(72);
-        expect(loaded.cup?.rounds[0]?.fixtures).toHaveLength(18);
+        expect(reloaded).toEqual(c);
+        expect(old).toBeNull();
     });
 
     it('plays three seasons headless: money flows, players grow, promotion/relegation move clubs', () => {
@@ -251,7 +239,7 @@ describe('career', () => {
                 // answer any letter with a random choice, like a player would
                 if (story(c).inbox) {
                     letters++;
-                    resolveLetter(cfg, c, Math.floor(Math.random() * 2));
+                    resolveLetter(cfg, c, letters % 2); // deterministic: alternate the answers
                 }
                 if (t.kind === 'match') {
                     const rng = careerRng(c);
@@ -259,6 +247,10 @@ describe('career', () => {
                     c.rngState = rng.state();
                     playMatchday(cfg, c, { score, knocks: {}, played: userClub(c).lineup });
                 } else trainingDay(cfg, c);
+                // the manager's level-up choices: main class, perks at random
+                const rng = careerRng(c);
+                for (const p of userClub(c).squad) autoLevel(cfg, rng, p);
+                c.rngState = rng.state();
             }
         }
         console.log(log.join('\n'));

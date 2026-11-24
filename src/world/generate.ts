@@ -1,5 +1,6 @@
 import type { ClassId, GameConfig, Stats, StatId } from '../config';
 import type { Club, Player } from '../types';
+import { settlePerks } from '../engine/abilities';
 import type { Rng } from '../rng';
 import { DEFAULT_NATION, NATIONS, pickNationality, shortCode, type NationId } from './nations';
 
@@ -67,7 +68,7 @@ export const generatePlayer = (
     const skin = rng.int(0, cfg.looks.skinTones - 1);
     const hair = pickHairIndex(cfg.looks.hairWeights, rng());
     const nation = opts.nation ?? DEFAULT_NATION;
-    return {
+    const player: Player = {
         id,
         name: playerName(rng, nation),
         nation,
@@ -84,8 +85,11 @@ export const generatePlayer = (
         hair,
         growth: +growth.toFixed(2),
         peakAge,
-        xp: {},
+        xp: 0,
     };
+    // perk choices for every tier they already reached, picked at random (variety across the league)
+    settlePerks(cfg, player, rng);
+    return player;
 };
 
 export const generateClub = (

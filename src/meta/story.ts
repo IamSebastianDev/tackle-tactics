@@ -4,7 +4,6 @@
  * Everything here hangs off the `Career` object and is driven by career.ts hooks.
  */
 import type { ClassId, GameConfig } from '../config';
-import { classLevel } from '../engine/abilities';
 import type { Rng } from '../rng';
 import type { Player } from '../types';
 import { generatePlayer } from '../world/generate';
@@ -182,7 +181,7 @@ const newQuests = (rng: Rng): Quest[] => {
     }));
 };
 
-const bumpQuest = (
+export const bumpQuest = (
     cfg: GameConfig,
     c: Career,
     id: string,
@@ -261,14 +260,13 @@ const LETTERS: LetterDef[] = [
                 shiftMorale(x.c, -2);
                 return `${p.name} rests, grumbling.`;
             }
-            const cls = v.trainingClass ?? p.cls;
-            const ups = gainXp(x.cfg, x.rng, p, cls, 90);
+            const ready = gainXp(x.cfg, p, 90);
             if (x.rng.chance(0.22)) {
                 p.injury = Math.max(p.injury ?? 0, 3);
-                return `${p.name} overdid it: strained something, out 3 days.${ups ? ' But they levelled up first!' : ''}`;
+                return `${p.name} overdid it: strained something, out 3 days.${ready ? ' But they earned a level-up first: choose their class in the squad.' : ''}`;
             }
-            return ups
-                ? `${p.name}'s extra work pays off: they reach ${x.cfg.classes[cls].short} ${classLevel(p, cls)}!`
+            return ready
+                ? `${p.name}'s extra work pays off: they're ready to level up. Choose their class in the squad.`
                 : `${p.name} banks a heap of experience.`;
         },
     },
@@ -543,7 +541,7 @@ const LETTERS: LetterDef[] = [
                 shiftMorale(x.c, 3);
                 return 'It got heated. A chair was thrown. But something shifted, a little.';
             }
-            for (const p of x.u.squad.filter((q) => !q.injury)) gainXp(x.cfg, x.rng, p, p.cls, 20);
+            for (const p of x.u.squad.filter((q) => !q.injury)) gainXp(x.cfg, p, 20);
             shiftMorale(x.c, -1);
             return 'Laps until dusk. Fitter, if not happier.';
         },
@@ -567,7 +565,7 @@ const LETTERS: LetterDef[] = [
                 return `${p.name} grins. "One more, then." The squad loves it.`;
             }
             const kids = x.u.squad.filter((q) => q.age <= 21 && q.id !== p.id);
-            for (const q of kids) gainXp(x.cfg, x.rng, q, q.cls, 45);
+            for (const q of kids) gainXp(x.cfg, q, 45);
             return `${p.name} takes the youngsters under their wing. ${kids.length} of them are already sharper.`;
         },
     },
@@ -628,9 +626,9 @@ const LETTERS: LetterDef[] = [
         resolve: (ch, v, x) => {
             const p = v.p!;
             if (ch === 0) {
-                const ups = gainXp(x.cfg, x.rng, p, p.cls, 120);
+                const ready = gainXp(x.cfg, p, 120);
                 shiftMorale(x.c, 2);
-                return ups ? `${p.name} levels up already. What a find.` : `${p.name} soaks it all up.`;
+                return ready ? `${p.name} is ready to level up already. What a find.` : `${p.name} soaks it all up.`;
             }
             p.growth = +(p.growth + 0.35).toFixed(2);
             return `${p.name} will be given time. Mags reckons patience will pay.`;
@@ -866,19 +864,7 @@ export const afterMatchday = (
     maybeLetter(cfg, c, rng);
 };
 
-export const afterTraining = (
-    cfg: GameConfig,
-    c: Career,
-    rng: Rng,
-    training: { trainees: readonly Trainee[]; newClass: boolean },
-    pay: (label: string, amount: number) => void,
-    news: (t: string, tone: 'good' | 'bad' | 'info') => void,
-) => {
-    if (training.newClass)
-        bumpQuest(cfg, c, 'newclass', 1, 'add', (amount, title) => {
-            pay(`Quest complete: ${title}`, amount);
-            news(`Quest complete: ${title}! +${money(amount)}.`, 'good');
-        });
+export const afterTraining = (cfg: GameConfig, c: Career, rng: Rng, training: { trainees: readonly Trainee[] }) => {
     // morale drifts back towards "settled"
     const s = story(c);
     s.morale += Math.sign(60 - s.morale);

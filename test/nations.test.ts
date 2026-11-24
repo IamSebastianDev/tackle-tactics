@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig as cfg } from '../src/config';
-import { migrateNations, newCareer, type Career } from '../src/meta/career';
+import { newCareer } from '../src/meta/career';
 import { createRng } from '../src/rng';
 import { NATION_IDS, NATIONS } from '../src/world/nations';
 
@@ -37,24 +37,6 @@ describe('nations', () => {
         expect(local).toBeGreaterThan(0.7);
         expect(local).toBeLessThan(0.9);
         expect(new Set(c.market.map((p) => p.nation)).size).toBeGreaterThanOrEqual(8);
-        expect(c.market.length).toBe(cfg.career.market.size);
-    });
-
-    it('older saves become Highmarch careers with Highmarch players', () => {
-        const c = newCareer(cfg, 7, settings);
-        delete (c as Partial<Career>).nation;
-        for (const club of Object.values(c.clubs)) for (const p of club.squad) delete p.nation;
-        c.market = c.market.slice(0, 30);
-        for (const p of c.market) delete p.nation;
-        migrateNations(cfg, c);
-        expect(c.nation).toBe('highmarch');
-        expect(Object.values(c.clubs).every((club) => club.squad.every((p) => p.nation === 'highmarch'))).toBe(true);
-        // the old market stays, topped up with players from abroad
-        expect(c.market.length).toBe(cfg.career.market.size);
-        expect(c.market.slice(0, 30).every((p) => p.nation === 'highmarch')).toBe(true);
-        expect(c.market.slice(30).every((p) => p.nation !== 'highmarch')).toBe(true);
-        // and it only happens once
-        migrateNations(cfg, c);
         expect(c.market.length).toBe(cfg.career.market.size);
     });
 });
