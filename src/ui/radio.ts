@@ -1,5 +1,5 @@
 /**
- * The in-game radio: every song in ../assets/music (scanned at dev/build time by
+ * The in-game radio: every song in assets/music (scanned at dev/build time by
  * scripts/music-plugin.ts) plays across every screen, like a sports game's soundtrack. The first
  * track opens the station; the rest shuffle and reshuffle. A "now playing" card announces each
  * song. Volume, on/off and how loud it plays during matches live in prefs.

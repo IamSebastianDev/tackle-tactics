@@ -1,5 +1,5 @@
 /**
- * Vite plugin: the in-game radio's playlist comes straight from a folder (../assets/music).
+ * Vite plugin: the in-game radio's playlist comes straight from a folder (assets/music).
  *
  * - Every audio file there becomes a track. Titles come from file names:
  *   "Artist - Title.wav" → artist + title, "Title.mp3" → title (credited to the station).

@@ -6,8 +6,8 @@ import { musicPlugin } from './scripts/music-plugin';
 export default defineConfig({
     clearScreen: false,
     plugins: [
-        // the radio: every song in ../assets/music becomes a playlist track (see scripts/music-plugin.ts)
-        musicPlugin(resolve(__dirname, '../assets/music'), resolve(__dirname, 'node_modules/.cache/tt-music')),
+        // the radio: every song in assets/music becomes a playlist track (see scripts/music-plugin.ts)
+        musicPlugin(resolve(__dirname, 'assets/music'), resolve(__dirname, 'node_modules/.cache/tt-music')),
     ],
     server: {
         // the Rust build tree is huge and changes constantly while cargo runs

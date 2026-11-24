@@ -8,7 +8,7 @@ out once like a game; only long lists scroll inside their own panels.
 
 ```bash
 npm install
-npm run assets   # copies the used subset of ../assets into public/assets (packs aren't redistributable on their own)
+npm run assets   # copies the used subset of assets/ into public/assets (packs aren't redistributable on their own)
 npm run dev
 npm test         # engine tests incl. full headless AI-vs-AI matches
 ```
@@ -29,7 +29,7 @@ npm run desktop:build    # release: src-tauri/target/release/bundle/macos/Tackle
 
 ### Radio
 
-Every audio file in `../assets/music/` becomes a song on the in-game radio (`scripts/music-plugin.ts`, read at
+Every audio file in `assets/music/` becomes a song on the in-game radio (`scripts/music-plugin.ts`, read at
 dev and build time; the folder is git-ignored like the art packs). Name files `Artist - Title.ext` (or just
 `Title.ext`); an optional leading number (`01 `) sets the order, and the first song opens the station, the rest
 shuffle. WAV/AIFF are converted to AAC once (cached in `node_modules/.cache/tt-music`); MP3/M4A/OGG are used as-is.

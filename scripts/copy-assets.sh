@@ -1,9 +1,9 @@
 #!/bin/sh
 # Copies the subset of the purchased asset packs the game uses into public/assets.
-# Source packs live in ../assets and are NOT redistributable on their own (see their licenses).
+# Source packs live in ./assets and are NOT redistributable on their own (see their licenses).
 set -e
 cd "$(dirname "$0")/.."
-SRC="../assets/Soccer_Match_-_Top_Down_Football_Tileset_&_Players_[32x32]/64"
+SRC="assets/Soccer_Match_-_Top_Down_Football_Tileset_&_Players_[32x32]/64"
 DST="public/assets"
 rm -rf "$DST" && mkdir -p "$DST/cast" "$DST/props" "$DST/tiles"
 for d in "$SRC"/animations/cast/*_player_* "$SRC"/animations/cast/keeper_* "$SRC"/animations/cast/coach "$SRC"/animations/cast/coach_2; do
