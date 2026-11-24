@@ -9,16 +9,44 @@ Web app (Vite, TypeScript, [Nørd](https://www.npmjs.com/package/@grainular/nord
 desktop shell. The whole UI renders onto a fixed **1600×900 stage** scaled to the window (`src/ui/stage.ts`), so
 screens are laid out once like a game; only long lists scroll inside their own panels.
 
-## Getting started
+## Building the game
+
+The code is in this repository; the **art and music are not**. The art comes from a licensed asset pack whose
+license allows using it in games but not sharing the files on their own, so it must never be committed (a public
+repo would hand the pack out). Both `assets/` and the generated `public/assets/` are git-ignored.
+
+**Requirements:** Node 22+ (see `.nvmrc`); for the desktop app also a Rust toolchain (`rustup`).
+
+**1. Get the art pack.** Buy or download _Soccer Match - Top Down Football Tileset & Players [32x32]_ by bubbabba
+([bubbabba.itch.io](https://bubbabba.itch.io)) and unzip it into `assets/`, so this folder exists:
+
+```text
+assets/
+├── Soccer_Match_-_Top_Down_Football_Tileset_&_Players_[32x32]/
+│   ├── 64/            ← the game uses the 64 px art
+│   └── license.txt
+└── music/             ← optional: songs for the in-game radio
+```
+
+The _Goals in Pixels_ pack is credited in the game but not needed to build it.
+
+**2. Install and run.**
 
 ```bash
 npm install
-npm run assets   # copy the used subset of the art packs (assets/) into public/assets
-npm run dev      # http://localhost:5173
+npm run dev              # http://localhost:5173
+npm run desktop          # or the desktop app (Tauri)
 ```
 
-The art packs (bubbabba "Soccer Match", Goals in Pixels) are licensed and **not in the repository**: put them in
-`assets/` before `npm run assets`. Songs for the in-game radio go in `assets/music/` (see [Radio](#radio)).
+`dev` and `build` first run `scripts/ensure-assets.sh`: if `public/assets` is missing it copies the art the game
+uses out of the pack (`scripts/copy-assets.sh`, about 6 MB of the pack's 50+), and if the pack isn't there either it
+stops with these instructions. After updating the pack, run `npm run assets` to copy it again.
+
+**3. Music (optional).** Drop audio files into `assets/music/` (see [Radio](#radio)). Without them the radio simply
+doesn't appear.
+
+**4. Release builds.** `npm run build` (web, into `dist/`) or `npm run desktop:build` (macOS app). The art and songs
+are bundled into the build, which the license allows: it's the game, not the pack.
 
 ## Development
 
