@@ -70,36 +70,111 @@ const make = (id: NationId, s: Spec): Nation => ({
     clubName: (rng, place) => rng.pick(s.clubs).replace('#', place),
 });
 
-// flags: a handful of simple, pixel-friendly layouts
-const h2 = (a: string, b: string) => `linear-gradient(to bottom, ${a} 0 50%, ${b} 50%)`;
-const h3 = (a: string, b: string, c: string) => `linear-gradient(to bottom, ${a} 0 33.4%, ${b} 33.4% 66.6%, ${c} 66.6%)`;
-const v3 = (a: string, b: string, c: string) => `linear-gradient(to right, ${a} 0 33.4%, ${b} 33.4% 66.6%, ${c} 66.6%)`;
-const band = (field: string, b: string) => `linear-gradient(to bottom, ${field} 0 36%, ${b} 36% 64%, ${field} 64%)`;
-const cross = (field: string, c: string) =>
-    `linear-gradient(to right, transparent 0 30%, ${c} 30% 44%, transparent 44%), linear-gradient(to bottom, ${field} 0 40%, ${c} 40% 60%, ${field} 60%)`;
+// ------------------------------------------------------------------ flags
+// Each flag is modelled on its real-world inspiration, so it reads at a glance even at 18×12px.
+// All layouts are CSS background layers (first layer on top).
+
+const stripes = (dir: 'bottom' | 'right', bands: Array<[string, number]>) => {
+    let at = 0;
+    const stops = bands.map(([col, w]) => {
+        const stop = `${col} ${at}% ${at + w}%`;
+        at += w;
+        return stop;
+    });
+    return `linear-gradient(to ${dir}, ${stops.join(', ')})`;
+};
+const h3 = (a: string, b: string, c: string) =>
+    stripes('bottom', [
+        [a, 33.4],
+        [b, 33.2],
+        [c, 33.4],
+    ]);
+const v3 = (a: string, b: string, c: string) =>
+    stripes('right', [
+        [a, 33.4],
+        [b, 33.2],
+        [c, 33.4],
+    ]);
+/** A vertical bar from x0% to x1% and a horizontal bar from y0% to y1%. */
+const bars = (col: string, [x0, x1]: [number, number], [y0, y1]: [number, number]) =>
+    `linear-gradient(to right, transparent ${x0}%, ${col} ${x0}% ${x1}%, transparent ${x1}%), linear-gradient(to bottom, transparent ${y0}%, ${col} ${y0}% ${y1}%, transparent ${y1}%)`;
+/** St George style: a centred cross. */
+const centredCross = (field: string, c: string) => `${bars(c, [44, 56], [41, 59])}, ${field}`;
+/** Nordic cross, shifted to the hoist; optionally with a border (Norway). */
+const nordic = (field: string, c: string, border?: string) =>
+    border
+        ? `${bars(c, [29, 39], [42.5, 57.5])}, ${bars(border, [26, 42], [38, 62])}, ${field}`
+        : `${bars(c, [28, 40], [41, 59])}, ${field}`;
 const saltire = (field: string, c: string) =>
-    `linear-gradient(34deg, transparent 0 44%, ${c} 44% 56%, transparent 56%), linear-gradient(-34deg, ${field} 0 44%, ${c} 44% 56%, ${field} 56%)`;
-const disc = (field: string, d: string, at = '50% 50%') => `radial-gradient(circle at ${at}, ${d} 0 26%, transparent 27%), ${field}`;
-const diag = (a: string, b: string) => `linear-gradient(135deg, ${a} 0 50%, ${b} 50%)`;
-const hoist = (h: string, rest: string) => `linear-gradient(to right, ${h} 0 30%, transparent 30%), ${rest}`;
+    `linear-gradient(to bottom right, transparent 44%, ${c} 44% 56%, transparent 56%), linear-gradient(to bottom left, transparent 44%, ${c} 44% 56%, transparent 56%), ${field}`;
+/** A filled circle; `r` is a share of the gradient ray, so it scales with the flag. */
+const dot = (col: string, at: string, r: number) => `radial-gradient(circle at ${at}, ${col} 0 ${r}%, transparent ${r + 0.8}%)`;
+/** A rhombus touching the middle of each edge (Brazil), as four corner triangles. */
+const rhombus = (col: string) =>
+    [
+        ['to bottom right', '0 0'],
+        ['to bottom left', '100% 0'],
+        ['to top right', '0 100%'],
+        ['to top left', '100% 100%'],
+    ]
+        .map(([dir, pos]) => `linear-gradient(${dir}, transparent 50%, ${col} 50%) ${pos} / 50% 50% no-repeat`)
+        .join(', ');
 
 const C = {
-    green: '#2e6b3a',
-    gold: '#e0b046',
-    red: '#b8323a',
-    cream: '#f0e7cf',
-    blue: '#2f5ea8',
-    navy: '#1f3f7a',
+    red: '#c8323a',
     white: '#f2efe6',
-    maroon: '#7a2433',
-    jade: '#3c8c5a',
-    stone: '#d8d2c4',
-    rust: '#c2562b',
-    sky: '#6fa8dc',
-    teal: '#2f7f8f',
+    blue: '#2a4fa0',
+    navy: '#1f3a78',
+    yellow: '#f2c230',
+    gold: '#e0b046',
+    green: '#2f8a4c',
     black: '#22262b',
-    indigo: '#2b3f8f',
-    sea: '#2a8fa8',
+    sky: '#74acdf',
+    finBlue: '#1f4f9f',
+    greekBlue: '#2d63b0',
+};
+
+const FLAGS: Record<NationId, string> = {
+    // England
+    highmarch: centredCross(C.white, C.red),
+    // Spain
+    valdoria: stripes('bottom', [
+        [C.red, 25],
+        [C.yellow, 50],
+        [C.red, 25],
+    ]),
+    // Norway
+    nordhavn: nordic(C.red, C.navy, C.white),
+    // Serbia
+    zaravia: h3(C.red, C.blue, C.white),
+    // Germany
+    ostmark: h3(C.black, '#d22c2c', '#f2c230'),
+    // France
+    gallavre: v3(C.blue, C.white, C.red),
+    // Brazil: blue globe on a yellow rhombus on green
+    lusmar: `${dot(C.navy, '50% 50%', 22)}, ${rhombus(C.yellow)}, ${C.green}`,
+    // Argentina: sky / white / sky with the sun
+    pampora: `${dot(C.gold, '50% 50%', 10)}, ${h3(C.sky, C.white, C.sky)}`,
+    // Scotland
+    caledra: saltire('#1f5fae', C.white),
+    // Finland
+    suvela: nordic(C.white, C.finBlue),
+    // Hungary
+    varhely: h3(C.red, C.white, C.green),
+    // Greece: nine stripes, a white cross on the blue canton
+    thalassa: [
+        `linear-gradient(to right, transparent 40%, ${C.white} 40% 60%, transparent 60%) 0 0 / 37% 55.6% no-repeat`,
+        `linear-gradient(to bottom, ${C.greekBlue} 40%, ${C.white} 40% 60%, ${C.greekBlue} 60%) 0 0 / 37% 55.6% no-repeat`,
+        `repeating-linear-gradient(to bottom, ${C.greekBlue} 0 11.11%, ${C.white} 11.11% 22.22%)`,
+    ].join(', '),
+    // Turkey: crescent (a red disc biting a white one) and a star
+    anvara: `${dot(C.white, '60% 50%', 8)}, ${dot(C.red, '44% 50%', 20)}, ${dot(C.white, '38% 50%', 25)}, ${C.red}`,
+    // the red-hoisted Arab tricolour (UAE)
+    qasira: `linear-gradient(to right, ${C.red} 0 26%, transparent 26%), ${h3(C.green, C.white, C.black)}`,
+    // Ghana: red / gold / green with the black star
+    kassara: `${dot(C.black, '50% 50%', 9)}, ${h3(C.red, C.gold, C.green)}`,
+    // Japan
+    kiyora: `${dot('#bc002d', '50% 50%', 30)}, ${C.white}`,
 };
 
 // ------------------------------------------------------------------ the nations
@@ -109,7 +184,7 @@ const SPECS: Record<NationId, Spec> = {
     highmarch: {
         name: 'Highmarch',
         adjective: 'Highmarch',
-        flag: band(C.green, C.gold),
+        flag: FLAGS.highmarch,
         first: glue(
             [
                 'Bra',
@@ -225,7 +300,7 @@ const SPECS: Record<NationId, Spec> = {
     valdoria: {
         name: 'Valdoria',
         adjective: 'Valdorian',
-        flag: v3(C.red, C.cream, C.blue),
+        flag: FLAGS.valdoria,
         first: [
             'Teodar',
             'Mareno',
@@ -261,7 +336,7 @@ const SPECS: Record<NationId, Spec> = {
     nordhavn: {
         name: 'Nordhavn',
         adjective: 'Nordhavn',
-        flag: cross(C.navy, C.white),
+        flag: FLAGS.nordhavn,
         first: [
             'Sigvar',
             'Halvard',
@@ -297,7 +372,7 @@ const SPECS: Record<NationId, Spec> = {
     zaravia: {
         name: 'Zaravia',
         adjective: 'Zaravian',
-        flag: h3(C.cream, C.jade, C.maroon),
+        flag: FLAGS.zaravia,
         first: [
             'Dren',
             'Milan',
@@ -333,7 +408,7 @@ const SPECS: Record<NationId, Spec> = {
     ostmark: {
         name: 'Ostmark',
         adjective: 'Ostmark',
-        flag: h2(C.stone, C.rust),
+        flag: FLAGS.ostmark,
         first: [
             'Joren',
             'Lukas',
@@ -369,7 +444,7 @@ const SPECS: Record<NationId, Spec> = {
     gallavre: {
         name: 'Gallavre',
         adjective: 'Gallavrian',
-        flag: v3(C.navy, C.white, C.gold),
+        flag: FLAGS.gallavre,
         first: [
             'Étienne',
             'Lucien',
@@ -405,7 +480,7 @@ const SPECS: Record<NationId, Spec> = {
     lusmar: {
         name: 'Lusmar',
         adjective: 'Lusmarine',
-        flag: diag(C.jade, C.gold),
+        flag: FLAGS.lusmar,
         first: [
             'Joaquim',
             'Tiago',
@@ -441,7 +516,7 @@ const SPECS: Record<NationId, Spec> = {
     pampora: {
         name: 'Pampora',
         adjective: 'Pamporan',
-        flag: `radial-gradient(circle at 50% 50%, ${C.gold} 0 13%, transparent 14%), ${h3(C.sky, C.white, C.sky)}`,
+        flag: FLAGS.pampora,
         first: [
             'Santiago',
             'Matías',
@@ -477,7 +552,7 @@ const SPECS: Record<NationId, Spec> = {
     caledra: {
         name: 'Caledra',
         adjective: 'Caledran',
-        flag: saltire(C.green, C.white),
+        flag: FLAGS.caledra,
         first: [
             'Ewan',
             'Callum',
@@ -513,7 +588,7 @@ const SPECS: Record<NationId, Spec> = {
     suvela: {
         name: 'Suvela',
         adjective: 'Suvelan',
-        flag: cross(C.white, C.teal),
+        flag: FLAGS.suvela,
         first: [
             'Eero',
             'Joonas',
@@ -549,7 +624,7 @@ const SPECS: Record<NationId, Spec> = {
     varhely: {
         name: 'Varhely',
         adjective: 'Varhelyi',
-        flag: h3(C.maroon, C.gold, C.black),
+        flag: FLAGS.varhely,
         first: [
             'Bence',
             'Zoltán',
@@ -585,7 +660,7 @@ const SPECS: Record<NationId, Spec> = {
     thalassa: {
         name: 'Thalassa',
         adjective: 'Thalassan',
-        flag: `repeating-linear-gradient(to bottom, ${C.sea} 0 20%, ${C.white} 20% 40%)`,
+        flag: FLAGS.thalassa,
         first: [
             'Nikos',
             'Giorgos',
@@ -621,7 +696,7 @@ const SPECS: Record<NationId, Spec> = {
     anvara: {
         name: 'Anvara',
         adjective: 'Anvaran',
-        flag: disc(C.red, C.white, '42% 50%'),
+        flag: FLAGS.anvara,
         first: [
             'Emre',
             'Burak',
@@ -657,7 +732,7 @@ const SPECS: Record<NationId, Spec> = {
     qasira: {
         name: 'Qasira',
         adjective: 'Qasiri',
-        flag: hoist(C.maroon, h3(C.green, C.white, C.black)),
+        flag: FLAGS.qasira,
         first: [
             'Karim',
             'Yassin',
@@ -716,7 +791,7 @@ const SPECS: Record<NationId, Spec> = {
     kassara: {
         name: 'Kassara',
         adjective: 'Kassaran',
-        flag: v3(C.gold, C.jade, C.gold),
+        flag: FLAGS.kassara,
         first: [
             'Kofi',
             'Yaw',
@@ -775,7 +850,7 @@ const SPECS: Record<NationId, Spec> = {
     kiyora: {
         name: 'Kiyora',
         adjective: 'Kiyoran',
-        flag: disc(C.white, C.indigo),
+        flag: FLAGS.kiyora,
         first: [
             'Haruto',
             'Ren',
