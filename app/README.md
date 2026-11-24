@@ -27,6 +27,15 @@ npm run desktop:build    # release: src-tauri/target/release/bundle/macos/Tackle
 - Saves live in the app's own web storage, separate from any browser saves.
 - The app icon is `src-tauri/icon-source.svg`; regenerate the icon set with `npx tauri icon src-tauri/icon-source.svg`.
 
+### Radio
+
+Every audio file in `../assets/music/` becomes a song on the in-game radio (`scripts/music-plugin.ts`, read at
+dev and build time; the folder is git-ignored like the art packs). Name files `Artist - Title.ext` (or just
+`Title.ext`); an optional leading number (`01 `) sets the order, and the first song opens the station, the rest
+shuffle. WAV/AIFF are converted to AAC once (cached in `node_modules/.cache/tt-music`); MP3/M4A/OGG are used as-is.
+In game: the chip on the title screen and in the hub, **N** next song, **R** radio on/off, Settings → Sound for
+volume and how loud it plays during matches.
+
 ### Look
 
 Matchday-broadcast style: warm graphite neutrals, one trophy-gold accent (`--accent`) for primary actions and

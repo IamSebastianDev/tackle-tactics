@@ -23,6 +23,11 @@ export type Prefs = {
     showZoc: boolean;
     /** Classic 2D: the art pack's native top-down projection. 3D: tilted broadcast camera. */
     camera: '2d' | '3d';
+    /** The in-game radio (src/ui/radio.ts). */
+    radioOn: boolean;
+    radioVolume: number;
+    /** During matches: full volume, quieter under the crowd, or silent. */
+    radioInMatch: 'on' | 'quiet' | 'off';
 };
 
 export const UI_SCALES = [0.85, 1, 1.15, 1.3, 1.5];
@@ -47,6 +52,7 @@ const KEY = 'tackle-tactics:prefs';
 const DEFAULTS: Prefs = {
     uiScale: 1, font: 'broadcast', reduceMotion: false, aiSpeed: 'normal', controlMode: 'near',
     sfxVolume: 0.7, crowdVolume: 0.5, muted: false, tips: true, tipsSeen: [], autoZoom: true, showZoc: true, camera: '2d',
+    radioOn: true, radioVolume: 0.6, radioInMatch: 'quiet',
 };
 
 const load = (): Prefs => {

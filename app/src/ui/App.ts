@@ -15,6 +15,8 @@ import { recolorVersion } from './recolor';
 import { generateStadium, rollConditions, type Conditions, type PitchCondition, type StadiumSize, type TimeOfDay, type Weather } from '../world/stadium';
 import { SettingsModal } from './Settings';
 import { LESSONS } from './tutorial';
+import { NowPlayingCard, RadioChip } from './RadioUI';
+import { radio } from './radio';
 import { applyTalk, matchEdge, prepFor } from '../meta/prep';
 import { audio } from './audio';
 import { AI_SPEED, prefs } from './prefs';
@@ -315,6 +317,7 @@ export const App = () => {
     const Title = () => html`<div class="setup title-screen">${titleScene()}<div class="setup-inner">
         <h1>Tackle <span>Tactics</span></h1>
         <p class="tag">A turn-based positioning game in a football kit. Make space, deny space, beat the clock.</p>
+        ${$render(RadioChip('title-radio'))}
         <div class="title-cards">
             ${career ? html`<button class="tcard primary-card" ${on('click', () => screen.set('hub'))}>
                 <b>Continue career</b><span>${userClub(career).name} · Season ${String(career.season)} · Division ${String(userClub(career).tier + 1)}</span></button>` : html``}
@@ -387,11 +390,13 @@ export const App = () => {
         const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && showSettings()) { e.stopImmediatePropagation(); showSettings.set(false); } };
         // audio needs a user gesture; every button gets a tactile click
         const down = () => audio.unlock();
+        window.addEventListener('keydown', down, { once: true });
         const click = (e: MouseEvent) => { if ((e.target as HTMLElement).closest('button')) audio.play('click'); };
         window.addEventListener('keydown', k, true);
         window.addEventListener('pointerdown', down);
         window.addEventListener('click', click);
         return () => { window.removeEventListener('keydown', k, true); window.removeEventListener('pointerdown', down); window.removeEventListener('click', click); };
     });
-    return html`<div class="app-root" ${keys}>${$render(view)}${$render(settingsModal)}</div>`;
+    screen.subscribe((s) => radio.setMatch(s === 'match'));
+    return html`<div class="app-root" ${keys}>${$render(view)}${$render(settingsModal)}${$render(NowPlayingCard())}</div>`;
 };

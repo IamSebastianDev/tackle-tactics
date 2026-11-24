@@ -1,8 +1,14 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
+import { musicPlugin } from './scripts/music-plugin';
 
 // Shared by the browser dev server and the Tauri desktop shell (src-tauri).
 export default defineConfig({
     clearScreen: false,
+    plugins: [
+        // the radio: every song in ../assets/music becomes a playlist track (see scripts/music-plugin.ts)
+        musicPlugin(resolve(__dirname, '../assets/music'), resolve(__dirname, 'node_modules/.cache/tt-music')),
+    ],
     server: {
         // the Rust build tree is huge and changes constantly while cargo runs
         watch: { ignored: ['**/src-tauri/**'] },

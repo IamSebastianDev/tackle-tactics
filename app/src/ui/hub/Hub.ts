@@ -23,6 +23,7 @@ import { Playbook } from '../Playbook';
 import { recolorVersion } from '../recolor';
 import { spriteStyle } from '../sprites';
 import { prefs, setPref } from '../prefs';
+import { RadioChip } from '../RadioUI';
 
 type Tab = 'overview' | 'squad' | 'tactics' | 'training' | 'league' | 'market' | 'finances' | 'playbook';
 const TABS: Array<[Tab, string, string]> = [
@@ -588,6 +589,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
             <div class="club-id" style="--kit:${kitColor(cl.kit)}"><span class="crest big">${cl.short}</span><div><b>${cl.name}</b><small>Division ${String(cl.tier + 1)}</small></div></div>
             ${TABS.map(([id, label, icon]) => html`<button class="${t === id ? 'on' : ''}" ${on('click', () => { tab.set(id); slotPick.set(null); })}><span>${icon}</span>${label}</button>`)}
             <div class="spacer"></div>
+            ${$render(RadioChip('hub-radio'))}
             <button class="menu-extra" ${on('click', actions.settings)}><span>⚙</span>Settings</button>
             <button class="ghost" ${on('click', actions.exit)}>Save & exit</button>
         </nav>`;

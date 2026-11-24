@@ -5,6 +5,7 @@ import { $render, attr, html, on } from '@grainular/nord';
 import type { Difficulty, TimeoutPolicy } from '../config';
 import type { CareerSettings } from '../meta/career';
 import { saveLocation } from '../meta/storage';
+import { radio } from './radio';
 import { audio } from './audio';
 import { CONTROL_MODES, FONTS, prefs, setPref, UI_SCALES, type AiSpeed } from './prefs';
 
@@ -71,6 +72,10 @@ export const SettingsModal = (props: SettingsProps) => {
                 <div class="set-row"><span>Sound<small>M toggles it during a match.</small></span>${seg(p.muted ? 'off' : 'on', [['on', 'On'], ['off', 'Muted']], (v) => setPref('muted', v === 'off'))}</div>
                 ${vol('sfxVolume', 'Effects', 'Kicks, tackles, whistles, UI.')}
                 ${vol('crowdVolume', 'Crowd', 'The ambience that swells as the ball nears goal.')}
+                <h4>Radio <small>songs from assets/music · N next song · R on/off</small></h4>
+                <div class="set-row"><span>Radio</span>${seg(p.radioOn ? 'on' : 'off', [['on', 'On'], ['off', 'Off']], (v) => radio.setOn(v === 'on'))}</div>
+                <label class="set-row"><span>Radio volume</span>${slider(Math.round(p.radioVolume * 100), 0, 100, 5, '%', (v) => setPref('radioVolume', v / 100))}</label>
+                <div class="set-row"><span>During matches<small>Quieter keeps it under the crowd and the commentary.</small></span>${seg(p.radioInMatch, [['on', 'Full'], ['quiet', 'Quieter'], ['off', 'Off']] as Array<['on' | 'quiet' | 'off', string]>, (v) => setPref('radioInMatch', v))}</div>
             </div>`;
         }
         if (t === 'gameplay') {

@@ -38,6 +38,7 @@ class AudioEngine {
 
     /** Call from any user gesture: unlocks audio. */
     unlock() {
+        void import('./radio').then((r) => r.radio.start());
         const ctx = this.ensure();
         if (ctx && ctx.state === 'suspended') void ctx.resume();
     }

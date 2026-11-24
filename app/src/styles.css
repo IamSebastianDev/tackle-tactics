@@ -995,3 +995,26 @@ a { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
 .save-path { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); user-select: text; -webkit-user-select: text; word-break: break-all; margin: 0 0 8px; }
 .tip.hub-tip { position: absolute; left: auto; right: 18px; bottom: 18px; top: auto; z-index: 45; }
 .tip.hub-tip.over-modal { z-index: 60; }
+
+/* ---- radio */
+.now-playing {
+    position: absolute; right: 18px; top: 18px; z-index: 80; display: flex; align-items: center; gap: 10px; min-width: 260px; max-width: 420px;
+    padding: 4px 14px 6px 8px; border: 8px solid transparent; border-image: var(--f-panel-raised) 4 fill / 8px / 0 stretch;
+    filter: drop-shadow(4px 4px 0 #000b); animation: np-in .35s cubic-bezier(.2,.8,.3,1) both; pointer-events: none;
+}
+@keyframes np-in { from { transform: translateX(30px); opacity: 0; } }
+.now-playing small { display: block; font-family: var(--display); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.now-playing b { display: block; font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: .03em; line-height: 1.1; color: var(--text); }
+.now-playing span { display: block; font-size: 13px; color: var(--muted); }
+.np-icon { font-style: normal; display: grid; place-items: center; width: 34px; height: 34px; flex: none; background: var(--accent); color: var(--on-accent); font-size: 18px; box-shadow: 0 0 0 2px var(--ink); }
+.radio-chip { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border: 8px solid transparent; border-image: var(--f-well) 4 fill / 8px / 0 stretch; }
+.radio-chip .np-icon { width: 26px; height: 26px; font-size: 14px; }
+.radio-chip.off .np-icon { background: var(--dim); }
+.rc-text { flex: 1; min-width: 0; display: grid; }
+.rc-text b { font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-text span { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-btn { padding: 0 3px; min-width: 0; font-size: 11px; border-width: 6px; border-image-width: 6px; }
+.title-radio { position: absolute; left: 24px; top: 20px; width: 360px; z-index: 3; text-align: left; }
+.hub-radio { margin: 0 0 8px; }
+.hub-radio .rc-btn:first-of-type { display: none; }
+.set-btn.dim { opacity: .45; }

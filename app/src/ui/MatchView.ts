@@ -1,4 +1,5 @@
 import { combined, derived, grain } from '@grainular/grains';
+import { nowPlaying, radio } from './radio';
 import { $each, $if, $render, attr, createDirective, html, mounted, on } from '@grainular/nord';
 import { isLightKit, kitColor } from './kits';
 import { Playbook } from './Playbook';
@@ -585,6 +586,7 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
 
     const toast = derived(ctl.toast, (t) => (t ? html`<div class="toast">${t}</div>` : html``));
     const focusChip = derived(combined([prefs, ctl.tick]), ([p]) => html`<button class="ghost focus-chip" title="Which of your players ask for orders" ${on('click', () => ctl.cycleControl())}>Focus: ${CONTROL_MODES.find((c) => c.id === p.controlMode)!.label} <kbd>F</kbd></button>`);
+    const radioBtn = derived(combined([prefs, nowPlaying]), ([p, t]) => html`<button class="set-btn ${p.radioOn ? '' : 'dim'}" title="${p.radioOn ? `Radio: ${t?.title ?? 'on'} · N next · R off` : 'Radio off · R on'}" ${on('click', () => radio.setOn(!p.radioOn))}>♫</button>`);
     const muteChip = derived(prefs, (p) => html`<button class="set-btn" title="Mute (M)" ${on('click', () => setPref('muted', !p.muted))}>${p.muted ? '♪̸' : '♪'}</button>`);
     const report = derived(ctl.report, (r) => (r ? MatchReport(ctl, onExit, continueLabel) : html``));
 
@@ -742,6 +744,7 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
                 <button class="set-btn" title="Bench & substitutions (B)" ${on('click', () => showBench.update((v) => !v))}>⇄</button>
                 <button class="set-btn" title="Pause (P)" ${on('click', () => ctl.togglePause())}>❚❚</button>
                 ${$render(muteChip)}
+                ${$render(radioBtn)}
                 ${onSettings ? html`<button class="set-btn" title="Settings" ${on('click', onSettings)}>⚙</button>` : html``}
             </div>
             ${$render(focusChip)}
