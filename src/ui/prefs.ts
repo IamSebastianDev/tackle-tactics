@@ -30,6 +30,8 @@ export type Prefs = {
     radioInMatch: 'on' | 'quiet' | 'off';
     /** Songs switched off in Settings (keyed "Artist - Title", so adding songs doesn't shift them). */
     radioDisabled: string[];
+    /** The floating radio player is folded down to its ♫ button. */
+    radioCollapsed: boolean;
 };
 
 export const UI_SCALES = [0.85, 1, 1.15, 1.3, 1.5];
@@ -73,6 +75,7 @@ const DEFAULTS: Prefs = {
     radioVolume: 0.6,
     radioInMatch: 'quiet',
     radioDisabled: [],
+    radioCollapsed: false,
 };
 
 const load = (): Prefs => {

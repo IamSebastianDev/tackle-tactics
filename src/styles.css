@@ -169,7 +169,6 @@ img,
 .log,
 .hud-bottom,
 .pb-class,
-.acard .pop,
 .toast,
 .banner,
 .hub-side,
@@ -1026,26 +1025,86 @@ a {
     align-items: center;
     flex: none;
 }
+/* ---- ability dock: lanes per turn step, one card per ability, clear states */
+.dock-row .cards {
+    display: flex;
+    gap: 14px;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    min-width: 0;
+}
+.lane {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.lane-label {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.lane.now .lane-label {
+    color: var(--accent);
+}
+.lane.later {
+    opacity: 0.55;
+}
+.lane-cards {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.passives {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-self: flex-end;
+}
+.passives > span:not(.lane-label) {
+    display: inline;
+}
+.passive {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    margin-right: 10px;
+    line-height: 1.6;
+}
+.passives {
+    display: block;
+    max-width: 150px;
+}
+.no-abilities {
+    align-self: center;
+    color: var(--muted);
+    font-size: 13px;
+}
 .acard {
+    position: relative;
     display: grid;
     grid-template-columns: 30px 1fr;
     gap: 0 8px;
+    align-items: center;
     text-align: left;
-    padding: 1px 6px;
-    min-width: 180px;
-    max-width: 230px;
+    padding: 2px 8px 3px 4px;
+    min-width: 168px;
+    max-width: 210px;
     font-family: var(--body);
     text-transform: none;
     letter-spacing: 0;
-    font-size: 14px;
+    font-size: 13px;
 }
 .acard .ic {
     grid-row: 1 / span 2;
-    font-size: 24px;
-    line-height: 34px;
+    font-size: 22px;
+    line-height: 1;
     text-align: center;
     color: var(--accent);
-    text-shadow: 2px 2px 0 var(--ink);
 }
 .acard .txt {
     display: flex;
@@ -1054,86 +1113,174 @@ a {
 }
 .acard .txt b {
     font-family: var(--display);
-    font-weight: 400;
-    font-size: 12px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
+    line-height: 1.1;
 }
 .acard .txt span {
-    font-size: 13px;
-    color: #a9aba8;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-shadow: none;
+    font-size: 11px;
+    color: var(--muted);
 }
 .acard .state {
     grid-column: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-family: var(--display);
-    font-size: 9px;
-    color: var(--good);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    text-shadow: none;
+    color: var(--good);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-.acard.off {
+.acard .state kbd {
+    margin-left: auto;
+}
+.acard .cd {
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    bottom: -4px;
+    height: 3px;
+    background: #0008;
+}
+.acard .cd i {
+    display: block;
+    height: 100%;
+    background: var(--muted);
+}
+/* ready: the normal button; the rest step back */
+.acard.wait,
+.acard.blocked,
+.acard.later {
     border-image-source: var(--f-chip);
-    cursor: help;
     filter: none;
+    cursor: help;
 }
-.acard.off .ic,
-.acard.off .txt b {
+.acard.wait .ic,
+.acard.blocked .ic,
+.acard.later .ic {
     color: var(--dim);
 }
-.acard.off .state {
+.acard.wait .state {
+    color: var(--muted);
+}
+.acard.blocked .state {
     color: #e59ac4;
-}
-.acard.on {
-    border-image-source: var(--f-sky);
-    color: #121314;
-    text-shadow: none;
-}
-.acard.on .ic,
-.acard.on .state,
-.acard.on .txt span {
-    color: #121314;
-    text-shadow: none;
-}
-.acard .pop {
-    display: none;
-    position: absolute;
-    left: -8px;
-    bottom: calc(100% + 14px);
-    width: 320px;
-    z-index: 5;
-    padding: 2px 8px 6px;
-    border-image-source: var(--f-panel-raised);
-    flex-direction: column;
-    gap: 6px;
-    font-size: 14px;
-    line-height: 1.35;
-    color: var(--text);
     text-transform: none;
     letter-spacing: 0;
+    font-family: var(--body);
+    font-size: 11px;
+    font-weight: 500;
+}
+.acard.later .state {
+    color: var(--dim);
+}
+/* armed: gold, pulsing edge */
+.acard.armed {
+    border-image-source: var(--f-gold);
+    color: var(--on-accent);
+    animation: armed-pulse 1s steps(2) infinite;
+}
+.acard.armed .ic,
+.acard.armed .state,
+.acard.armed .txt span {
+    color: var(--on-accent);
+}
+@keyframes armed-pulse {
+    50% {
+        filter: drop-shadow(0 0 0 var(--accent)) drop-shadow(0 0 6px var(--accent));
+    }
+}
+
+/* the explanation panel above the dock */
+.ab-info {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 10px);
+    width: 380px;
+    z-index: 6;
+    padding: 6px 12px 8px;
+    border: 8px solid transparent;
+    border-image: var(--f-panel-raised) 4 fill / 8px / 0 stretch;
     filter: drop-shadow(var(--shadow));
-    text-shadow: none;
-    cursor: default;
+    pointer-events: none;
 }
-.acard:hover .pop {
+.ab-head {
     display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
 }
-.acard .pop b {
+.ab-head .ic {
+    font-size: 24px;
+    color: var(--accent);
+    width: 30px;
+    text-align: center;
+}
+.ab-head b {
+    display: block;
     font-family: var(--display);
-    font-weight: 400;
-    font-size: 14px;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--gold-hi);
+    color: var(--text);
 }
-.acard .pop em {
-    font-style: normal;
+.ab-head small {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+}
+.ab-info p {
+    margin: 0 0 6px;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #dedcd5;
+}
+.ab-info p.how {
     color: var(--accent);
 }
-.acard .pop small {
-    color: var(--muted);
-    font-size: 12px;
+.ab-info p.how b {
+    color: var(--accent);
+}
+.ab-info p.why {
+    color: #e59ac4;
+    margin-bottom: 0;
+}
+
+/* the armed bar: what to click next, and a way out */
+.armed-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 6px 4px 10px;
+    background: var(--accent);
+    color: var(--on-accent);
+    box-shadow: 0 0 0 2px var(--ink);
+}
+.armed-bar .ic {
+    font-size: 18px;
+}
+.armed-bar b {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.armed-bar span {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+}
+.armed-bar button {
+    color: var(--text);
 }
 
 .banner {
@@ -1208,7 +1355,7 @@ a {
     gap: 12px;
     margin: 0 -12px 8px;
     padding: 6px 12px 8px;
-    position: sticky;
+    position: relative; /* not sticky: WebKit misplaces sticky inside the scaled stage */
     top: 0;
     z-index: 3;
     background: var(--modal-fill);
@@ -1216,7 +1363,7 @@ a {
 }
 .modal-body > footer,
 .modal-body > .bench-foot {
-    position: sticky;
+    position: relative; /* not sticky: WebKit misplaces sticky inside the scaled stage */
     bottom: 0;
     z-index: 3;
     margin: 14px -12px 0;
@@ -1868,7 +2015,7 @@ a {
     padding: 4px 8px;
     background: var(--panel);
     border-bottom: 2px solid var(--ink);
-    position: sticky;
+    position: relative; /* not sticky: WebKit misplaces sticky inside the scaled stage */
     top: 0;
     z-index: 1;
 }
@@ -2647,7 +2794,7 @@ a {
     width: min(860px, 100%);
 }
 .settings-modal .tabs {
-    position: sticky;
+    position: relative; /* not sticky: WebKit misplaces sticky inside the scaled stage */
     top: 54px;
     z-index: 2;
     margin: -8px -12px 12px;
@@ -3736,7 +3883,13 @@ a {
     padding: 1px 4px;
 }
 .hud-bottom {
-    max-width: calc(100% - 40px);
+    /* centred in the band left of the floating radio player (which sits bottom-right) */
+    left: 16px;
+    right: 440px;
+    transform: none;
+    width: fit-content;
+    max-width: none;
+    margin: 0 auto;
 }
 .tip {
     bottom: 190px;
@@ -4276,89 +4429,62 @@ a {
     z-index: 60;
 }
 
-/* ---- radio */
-.now-playing {
+/* ---- radio: one floating player, lower right, collapsible */
+.radio-dock {
     position: absolute;
-    right: 18px;
-    top: 18px;
-    z-index: 80;
+    right: 16px;
+    bottom: 16px;
+    z-index: 70;
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-width: 260px;
-    max-width: 420px;
-    padding: 4px 14px 6px 8px;
+    gap: 6px;
+    width: 400px;
+    padding: 3px 6px 3px 4px;
     border: 8px solid transparent;
     border-image: var(--f-panel-raised) 4 fill / 8px / 0 stretch;
     filter: drop-shadow(4px 4px 0 #000b);
+}
+.radio-dock.fresh {
     animation: np-in 0.35s cubic-bezier(0.2, 0.8, 0.3, 1) both;
-    pointer-events: none;
 }
 @keyframes np-in {
     from {
-        transform: translateX(30px);
+        transform: translateY(12px);
         opacity: 0;
     }
-}
-.now-playing small {
-    display: block;
-    font-family: var(--display);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--accent);
-}
-.now-playing b {
-    display: block;
-    font-family: var(--display);
-    font-weight: 700;
-    font-size: 18px;
-    letter-spacing: 0.03em;
-    line-height: 1.1;
-    color: var(--text);
-}
-.now-playing span {
-    display: block;
-    font-size: 13px;
-    color: var(--muted);
 }
 .np-icon {
     font-style: normal;
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
     flex: none;
     background: var(--accent);
     color: var(--on-accent);
-    font-size: 18px;
+    font-size: 16px;
     box-shadow: 0 0 0 2px var(--ink);
 }
-.radio-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 6px;
-    border: 8px solid transparent;
-    border-image: var(--f-well) 4 fill / 8px / 0 stretch;
-}
-.radio-chip .np-icon {
-    width: 26px;
-    height: 26px;
-    font-size: 14px;
-}
-.radio-chip.off .np-icon {
+.radio-dock.off .np-icon {
     background: var(--dim);
 }
 .rc-text {
     flex: 1;
     min-width: 0;
     display: grid;
+    line-height: 1.15;
+}
+.rc-text small {
+    font-family: var(--display);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
 }
 .rc-text b {
     font-family: var(--display);
     font-weight: 700;
-    font-size: 13px;
+    font-size: 14px;
     letter-spacing: 0.03em;
     white-space: nowrap;
     overflow: hidden;
@@ -4378,23 +4504,70 @@ a {
     border-width: 6px;
     border-image-width: 6px;
 }
-.title-radio {
-    position: absolute;
-    left: 24px;
-    top: 20px;
-    width: 360px;
-    z-index: 3;
-    text-align: left;
+.radio-dock.collapsed {
+    width: auto;
+    padding: 0;
+    border: 0;
+    border-image: none;
+    filter: none;
+    gap: 8px;
 }
-.hub-radio {
-    margin: 0 0 8px;
+.radio-fab {
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    font-size: 20px;
+    border-image-source: var(--f-panel-raised);
+    color: var(--accent);
 }
-.hub-radio .rc-btn:first-of-type {
-    display: none;
+.radio-dock.off .radio-fab {
+    color: var(--dim);
 }
-.set-btn.dim {
-    opacity: 0.45;
+.radio-fab.live {
+    animation: fab-beat 1.2s steps(2) infinite;
 }
+@keyframes fab-beat {
+    50% {
+        color: var(--gold-hi);
+    }
+}
+.radio-toast {
+    padding: 3px 12px 5px;
+    border: 8px solid transparent;
+    border-image: var(--f-panel-raised) 4 fill / 8px / 0 stretch;
+    filter: drop-shadow(4px 4px 0 #000b);
+    animation: toast-in 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    max-width: 280px;
+}
+@keyframes toast-in {
+    from {
+        transform: translateX(16px);
+        opacity: 0;
+    }
+}
+.radio-toast small {
+    display: block;
+    font-family: var(--display);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+.radio-toast b {
+    display: block;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.radio-toast span {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+}
+
 .songs {
     margin-top: 12px;
 }
@@ -4470,4 +4643,8 @@ a {
 }
 .songs li.now .song-play b {
     color: var(--accent);
+}
+.passives .lane-label {
+    display: block;
+    white-space: nowrap;
 }

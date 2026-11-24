@@ -1,5 +1,4 @@
 import { combined, derived, grain } from '@grainular/grains';
-import { nowPlaying, radio } from './radio';
 import { $each, $if, $render, attr, createDirective, html, mounted, on } from '@grainular/nord';
 import { isLightKit, kitColor } from './kits';
 import { Playbook } from './Playbook';
@@ -23,7 +22,7 @@ import { attackGoalX, cheb, dist, disc, fromKey, goalRows, inPitch, isGoalCell, 
 import type { KickAbility, MoveAbility } from '../engine/match';
 import { movePoints } from '../engine/rules';
 import type { Cell, Piece, TeamSide } from '../types';
-import { KICK_MODES, MOVE_MODES, type MatchController } from './controller';
+import { KICK_MODES, MOVE_MODES, TARGET_MODES, type MatchController } from './controller';
 import { prewarmPlayer, resolveAnim, spriteStyle } from './sprites';
 import { recolorVersion } from './recolor';
 
@@ -467,7 +466,7 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
                     <div class="pmeta stam">Stamina ${staminaBar(p.stamina)} ${String(Math.round(p.stamina))}</div>
                 </div>
             </div>
-            ${kitList(p)}
+            ${human ? html`` : kitList(p)}
             <div class="stats">
                 ${statBar('SPD', s.speed)}${statBar('PAC', s.pace)}${statBar('PAS', s.passing)}${statBar('SHO', s.shooting)}
                 ${statBar('DRI', s.dribbling)}${statBar('TAC', s.tackling)}${statBar('REF', s.reflexes)}${statBar('COM', s.composure)}
@@ -510,16 +509,8 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
                         : `${p.player.name} keeps formation on their own (Focus: F)`
                     : `${club(p.team).short} is thinking…`;
             const isCarrier = m.carrier()?.id === p.id;
-            if (mode) {
-                const a = abilityDef(cfg, mode);
-                const extra =
-                    mode === 'mark' || mode === 'tempo'
-                        ? ' Click a highlighted player.'
-                        : MOVE_MODES.includes(mode)
-                          ? ' Click a cell.'
-                          : ' Aim with the mouse.';
-                return `${a.icon} ${a.label}: ${a.desc}${extra} (Esc cancels)`;
-            }
+            // the armed bar says what to click; the hint just restates the plan in words
+            if (mode) return abilityDef(cfg, mode).short;
             if (m.state.phase === 'move') {
                 if (p.status.fouled) return 'You were fouled: free kick. Stay put (Space), then pass or shoot.';
                 return isCarrier
@@ -542,6 +533,22 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             return 'Use an ability, or Space to end your turn.';
         },
     );
+
+    type Lane = 'before' | 'after';
+    const laneOf = (id: AbilityId): Lane => (abilityDef(cfg, id).phase === 'act' ? 'after' : 'before');
+    /** What arming the ability asks of you next. */
+    const kindOf = (id: AbilityId) =>
+        MOVE_MODES.includes(id) ? 'Pick a cell' : KICK_MODES.includes(id) ? 'Aim a kick' : TARGET_MODES.includes(id) ? 'Pick a player' : 'Instant';
+    const infoFor = grain<AbilityId | null>(null);
+    ctl.awaitingHuman.subscribe(() => infoFor.set(null));
+    /** While an ability is armed: what to click, and a way out. */
+    const armedBar = derived(combined([ctl.mode, ctl.awaitingHuman]), ([mode, awaiting]) => {
+        if (!mode || !awaiting) return html``;
+        const a = abilityDef(cfg, mode);
+        const what = MOVE_MODES.includes(mode) ? 'Click a highlighted cell' : KICK_MODES.includes(mode) ? 'Aim with the mouse, click to kick' : 'Click a highlighted player';
+        return html`<div class="armed-bar"><span class="ic">${a.icon}</span><b>${a.label}</b><span>${what}</span>
+            <button class="ghost" ${on('click', () => { ctl.mode.set(null); ctl.bump(); })}>Cancel <kbd>Esc</kbd></button></div>`;
+    });
 
     const phaseAbilities = (p: Piece) => {
         const phase = m.state.phase;
@@ -569,29 +576,73 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         const p = m.active();
         const phase = m.state.phase;
         const isCarrier = m.carrier()?.id === p.id;
-        const card = (id: AbilityId, i: number) => {
+        const nowLane: Lane = phase === 'move' ? 'before' : 'after';
+        const keyed = phaseAbilities(p); // number keys follow the current step's cards
+        const owned = abilitiesOf(cfg, p.player);
+        const card = (id: AbilityId) => {
             const a = abilityDef(cfg, id);
             const reason = m.blockReason(p, id);
-            const cls = `acard${mode === id ? ' on' : ''}${reason ? ' off' : ''}`;
+            const cd = cooldownLeft(p, id, m.state.round);
+            const inLane = laneOf(id) === nowLane;
+            const armed = mode === id;
+            const k = keyed.indexOf(id) + 1;
+            const st = armed ? 'armed' : !inLane ? 'later' : cd > 0 ? 'wait' : reason ? 'blocked' : 'ready';
+            const label =
+                st === 'armed' ? 'Armed' : st === 'later' ? (nowLane === 'before' ? 'After you move' : 'Before moving only') : st === 'wait' ? `Recharging · ${cd}` : st === 'blocked' ? reason : 'Ready';
             const enter = on('mouseenter', () => {
-                if (!reason) ctl.preview.set(id);
+                infoFor.set(id);
+                if (st === 'ready') ctl.preview.set(id);
             });
-            const leave = on('mouseleave', () => ctl.preview.set(null));
-            return html`<button class="${cls}" ${enter} ${leave} ${on('click', () => ctl.useAbility(id))}>
+            const leave = on('mouseleave', () => {
+                infoFor.set(null);
+                ctl.preview.set(null);
+            });
+            return html`<button class="acard ${st}" ${enter} ${leave} ${on('click', () => ctl.useAbility(id))}>
                 <span class="ic">${a.icon}</span>
-                <span class="txt"><b>${a.label}</b><span>${a.short}</span></span>
-                <span class="state">${reason ? reason : html`Ready <kbd>${String(i + 1)}</kbd>`}</span>
-                <span class="pop"><b>${a.icon} ${a.label}</b><span>${a.desc}</span><em>${a.how}</em>${a.cooldown ? html`<small>Recharges in ${String(a.cooldown)} round${a.cooldown > 1 ? 's' : ''} after use.</small>` : html``}</span>
+                <span class="txt"><b>${a.label}</b><span>${kindOf(id)}</span></span>
+                <span class="state">${label}${st === 'ready' && k ? html`<kbd>${String(k)}</kbd>` : html``}</span>
+                ${st === 'wait' ? html`<span class="cd"><i style="width:${String(100 - (cd / Math.max(1, a.cooldown)) * 100)}%"></i></span>` : html``}
             </button>`;
         };
+        const lane = (which: Lane) => {
+            const ids = owned.filter((id) => laneOf(id) === which);
+            if (!ids.length) return html``;
+            return html`<div class="lane ${which === nowLane ? 'now' : 'later'}">
+                <span class="lane-label">${which === 'before' ? 'Before moving' : 'After moving'}</span>
+                <div class="lane-cards">${ids.map(card)}</div>
+            </div>`;
+        };
+        const passives = passivesOf(cfg, p.player);
         return html`<div class="dock-row">
-            <div class="cards">${phaseAbilities(p).map(card)}</div>
+            <div class="cards">
+                ${owned.length ? html`${lane('before')}${lane('after')}` : html`<span class="no-abilities">No abilities yet. They unlock as this player levels up.</span>`}
+                ${passives.length ? html`<div class="passives"><span class="lane-label">Always on</span>${passives.map((id) => html`<span class="passive" title="${cfg.passives[id].desc}">◆ ${cfg.passives[id].label}</span>`)}</div>` : html``}
+            </div>
             <div class="core">
                 ${phase === 'move' ? html`<button ${on('click', () => ctl.pass())}>${isCarrier ? 'Stay & kick' : 'Hold'} <kbd>Space</kbd></button>` : html``}
                 ${phase === 'act' && m.canTackle(p) ? html`<button class="warn" ${on('click', () => ctl.input({ t: 'act', d: { kind: 'tackle' } }))}>Tackle <kbd>T</kbd></button>` : html``}
                 ${phase === 'act' ? html`<button ${on('click', () => ctl.pass())}>${isCarrier ? 'Keep ball' : 'End turn'} <kbd>Space</kbd></button>` : html``}
                 <button class="ghost" ${on('click', () => ctl.input({ t: 'auto' }))}>Auto <kbd>A</kbd></button>
             </div>
+        </div>`;
+    });
+
+    /** Explains the hovered or armed ability, above the dock (instead of a tiny tooltip). */
+    const abilityInfo = derived(combined([infoFor, ctl.mode, ctl.awaitingHuman, ctl.tick]), ([hovered, armed, awaiting]) => {
+        if (!awaiting || m.state.over) return html``;
+        const p = m.active();
+        // a card can be re-rendered away under the mouse (new turn): only explain this player's abilities
+        const owned = abilitiesOf(cfg, p.player);
+        const id = hovered && owned.includes(hovered) ? hovered : armed;
+        if (!id) return html``;
+        const a = abilityDef(cfg, id);
+        const reason = m.blockReason(p, id);
+        const cd = cooldownLeft(p, id, m.state.round);
+        return html`<div class="ab-info">
+            <div class="ab-head"><span class="ic">${a.icon}</span><div><b>${a.label}</b><small>${laneOf(id) === 'before' ? 'Before moving' : 'After moving'} · ${kindOf(id)}${a.cooldown ? ` · recharges for ${a.cooldown} round${a.cooldown > 1 ? 's' : ''}` : ''}</small></div></div>
+            <p>${a.desc}</p>
+            <p class="how"><b>How:</b> ${a.how}</p>
+            ${cd > 0 ? html`<p class="why">Recharging: ready in ${String(cd)} round${cd > 1 ? 's' : ''}.</p>` : reason ? html`<p class="why">Not now: ${reason}.</p>` : html``}
         </div>`;
     });
 
@@ -675,11 +726,7 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         ([p]) =>
             html`<button class="ghost focus-chip" title="Which of your players ask for orders" ${on('click', () => ctl.cycleControl())}>Focus: ${CONTROL_MODES.find((c) => c.id === p.controlMode)!.label} <kbd>F</kbd></button>`,
     );
-    const radioBtn = derived(
-        combined([prefs, nowPlaying]),
-        ([p, t]) =>
-            html`<button class="set-btn ${p.radioOn ? '' : 'dim'}" title="${p.radioOn ? `Radio: ${t?.title ?? 'on'} · N next · R off` : 'Radio off · R on'}" ${on('click', () => radio.setOn(!p.radioOn))}>♫</button>`,
-    );
+
     const muteChip = derived(
         prefs,
         (p) =>
@@ -895,12 +942,13 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
                 <button class="set-btn" title="Bench & substitutions (B)" ${on('click', () => showBench.update((v) => !v))}>⇄</button>
                 <button class="set-btn" title="Pause (P)" ${on('click', () => ctl.togglePause())}>❚❚</button>
                 ${$render(muteChip)}
-                ${$render(radioBtn)}
                 ${onSettings ? html`<button class="set-btn" title="Settings" ${on('click', onSettings)}>⚙</button>` : html``}
             </div>
             ${$render(focusChip)}
             ${$render(minimap)}${$render(queue)}${$render(log)}</aside>
         <footer class="hud-bottom">
+            ${$render(abilityInfo)}
+            ${$render(armedBar)}
             <div class="dock-head">${$render(phaseStep)}<div class="hint">${hint}</div></div>
             ${$render(actions)}
         </footer>

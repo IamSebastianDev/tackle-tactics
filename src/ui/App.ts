@@ -35,7 +35,7 @@ import {
 } from '../world/stadium';
 import { SettingsModal } from './Settings';
 import { LESSONS } from './tutorial';
-import { NowPlayingCard, RadioChip } from './RadioUI';
+import { RadioDock } from './RadioUI';
 import { radio } from './radio';
 import { applyTalk, matchEdge, prepFor } from '../meta/prep';
 import { audio } from './audio';
@@ -482,7 +482,6 @@ export const App = () => {
     const Title = () => html`<div class="setup title-screen">${titleScene()}<div class="setup-inner">
         <h1>Tackle <span>Tactics</span></h1>
         <p class="tag">A turn-based positioning game in a football kit. Make space, deny space, beat the clock.</p>
-        ${$render(RadioChip('title-radio'))}
         <div class="title-cards">
             ${
                 career
@@ -633,5 +632,5 @@ export const App = () => {
         };
     });
     screen.subscribe((s) => radio.setMatch(s === 'match'));
-    return html`<div class="app-root" ${keys}>${$render(view)}${$render(settingsModal)}${$render(NowPlayingCard())}</div>`;
+    return html`<div class="app-root" ${keys}>${$render(view)}${$render(settingsModal)}${$render(RadioDock())}</div>`;
 };
