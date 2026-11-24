@@ -1,7 +1,7 @@
 {
     "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName": "Tackle Tactics",
-    "version": "1.0.0",
+    "version": "../package.json",
     "identifier": "com.tackletactics.game",
     "build": {
         "frontendDist": "../dist",
@@ -36,6 +36,15 @@
         "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
         "category": "Game",
         "shortDescription": "Turn-based football tactics",
-        "copyright": "Art by bubbabba \u00b7 Goals in Pixels"
+        "copyright": "Art by bubbabba · Goals in Pixels",
+        "macOS": {
+            "signingIdentity": "-",
+            "minimumSystemVersion": "11.0"
+        },
+        "windows": {
+            "nsis": {
+                "installMode": "currentUser"
+            }
+        }
     }
 }

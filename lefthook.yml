@@ -1,0 +1,33 @@
+# Git hooks (installed by `npm install` via the `prepare` script).
+# The pre-commit checks are the project's only check definitions: CI runs the same jobs with
+#   npx lefthook run pre-commit --all-files --tag web   (and --tag rust)
+# Fix formatting and lint findings with `npm run fix`.
+
+pre-commit:
+    parallel: true
+    jobs:
+        - name: typecheck
+          tags: [web]
+          glob: '*.ts'
+          run: npx tsc
+
+        - name: lint
+          tags: [web]
+          glob: '*.{ts,js,mjs}'
+          run: npx oxlint {staged_files}
+
+        - name: format
+          tags: [web]
+          glob: '*.{ts,js,mjs,json,css,html,md,yml,yaml}'
+          run: npx oxfmt --check {staged_files}
+
+        - name: test
+          tags: [web]
+          glob: '{src,test,scripts}/**/*.ts'
+          run: npx vitest run
+
+        - name: rust
+          tags: [rust]
+          root: src-tauri/
+          glob: '*.{rs,toml}'
+          run: cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test

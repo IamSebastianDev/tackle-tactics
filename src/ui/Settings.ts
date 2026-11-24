@@ -325,6 +325,7 @@ export const SettingsModal = (props: SettingsProps) => {
                 return html`<button ${attr({ class: derived(active, (selected) => (selected ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => tab.set(id))}>${id[0]!.toUpperCase() + id.slice(1)}</button>`;
             })}</div>
             <div class="modal-scroll set-body">${$switch(tab).$case('display', Display).$case('sound', Sound).$case('gameplay', Gameplay).$default(Career)}</div>
+            <p class="set-version" title="Include this when you report a bug">Tackle Tactics v${__APP_VERSION__}${__APP_COMMIT__ ? html` <span>· build ${__APP_COMMIT__}</span>` : html``}</p>
         </div>`,
     });
 };
