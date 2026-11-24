@@ -1,0 +1,15 @@
+# dependencies & build output
+node_modules/
+app/dist/
+app/src-tauri/target/
+app/src-tauri/gen/schemas/
+
+# third-party art packs are licensed, not redistributable: keep them local.
+# `npm run assets` (app/scripts/copy-assets.sh) copies the used subset into app/public/assets.
+/assets/
+app/public/assets/
+
+# local / OS
+.DS_Store
+*.log
+.claude/settings.local.json
