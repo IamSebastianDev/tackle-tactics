@@ -44,6 +44,8 @@ export type Club = {
     short: string;
     kit: string;
     keeperKit: string;
+    /** Second strip, worn when the home kit would clash with the home side's (career clubs). */
+    awayKit?: string;
     formationId: string;
     /** Substitutes available for this match (engine clubs only). */
     bench?: Player[];

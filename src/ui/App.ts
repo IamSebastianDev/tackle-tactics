@@ -22,6 +22,8 @@ import {
     userClub,
     userSide,
     type Career,
+    awayKitFor,
+    kitsClash,
 } from '../meta/career';
 import { Hub } from './hub/Hub';
 import { styleOf } from '../ai/brain';
@@ -100,7 +102,7 @@ const saveSettings = (s: Settings) => {
 const buildClubs = (cfg: GameConfig, s: Settings): [Club, Club] => {
     const rng = createRng(s.seed);
     const names = new Set<string>();
-    const kAway = s.awayKit === s.homeKit ? cfg.kits.outfield.find((k) => k !== s.homeKit)! : s.awayKit;
+    const kAway = kitsClash(cfg, s.awayKit, s.homeKit) ? awayKitFor(cfg, s.awayKit, 0, s.homeKit) : s.awayKit;
     return [
         generateClub(cfg, rng, 'home', s.homeKit, cfg.kits.keepers[0]!, s.homeFormation, names),
         generateClub(cfg, rng, 'away', kAway, cfg.kits.keepers[1]!, s.awayFormation, names),
@@ -588,6 +590,11 @@ export const App = () => {
         const name = grain('');
         const kit = grain('blue');
         const keeperKit = grain(defaultConfig.kits.keepers[0]!);
+        const awayKit = grain('white');
+        // the away strip may never clash with the home one: move it along when the home kit changes
+        kit.subscribe((k) => {
+            if (kitsClash(defaultConfig, awayKit(), k)) awayKit.set(awayKitFor(defaultConfig, k));
+        });
         /** The short name follows the club name until you type your own. */
         const short = grain('');
         const shortEdited = grain(false);
@@ -601,23 +608,25 @@ export const App = () => {
             const n = k.replace('keeper_', '');
             return n[0]!.toUpperCase() + n.slice(1);
         };
-        const swatch = (k: string, keeper: boolean) =>
-            derived(
-                keeper ? keeperKit : kit,
-                (
-                    cur,
-                ) => html`<button class="kit-swatch ${cur === k ? 'on' : ''}" title="${kitName(k)}" ${on('click', () => (keeper ? keeperKit : kit).set(k))}>
-                <span class="portrait kit-portrait"><span class="sprite still" style="${spriteStyle(defaultConfig, keeper ? k : `${k}_player_1`, 'idle', 'down')}"></span></span>
-                <small>${kitName(k)}</small>
-            </button>`,
-            );
+        const swatch = (k: string, which: 'home' | 'away' | 'keeper') => {
+            const target = which === 'home' ? kit : which === 'away' ? awayKit : keeperKit;
+            return derived(combined([target, kit]), ([cur, home]) => {
+                const clash = which === 'away' && kitsClash(defaultConfig, k, home);
+                return html`<button class="kit-swatch ${cur === k ? 'on' : ''} ${clash ? 'clash' : ''}" ${attr({ disabled: clash })} title="${clash ? `${kitName(k)}: clashes with the home kit` : kitName(k)}" ${on('click', () => target.set(k))}>
+                    <span class="portrait kit-portrait"><span class="sprite still" style="${spriteStyle(defaultConfig, which === 'keeper' ? k : `${k}_player_1`, 'idle', 'down')}"></span></span>
+                    <small>${kitName(k)}</small>
+                </button>`;
+            });
+        };
         const preview = derived(
-            combined([kit, keeperKit, shownShort, name]),
-            ([k, gk, sh, n]) => html`<div class="kit-preview">
+            combined([kit, keeperKit, shownShort, name, awayKit]),
+            ([k, gk, sh, n, ak]) => html`<div class="kit-preview">
             <div class="kit-crest" style="--kit:${kitColor(k)}"><span>${sh}</span></div>
             <b>${n.trim() || 'Your club'}</b>
             <div class="kit-pitch">
                 ${[`${k}_player_1`, `${k}_player_2`, gk].map((sp, i) => html`<span class="kit-model"><span class="sprite" style="${spriteStyle(defaultConfig, sp, i === 2 ? 'gk_ready' : 'idle', 'down')}"></span></span>`)}
+                <span class="kit-away-label">Away</span>
+                ${[`${ak}_player_1`, `${ak}_player_2`].map((sp) => html`<span class="kit-model"><span class="sprite" style="${spriteStyle(defaultConfig, sp, 'idle', 'down')}"></span></span>`)}
             </div>
         </div>`,
         );
@@ -638,6 +647,7 @@ export const App = () => {
                     name: name().trim() || undefined,
                     short: shortEdited() ? short() : undefined,
                     kit: kit(),
+                    awayKit: awayKit(),
                     keeperKit: keeperKit(),
                 },
             );
@@ -667,9 +677,11 @@ export const App = () => {
                 </div>
                 ${$render(preview)}
                 <h4>Home kit</h4>
-                <div class="kit-grid">${kits.map(([k]) => $render(swatch(k, false)))}</div>
+                <div class="kit-grid">${kits.map(([k]) => $render(swatch(k, 'home')))}</div>
+                <h4>Away kit <small>worn when the home kit clashes with the hosts'</small></h4>
+                <div class="kit-grid">${kits.map(([k]) => $render(swatch(k, 'away')))}</div>
                 <h4>Goalkeeper</h4>
-                <div class="kit-grid keepers">${defaultConfig.kits.keepers.map((k) => $render(swatch(k, true)))}</div>
+                <div class="kit-grid keepers">${defaultConfig.kits.keepers.map((k) => $render(swatch(k, 'keeper')))}</div>
             </section>
             <section class="opts">
                 <h4>Match settings</h4>

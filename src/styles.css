@@ -5113,3 +5113,24 @@ a {
 .kit-portrait .sprite.still {
     display: block;
 }
+.kit-swatch.clash {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+.kit-away-label {
+    align-self: center;
+    margin-left: 10px;
+    font-family: var(--display);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.kit-editor h4 small {
+    font-family: var(--body);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--muted);
+    margin-left: 6px;
+}

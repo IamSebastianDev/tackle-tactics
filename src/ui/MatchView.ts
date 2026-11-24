@@ -200,6 +200,20 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     });
 
     // ------------------------------------------------------------ camera
+    /**
+     * Fires only when `key()` changes after any of `sources` emits. Whole blocks (player card, dock)
+     * derive from this instead of the match tick, so they aren't torn down and rebuilt (sprites
+     * blinking) on every tick when nothing they show has changed.
+     */
+    const changes = (sources: Array<{ subscribe: (fn: () => void) => unknown }>, key: () => string) => {
+        const g = grain(key());
+        for (const src of sources)
+            src.subscribe(() => {
+                const k = key();
+                if (k !== g()) g.set(k);
+            });
+        return g;
+    };
     const zoomBias = grain(1);
     /**
      * Free camera: a pan offset (viewport px) on top of the automatic framing. Drag the pitch, use the
@@ -482,7 +496,12 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         </div>`;
     };
 
-    const activeCard = derived(ctl.tick, () => {
+    const cardKey = changes([ctl.tick, recolorVersion], () => {
+        if (m.state.over) return 'over';
+        const p = m.active();
+        return `${p.id}|${movePoints(cfg, p)}|${p.reactionReady}|${Math.round(p.stamina)}|${p.yellows}|${ctl.isHuman(p.team)}|${recolorVersion()}`;
+    });
+    const activeCard = derived(cardKey, () => {
         if (m.state.over) return html`<div class="card"></div>`;
         const p = m.active();
         const s = p.player.stats;
@@ -617,7 +636,8 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         return html`<div class="steps"><span class="${ph === 'move' ? 'on' : 'done'}">1 · Move</span><i></i><span class="${ph === 'act' ? 'on' : ''}">2 · Act</span></div>`;
     });
 
-    const actions = derived(combined([ctl.tick, ctl.awaitingHuman, ctl.mode]), ([, awaiting, mode]) => {
+    const dockKey = changes([ctl.tick, ctl.awaitingHuman], () => (ctl.awaitingHuman() ? `turn:${ctl.tick()}` : 'idle'));
+    const actions = derived(combined([dockKey, ctl.awaitingHuman, ctl.mode]), ([, awaiting, mode]) => {
         if (!awaiting || m.state.over) return html`<div class="dock-row"></div>`;
         const sp = m.state.setPiece;
         if (sp?.stage === 'setup') {
@@ -711,20 +731,34 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         </div>`;
     });
 
-    const queue = derived(ctl.tick, () => {
-        // a tackle winner's extra turn sits in front of the normal order
-        const ids = m.state.bonusTurn
-            ? [m.state.bonusTurn, ...m.state.order.slice(m.state.turnIndex + 1, m.state.turnIndex + 12)]
-            : m.state.order.slice(m.state.turnIndex, m.state.turnIndex + 12);
-        return html`<div class="queue">${ids.map((id, i) => {
-            const p = m.piece(id);
-            const auto = ctl.isHuman(p.team) && !ctl.needsOrders(p);
-            return html`<div class="qitem ${i === 0 ? 'now' : ''} ${auto ? 'auto' : ''}" style="--kit:${kitColor(club(p.team).kit)}" title="${p.player.name}${auto ? ' (acts on their own — Focus)' : ''}">
-                <div class="sprite still" style="${spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player)}"></div>
-                <span>${cfg.classes[p.player.cls].short}${String(p.player.number)}</span>
-            </div>`;
-        })}</div>`;
+    /** The next dozen to act; a tackle winner's extra turn sits in front of the normal order. */
+    const queueIds = () =>
+        m.state.over
+            ? []
+            : m.state.bonusTurn
+              ? [m.state.bonusTurn, ...m.state.order.slice(m.state.turnIndex + 1, m.state.turnIndex + 12)]
+              : m.state.order.slice(m.state.turnIndex, m.state.turnIndex + 12);
+    const queueKey = changes([ctl.tick, prefs], () => queueIds().join(',') + '|' + prefs().controlMode);
+    const queueItems = derived(queueKey, () => {
+        const ids = queueIds();
+        return ids.map((id, i) => ({ id, key: ids.indexOf(id) === i ? id : `${id}#${i}`, first: i === 0 }));
     });
+    // each portrait is built once per player and kept; only its markers update
+    const queueItem = (q: { id: string; key: string }) => {
+        const p = m.piece(q.id);
+        const cls = derived(queueKey, () => {
+            const auto = ctl.isHuman(p.team) && !ctl.needsOrders(p);
+            return `qitem ${queueIds()[0] === q.id && !q.key.includes('#') ? 'now' : ''} ${auto ? 'auto' : ''}`;
+        });
+        const sprite = derived(recolorVersion, () => spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player));
+        return html`<div ${attr({ class: cls })} style="--kit:${kitColor(club(p.team).kit)}" title="${p.player.name}">
+            <div class="sprite still" ${attr({ style: sprite })}></div>
+            <span>${cfg.classes[p.player.cls].short}${String(p.player.number)}</span>
+        </div>`;
+    };
+    const queue = html`<div class="queue">${$each(queueItems)
+        .$withKey((q) => q.key)
+        .$as(queueItem)}</div>`;
 
     const log = derived(
         ctl.commentary,
@@ -902,7 +936,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     });
     const report = derived(ctl.report, (r) => (r ? MatchReport(ctl, onExit, finishOdds ? 'Back to the club' : 'Back to menu') : html``));
 
-    const minimap = derived(ctl.tick, () => {
+    const minimapSvg = () => {
         const s = 4;
         const dots = m.state.pieces
             .map((p) => {
@@ -918,10 +952,15 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             <rect x="${cols * s - 2}" y="${gTop * s}" width="2" height="${cfg.pitch.goalWidth * s}" fill="#fff" />
             ${dots}<circle cx="${b.x * s + s / 2}" cy="${b.y * s + s / 2}" r="3.2" fill="#fff" stroke="#2f8cff" stroke-width="1.6" />
         </svg>`;
-        return html`<div class="minimap" ${createDirective((n) => {
-            n.innerHTML = svg;
-        })}></div>`;
-    });
+        return svg;
+    };
+    const minimap = html`<div class="minimap" ${createDirective((n) => {
+        const draw = () => {
+            n.innerHTML = minimapSvg();
+        };
+        draw();
+        ctl.tick.subscribe(draw);
+    })}></div>`;
 
     const banner = derived(ctl.banner, (b) =>
         b
@@ -1197,7 +1236,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             </div>
             ${$if(showMusic).$then(MatchRadioControls)}
             ${$render(focusChip)}
-            ${$render(minimap)}${$render(queue)}${$render(log)}</aside>
+            ${minimap}${queue}${$render(log)}</aside>
         <footer class="hud-bottom">
             ${$render(abilityInfo)}
             ${$render(armedBar)}

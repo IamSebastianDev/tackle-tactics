@@ -771,6 +771,12 @@ export const defaultConfig = {
     kits: {
         outfield: ['blue', 'yellow', 'white', 'hoops', 'sky', 'stripes', 'orange', 'red'],
         keepers: ['keeper_pink', 'keeper_black', 'keeper_lime', 'keeper_orange'],
+        /** Kits too alike to share a pitch (besides identical ones). */
+        clashes: [
+            ['blue', 'sky'],
+            ['orange', 'red'],
+            ['yellow', 'orange'],
+        ] as Array<[string, string]>,
     },
     /** Frames per animation strip (measured from the art). */
     animFrames: {

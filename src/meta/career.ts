@@ -134,6 +134,19 @@ const SUFFIX = [
 const outfieldKit = (cfg: GameConfig, i: number) => cfg.kits.outfield[i % cfg.kits.outfield.length]!;
 const keeperKit = (cfg: GameConfig, i: number) => cfg.kits.keepers[i % cfg.kits.keepers.length]!;
 
+/** Two kits too alike to share a pitch: the same, or a pair listed in config.kits.clashes. */
+export const kitsClash = (cfg: GameConfig, a: string, b: string) =>
+    a === b || cfg.kits.clashes.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+/** A second strip for a club: the first kit (from `start`) that doesn't clash with its home kit. */
+export const awayKitFor = (cfg: GameConfig, home: string, start = 0, avoid?: string) => {
+    const kits = cfg.kits.outfield;
+    for (let i = 0; i < kits.length; i++) {
+        const k = kits[(start + i) % kits.length]!;
+        if (!kitsClash(cfg, k, home) && (!avoid || !kitsClash(cfg, k, avoid))) return k;
+    }
+    return kits.find((k) => k !== home)!;
+};
+
 export const careerRng = (c: Career): Rng => createRng(c.rngState);
 const saveRng = (c: Career, rng: Rng) => {
     c.rngState = rng.state();
@@ -184,7 +197,7 @@ export const newCareer = (
     cfg: GameConfig,
     seed: number,
     settings: CareerSettings,
-    opts: { name?: string; short?: string; kit?: string; keeperKit?: string } = {},
+    opts: { name?: string; short?: string; kit?: string; awayKit?: string; keeperKit?: string } = {},
 ): Career => {
     const rng = createRng(seed);
     const c: Career = {
@@ -216,6 +229,7 @@ export const newCareer = (
                 name: `${places[ci % places.length]} ${rng.pick(SUFFIX)}`,
                 short: places[ci % places.length]!.slice(0, 3).toUpperCase(),
                 kit: outfieldKit(cfg, ci),
+                awayKit: awayKitFor(cfg, outfieldKit(cfg, ci), ci + 3),
                 keeperKit: keeperKit(cfg, ci),
                 formationId: formation,
                 squad: buildSquad(cfg, rng, c, tier),
@@ -242,6 +256,8 @@ export const newCareer = (
     }
     if (opts.short?.trim()) user.short = opts.short.trim().slice(0, 3).toUpperCase();
     if (opts.kit) user.kit = opts.kit;
+    if (opts.awayKit && !kitsClash(cfg, opts.awayKit, user.kit)) user.awayKit = opts.awayKit;
+    else if (opts.kit) user.awayKit = awayKitFor(cfg, user.kit);
     if (opts.keeperKit) user.keeperKit = opts.keeperKit;
     c.userClubId = user.id;
     for (const d of c.divisions) d.fixtures = roundRobin(d.clubs, rng, `s1-t${d.tier}`);
@@ -386,7 +402,12 @@ export const fixtureClubs = (cfg: GameConfig, c: Career, f: Fixture): [Club, Clu
     const home = c.clubs[f.home]!;
     const away = c.clubs[f.away]!;
     for (const cl of [home, away]) cl.morale = cl.id === c.userClubId ? story(c).morale : 60;
-    const awayKit = away.kit === home.kit ? cfg.kits.outfield.find((k) => k !== home.kit)! : away.kit;
+    // the away side changes strip only on a clash; older saves without an away kit get one that fits
+    const awayKit = !kitsClash(cfg, away.kit, home.kit)
+        ? away.kit
+        : away.awayKit && !kitsClash(cfg, away.awayKit, home.kit)
+          ? away.awayKit
+          : awayKitFor(cfg, away.kit, 0, home.kit);
     return [matchClub(cfg, home), matchClub(cfg, away, awayKit)];
 };
 

@@ -7,6 +7,7 @@ import {
     divisionOf,
     endSeason,
     fixtureClubs,
+    kitsClash,
     newCareer,
     playMatchday,
     resolveLetter,
@@ -157,14 +158,34 @@ describe('career', () => {
     });
 
     it('a new career takes the club name, short name and both kits from the kit editor', () => {
-        const c = newCareer(cfg, 9, settings, { name: 'Mudbury Rovers', short: 'mbr', kit: 'red', keeperKit: 'keeper_lime' });
+        const c = newCareer(cfg, 9, settings, {
+            name: 'Mudbury Rovers',
+            short: 'mbr',
+            kit: 'red',
+            awayKit: 'white',
+            keeperKit: 'keeper_lime',
+        });
         const u = userClub(c);
         expect(u.name).toBe('Mudbury Rovers');
         expect(u.short).toBe('MBR');
         expect(u.kit).toBe('red');
         expect(u.keeperKit).toBe('keeper_lime');
+        expect(u.awayKit).toBe('white');
         const f = c.divisions.at(-1)!.fixtures.find((x) => x.home === u.id || x.away === u.id)!;
         const mine = fixtureClubs(cfg, c, f).find((x) => x.id === u.id)!;
         expect(mine.squad.some((p) => p.sprite === 'keeper_lime')).toBe(true);
+    });
+
+    it('the away side changes into its away kit only when the strips clash', () => {
+        const c = newCareer(cfg, 11, settings, { kit: 'blue', awayKit: 'yellow' });
+        const u = userClub(c);
+        const f = c.divisions.at(-1)!.fixtures.find((x) => x.away === u.id)!;
+        const host = c.clubs[f.home]!;
+        host.kit = 'sky'; // too close to blue
+        expect(kitsClash(cfg, 'blue', 'sky')).toBe(true);
+        expect(fixtureClubs(cfg, c, f)[1].kit).toBe('yellow');
+        host.kit = 'red'; // no clash: home strip
+        expect(fixtureClubs(cfg, c, f)[1].kit).toBe('blue');
+        for (const cl of Object.values(c.clubs)) expect(kitsClash(cfg, cl.kit, cl.awayKit!)).toBe(false);
     });
 });
