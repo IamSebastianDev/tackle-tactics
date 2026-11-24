@@ -7,10 +7,13 @@ import { generateClub } from '../src/world/generate';
 
 const noFouls = { foulOnMiss: 0, foulOnWin: 0 };
 const make = (foulOnWin = 0) => {
-    const cfg = withOverrides({
-        reactions: { tackleBase: 2 },
-        referee: { styles: { lenient: { ...noFouls, foulOnWin }, fair: { ...noFouls, foulOnWin }, strict: { ...noFouls, foulOnWin } } },
-    } as never, defaultConfig);
+    const cfg = withOverrides(
+        {
+            reactions: { tackleBase: 2 },
+            referee: { styles: { lenient: { ...noFouls, foulOnWin }, fair: { ...noFouls, foulOnWin }, strict: { ...noFouls, foulOnWin } } },
+        } as never,
+        defaultConfig,
+    );
     const rng = createRng(5);
     const names = new Set<string>();
     const a = generateClub(cfg, rng, 'home', 'blue', 'keeper_pink', '4-3-3', names);

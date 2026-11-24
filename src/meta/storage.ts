@@ -37,7 +37,11 @@ export const initStorage = async () => {
 
 export const readSave = (): string | null => {
     if (desktop) return cache;
-    try { return localStorage.getItem(KEY); } catch { return null; }
+    try {
+        return localStorage.getItem(KEY);
+    } catch {
+        return null;
+    }
 };
 
 const flush = () => {
@@ -55,13 +59,32 @@ const flush = () => {
 };
 
 export const writeSave = (data: string): boolean => {
-    if (desktop) { cache = data; pending = data; flush(); return true; }
-    try { localStorage.setItem(KEY, data); return true; } catch { return false; }
+    if (desktop) {
+        cache = data;
+        pending = data;
+        flush();
+        return true;
+    }
+    try {
+        localStorage.setItem(KEY, data);
+        return true;
+    } catch {
+        return false;
+    }
 };
 
 export const deleteSave = () => {
-    if (desktop) { cache = null; pending = null; flush(); return; }
-    try { localStorage.removeItem(KEY); } catch { /* ignore */ }
+    if (desktop) {
+        cache = null;
+        pending = null;
+        flush();
+        return;
+    }
+    try {
+        localStorage.removeItem(KEY);
+    } catch {
+        /* ignore */
+    }
 };
 
 /** Where the save lives, for the settings screen. */

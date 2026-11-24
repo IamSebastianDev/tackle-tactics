@@ -6,11 +6,25 @@ import { recolored } from './recolor';
 
 /** Keepers and outfielders have different strips; map requests onto what exists. */
 const KEEPER_MAP: Record<string, string> = {
-    dribble: 'run', kick: 'gk_punt', pass: 'gk_throw', trap: 'gk_catch', slide_tackle: 'run',
-    fall: 'sad', tired: 'idle', header: 'gk_punch', get_up: 'idle', clap: 'gk_ready', juggle: 'idle',
+    dribble: 'run',
+    kick: 'gk_punt',
+    pass: 'gk_throw',
+    trap: 'gk_catch',
+    slide_tackle: 'run',
+    fall: 'sad',
+    tired: 'idle',
+    header: 'gk_punch',
+    get_up: 'idle',
+    clap: 'gk_ready',
+    juggle: 'idle',
 };
 const OUTFIELD_MAP: Record<string, string> = {
-    gk_ready: 'idle', gk_hold: 'idle', gk_catch: 'trap', gk_punch: 'header', gk_punt: 'kick', gk_throw: 'pass',
+    gk_ready: 'idle',
+    gk_hold: 'idle',
+    gk_catch: 'trap',
+    gk_punch: 'header',
+    gk_punt: 'kick',
+    gk_throw: 'pass',
 };
 
 export const resolveAnim = (p: Piece, anim: string) =>

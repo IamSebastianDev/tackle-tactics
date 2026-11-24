@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config';
-import { careerRng, endSeason, newCareer, playMatchday, resolveLetter, simulateScore, today, trainingDay, userClub } from '../src/meta/career';
+import {
+    careerRng,
+    endSeason,
+    newCareer,
+    playMatchday,
+    resolveLetter,
+    simulateScore,
+    today,
+    trainingDay,
+    userClub,
+} from '../src/meta/career';
 import { applyTalk, isDerby, matchEdge, prepFor } from '../src/meta/prep';
 import { rivalOf, story } from '../src/meta/story';
 
@@ -16,9 +26,15 @@ describe('stories and match prep', () => {
             for (let season = 1; season <= 2; season++) {
                 for (let guard = 0; guard < 200; guard++) {
                     const t = today(cfg, c);
-                    if (t.kind === 'seasonEnd') { endSeason(cfg, c); break; }
+                    if (t.kind === 'seasonEnd') {
+                        endSeason(cfg, c);
+                        break;
+                    }
                     const l = story(c).inbox;
-                    if (l) { kinds.add(l.kind); resolveLetter(cfg, c, (l.kind.length + c.day) % 2); }
+                    if (l) {
+                        kinds.add(l.kind);
+                        resolveLetter(cfg, c, (l.kind.length + c.day) % 2);
+                    }
                     if (t.kind === 'match') {
                         const p = prepFor(cfg, c, t.fixture);
                         p.plan = (['press', 'deep', 'direct', 'possession', 'balanced'] as const)[c.day % 5]!;

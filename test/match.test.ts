@@ -19,7 +19,12 @@ const setup = (seed: number) => {
 
 describe('engine', () => {
     it('bresenham includes both ends', () => {
-        expect(line({ x: 0, y: 0 }, { x: 3, y: 1 })).toEqual([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 1 }, { x: 3, y: 1 }]);
+        expect(line({ x: 0, y: 0 }, { x: 3, y: 1 })).toEqual([
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 2, y: 1 },
+            { x: 3, y: 1 },
+        ]);
     });
 
     it('kickoff places 22 pieces on distinct in-pitch cells with the ball held', () => {
@@ -60,11 +65,15 @@ describe('engine', () => {
         p.player.levels = { winger: 5 };
         // advance until it's this winger's turn
         let guard = 0;
-        while (m.active().id !== p.id && guard++ < 30) { m.state.phase = 'done'; m.nextTurn(); }
+        while (m.active().id !== p.id && guard++ < 30) {
+            m.state.phase = 'done';
+            m.nextTurn();
+        }
         const reach = m.reachable(p, 'sprint');
         for (const k of reach.keys()) {
             const [x, y] = k.split(',').map(Number);
-            const dx = x! - p.pos.x, dy = y! - p.pos.y;
+            const dx = x! - p.pos.x,
+                dy = y! - p.pos.y;
             expect(dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy)).toBe(true);
         }
     });

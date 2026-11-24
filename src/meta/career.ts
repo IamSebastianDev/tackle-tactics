@@ -11,7 +11,17 @@ import type { Club, Player, TeamSide } from '../types';
 import { generatePlayer } from '../world/generate';
 import { generateStadium, type Stadium } from '../world/stadium';
 import { ageOneSeason, fitFor, gainXp, money, ovr, playerValue, wage } from './player';
-import { afterMatchday, afterTraining, answerLetter, initStory, resetSeason, seasonAwards, simLines, story, type PlayerMatchLine } from './story';
+import {
+    afterMatchday,
+    afterTraining,
+    answerLetter,
+    initStory,
+    resetSeason,
+    seasonAwards,
+    simLines,
+    story,
+    type PlayerMatchLine,
+} from './story';
 
 export type Fixture = { id: string; round: number; home: string; away: string; result?: [number, number] };
 export type Division = { tier: number; clubs: string[]; fixtures: Fixture[] };
@@ -49,31 +59,92 @@ export type Career = {
     nextId: number;
 };
 
-export type Today =
-    | { kind: 'match'; round: number; fixture: Fixture; division: Division }
-    | { kind: 'training' }
-    | { kind: 'seasonEnd' };
+export type Today = { kind: 'match'; round: number; fixture: Fixture; division: Division } | { kind: 'training' } | { kind: 'seasonEnd' };
 
 // ------------------------------------------------------------------ names & kits
 
-const PLACES = ['Mirewick', 'Thornvale', 'Galehaven', 'Emberfall', 'Ravenmoor', 'Oakshaw', 'Frostcrest', 'Silverbrook', 'Ironridge', 'Hollowden',
-    'Ashford', 'Brightwater', 'Coldharbour', 'Duskmere', 'Elderglen', 'Fallowmere', 'Greywatch', 'Highcairn', 'Ivywood', 'Kingsreach',
-    'Larkspur', 'Mossbank', 'Northmarch', 'Oldcastle', 'Pinehold', 'Quarrydeep', 'Redwater', 'Stormhaven', 'Tallow Cross', 'Underhill',
-    'Valewood', 'Westerfold', 'Yarrowby', 'Ambergate', 'Blackfen', 'Cindervale', 'Deepholm', 'Eastwatch', 'Foxhollow', 'Glimmerdell',
-    'Harrowgate', 'Ironhaven', 'Juniper Bay', 'Kestrel Moor', 'Lanternfall', 'Marrowdeep', 'Nettlecombe', 'Owlbridge', 'Pyrewood', 'Ravensgate'];
-const SUFFIX = ['Wanderers', 'Rovers', 'Athletic', 'Guild', 'Company', 'Vanguard', 'Wardens', 'Fellowship', 'Rangers', 'United', 'Order', 'Blades'];
+const PLACES = [
+    'Mirewick',
+    'Thornvale',
+    'Galehaven',
+    'Emberfall',
+    'Ravenmoor',
+    'Oakshaw',
+    'Frostcrest',
+    'Silverbrook',
+    'Ironridge',
+    'Hollowden',
+    'Ashford',
+    'Brightwater',
+    'Coldharbour',
+    'Duskmere',
+    'Elderglen',
+    'Fallowmere',
+    'Greywatch',
+    'Highcairn',
+    'Ivywood',
+    'Kingsreach',
+    'Larkspur',
+    'Mossbank',
+    'Northmarch',
+    'Oldcastle',
+    'Pinehold',
+    'Quarrydeep',
+    'Redwater',
+    'Stormhaven',
+    'Tallow Cross',
+    'Underhill',
+    'Valewood',
+    'Westerfold',
+    'Yarrowby',
+    'Ambergate',
+    'Blackfen',
+    'Cindervale',
+    'Deepholm',
+    'Eastwatch',
+    'Foxhollow',
+    'Glimmerdell',
+    'Harrowgate',
+    'Ironhaven',
+    'Juniper Bay',
+    'Kestrel Moor',
+    'Lanternfall',
+    'Marrowdeep',
+    'Nettlecombe',
+    'Owlbridge',
+    'Pyrewood',
+    'Ravensgate',
+];
+const SUFFIX = [
+    'Wanderers',
+    'Rovers',
+    'Athletic',
+    'Guild',
+    'Company',
+    'Vanguard',
+    'Wardens',
+    'Fellowship',
+    'Rangers',
+    'United',
+    'Order',
+    'Blades',
+];
 
 const outfieldKit = (cfg: GameConfig, i: number) => cfg.kits.outfield[i % cfg.kits.outfield.length]!;
 const keeperKit = (cfg: GameConfig, i: number) => cfg.kits.keepers[i % cfg.kits.keepers.length]!;
 
 export const careerRng = (c: Career): Rng => createRng(c.rngState);
-const saveRng = (c: Career, rng: Rng) => { c.rngState = rng.state(); };
+const saveRng = (c: Career, rng: Rng) => {
+    c.rngState = rng.state();
+};
 
 // ------------------------------------------------------------------ creation
 
 const newPlayer = (cfg: GameConfig, rng: Rng, c: Career, cls: ClassId, tier: number, number: number, ageR?: [number, number]) => {
     const p = generatePlayer(cfg, rng, cls, '', number, `p${c.nextId++}`, {
-        levelRange: cfg.career.tierLevels[tier], talentShift: cfg.career.tierTalent[tier], age: ageR,
+        levelRange: cfg.career.tierLevels[tier],
+        talentShift: cfg.career.tierTalent[tier],
+        age: ageR,
     });
     return p;
 };
@@ -111,8 +182,21 @@ export const seasonDays = (cfg: GameConfig) => roundsPerSeason(cfg) * cfg.career
 export const newCareer = (cfg: GameConfig, seed: number, settings: CareerSettings, opts: { name?: string; kit?: string } = {}): Career => {
     const rng = createRng(seed);
     const c: Career = {
-        version: 1, seed, rngState: 0, season: 1, day: 1, userClubId: '', clubs: {}, divisions: [], market: [], news: [],
-        ledger: [], plan: {}, settings, history: [], nextId: 1,
+        version: 1,
+        seed,
+        rngState: 0,
+        season: 1,
+        day: 1,
+        userClubId: '',
+        clubs: {},
+        divisions: [],
+        market: [],
+        news: [],
+        ledger: [],
+        plan: {},
+        settings,
+        history: [],
+        nextId: 1,
     };
     const places = [...PLACES].sort(() => rng() - 0.5);
     let ci = 0;
@@ -122,9 +206,16 @@ export const newCareer = (cfg: GameConfig, seed: number, settings: CareerSetting
             const id = `c${ci}`;
             const formation = cfg.formations[Math.floor(rng() * cfg.formations.length)]!.id;
             const club: CareerClub = {
-                id, name: `${places[ci % places.length]} ${rng.pick(SUFFIX)}`, short: places[ci % places.length]!.slice(0, 3).toUpperCase(),
-                kit: outfieldKit(cfg, ci), keeperKit: keeperKit(cfg, ci), formationId: formation, squad: buildSquad(cfg, rng, c, tier),
-                tier, budget: cfg.career.startingBudget[tier]!, lineup: [],
+                id,
+                name: `${places[ci % places.length]} ${rng.pick(SUFFIX)}`,
+                short: places[ci % places.length]!.slice(0, 3).toUpperCase(),
+                kit: outfieldKit(cfg, ci),
+                keeperKit: keeperKit(cfg, ci),
+                formationId: formation,
+                squad: buildSquad(cfg, rng, c, tier),
+                tier,
+                budget: cfg.career.startingBudget[tier]!,
+                lineup: [],
             };
             club.lineup = autoLineup(cfg, club);
             c.clubs[id] = club;
@@ -137,7 +228,11 @@ export const newCareer = (cfg: GameConfig, seed: number, settings: CareerSetting
     const user = c.clubs[bottom.clubs[0]!]!;
     if (opts.name) {
         user.name = opts.name;
-        user.short = opts.name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || user.short;
+        user.short =
+            opts.name
+                .replace(/[^A-Za-z]/g, '')
+                .slice(0, 3)
+                .toUpperCase() || user.short;
     }
     if (opts.kit) user.kit = opts.kit;
     c.userClubId = user.id;
@@ -145,12 +240,17 @@ export const newCareer = (cfg: GameConfig, seed: number, settings: CareerSetting
     c.market = buildMarket(cfg, rng, c);
     c.plan = defaultPlan(cfg, user);
     initStory(c, rng);
-    c.news.push({ season: 1, day: 1, tone: 'info', text: `You take charge of ${user.name}, bottom of the pyramid. Promotion is the goal.` });
+    c.news.push({
+        season: 1,
+        day: 1,
+        tone: 'info',
+        text: `You take charge of ${user.name}, bottom of the pyramid. Promotion is the goal.`,
+    });
     saveRng(c, rng);
     return c;
 };
 
-const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')}`;
 
 // ------------------------------------------------------------------ queries
 
@@ -176,11 +276,28 @@ export const table = (d: Division): TableRow[] => {
         const [h, a] = f.result;
         const H = rows.get(f.home)!;
         const A = rows.get(f.away)!;
-        H.p++; A.p++;
-        H.gf += h; H.ga += a; A.gf += a; A.ga += h;
-        if (h > a) { H.w++; A.l++; H.pts += 3; } else if (h < a) { A.w++; H.l++; A.pts += 3; } else { H.d++; A.d++; H.pts++; A.pts++; }
+        H.p++;
+        A.p++;
+        H.gf += h;
+        H.ga += a;
+        A.gf += a;
+        A.ga += h;
+        if (h > a) {
+            H.w++;
+            A.l++;
+            H.pts += 3;
+        } else if (h < a) {
+            A.w++;
+            H.l++;
+            A.pts += 3;
+        } else {
+            H.d++;
+            A.d++;
+            H.pts++;
+            A.pts++;
+        }
     }
-    return [...rows.values()].sort((x, y) => y.pts - x.pts || (y.gf - y.ga) - (x.gf - x.ga) || y.gf - x.gf);
+    return [...rows.values()].sort((x, y) => y.pts - x.pts || y.gf - y.ga - (x.gf - x.ga) || y.gf - x.gf);
 };
 
 export const squadOvr = (cfg: GameConfig, club: CareerClub) => {
@@ -197,11 +314,16 @@ export const autoLineup = (cfg: GameConfig, club: Club): string[] => {
     const formation = cfg.formations.find((f) => f.id === club.formationId) ?? cfg.formations[0]!;
     const used = new Set<string>();
     // fill the most specialised slots (keeper) first
-    const order = formation.slots.map((s, i) => ({ s, i })).sort((a, b) => (a.s.cls === 'keeper' ? -1 : 0) - (b.s.cls === 'keeper' ? -1 : 0));
+    const order = formation.slots
+        .map((s, i) => ({ s, i }))
+        .sort((a, b) => (a.s.cls === 'keeper' ? -1 : 0) - (b.s.cls === 'keeper' ? -1 : 0));
     const out: string[] = Array.from({ length: formation.slots.length }, () => '');
     for (const { s, i } of order) {
         const best = club.squad.filter((p) => !used.has(p.id)).sort((a, b) => fitFor(cfg, b, s.cls) - fitFor(cfg, a, s.cls))[0];
-        if (best) { used.add(best.id); out[i] = best.id; }
+        if (best) {
+            used.add(best.id);
+            out[i] = best.id;
+        }
     }
     return out;
 };
@@ -210,7 +332,9 @@ export const autoLineup = (cfg: GameConfig, club: Club): string[] => {
 export const validLineup = (cfg: GameConfig, club: CareerClub) => {
     const ids = new Set(club.squad.map((p) => p.id));
     const formation = cfg.formations.find((f) => f.id === club.formationId) ?? cfg.formations[0]!;
-    const bad = club.lineup.length !== formation.slots.length || club.lineup.some((id) => !ids.has(id) || club.squad.find((p) => p.id === id)!.injury);
+    const bad =
+        club.lineup.length !== formation.slots.length ||
+        club.lineup.some((id) => !ids.has(id) || club.squad.find((p) => p.id === id)!.injury);
     if (bad) club.lineup = autoLineup(cfg, club);
     return club.lineup;
 };
@@ -234,7 +358,19 @@ export const matchClub = (cfg: GameConfig, club: CareerClub, kitOverride?: strin
         p.sprite = p.cls === 'keeper' ? club.keeperKit : `${kit}_player_${p.look ?? 1}`;
         return p;
     });
-    return { id: club.id, name: club.name, short: club.short, kit, keeperKit: club.keeperKit, formationId: club.formationId, squad, bench, tier: club.tier, morale: club.morale, style: club.style };
+    return {
+        id: club.id,
+        name: club.name,
+        short: club.short,
+        kit,
+        keeperKit: club.keeperKit,
+        formationId: club.formationId,
+        squad,
+        bench,
+        tier: club.tier,
+        morale: club.morale,
+        style: club.style,
+    };
 };
 
 /** Clubs for the engine, home first; away swaps to a different kit on a clash. */
@@ -252,7 +388,10 @@ const poisson = (rng: Rng, lambda: number) => {
     const L = Math.exp(-lambda);
     let k = 0;
     let p = 1;
-    do { k++; p *= rng(); } while (p > L);
+    do {
+        k++;
+        p *= rng();
+    } while (p > L);
     return k - 1;
 };
 
@@ -282,7 +421,9 @@ const book = (c: Career, label: string, amount: number) => {
 };
 
 export type MatchReport = {
-    score: [number, number]; knocks: Record<string, number>; played: string[];
+    score: [number, number];
+    knocks: Record<string, number>;
+    played: string[];
     /** Per-player lines from a match played on the board (both teams); absent for quick sims. */
     lines?: Record<string, PlayerMatchLine>;
 };
@@ -317,7 +458,11 @@ export const playMatchday = (cfg: GameConfig, c: Career, report: MatchReport) =>
     if (gf > ga) book(c, 'Win bonus', Math.round(fee * cfg.career.winBonus));
     else if (gf === ga) book(c, 'Draw bonus', Math.round(fee * cfg.career.drawBonus));
     book(c, 'Wages', -wageBill(cfg, u));
-    news(c, `${gf > ga ? 'Won' : gf < ga ? 'Lost' : 'Drew'} ${gf}–${ga} ${home ? 'at home to' : 'away at'} ${opp.name}.`, gf > ga ? 'good' : gf < ga ? 'bad' : 'info');
+    news(
+        c,
+        `${gf > ga ? 'Won' : gf < ga ? 'Lost' : 'Drew'} ${gf}–${ga} ${home ? 'at home to' : 'away at'} ${opp.name}.`,
+        gf > ga ? 'good' : gf < ga ? 'bad' : 'info',
+    );
 
     // match XP & injuries for the user's XI
     for (const id of report.played) {
@@ -339,7 +484,18 @@ export const playMatchday = (cfg: GameConfig, c: Career, report: MatchReport) =>
     const oppLines = report.lines ?? simLines(rng, opp, ga, gf);
     const mineOnly = Object.fromEntries(Object.entries(userLines).filter(([id]) => u.squad.some((p) => p.id === id)));
     story.recordFixture(c, Object.fromEntries(Object.entries(oppLines).filter(([id]) => opp.squad.some((p) => p.id === id))));
-    afterMatchday(cfg, c, rng, f, gf, ga, mineOnly, !!report.lines, (label, amount) => book(c, label, amount), (text, tone) => news(c, text, tone));
+    afterMatchday(
+        cfg,
+        c,
+        rng,
+        f,
+        gf,
+        ga,
+        mineOnly,
+        !!report.lines,
+        (label, amount) => book(c, label, amount),
+        (text, tone) => news(c, text, tone),
+    );
 
     // AI clubs: pay nothing we track, but their XI gains XP too
     for (const club of Object.values(c.clubs)) {
@@ -371,7 +527,10 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
                 p.injury += 2;
                 news(c, `${p.name} trained through the pain and made it worse.`, 'bad');
             }
-            if (p.injury <= 0) { delete p.injury; news(c, `${p.name} is fit again.`, 'good'); }
+            if (p.injury <= 0) {
+                delete p.injury;
+                news(c, `${p.name} is fit again.`, 'good');
+            }
         }
         if (s && intensity) {
             const injuredPenalty = p.injury ? 0.5 : 1;
@@ -381,7 +540,13 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
             if (ups) {
                 const lv = classLevel(p, s.cls);
                 if (before === 0) newClass = true;
-                news(c, before === 0 ? `${p.name} picked up a new class: ${cfg.classes[s.cls].label}!` : `${p.name} reached ${cfg.classes[s.cls].short} ${lv}.`, 'good');
+                news(
+                    c,
+                    before === 0
+                        ? `${p.name} picked up a new class: ${cfg.classes[s.cls].label}!`
+                        : `${p.name} reached ${cfg.classes[s.cls].short} ${lv}.`,
+                    'good',
+                );
             }
         }
     }
@@ -390,17 +555,33 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
         for (let i = 0; i < cfg.training.aiSessions; i++) {
             const p = rng.pick(club.squad);
             gainXp(cfg, rng, p, p.cls, cfg.training.xp.full * 0.8);
-            if (p.injury) { p.injury -= 1; if (p.injury <= 0) delete p.injury; }
+            if (p.injury) {
+                p.injury -= 1;
+                if (p.injury <= 0) delete p.injury;
+            }
         }
     }
-    afterTraining(cfg, c, rng, newClass, (label, amount) => book(c, label, amount), (text, tone) => news(c, text, tone));
+    afterTraining(
+        cfg,
+        c,
+        rng,
+        newClass,
+        (label, amount) => book(c, label, amount),
+        (text, tone) => news(c, text, tone),
+    );
     saveRng(c, rng);
     c.day++;
 };
 
 export type SeasonCeremony = {
-    season: number; tier: number; position: number; champion: boolean; promoted: boolean; relegated: boolean;
-    lines: string[]; awards: ReturnType<typeof seasonAwards>;
+    season: number;
+    tier: number;
+    position: number;
+    champion: boolean;
+    promoted: boolean;
+    relegated: boolean;
+    lines: string[];
+    awards: ReturnType<typeof seasonAwards>;
 };
 
 /** Season end: rewards, promotion/relegation, aging, retirements, new fixtures & market. */
@@ -410,12 +591,25 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
     const u = userClub(c);
     const userDiv = divisionOf(c, u.id);
     const pos = table(userDiv).findIndex((r) => r.club === u.id) + 1;
-    const ceremony: SeasonCeremony = { season: c.season, tier: u.tier, position: pos, champion: pos === 1, promoted: false, relegated: false, lines: summary, awards: seasonAwards(cfg, c) };
+    const ceremony: SeasonCeremony = {
+        season: c.season,
+        tier: u.tier,
+        position: pos,
+        champion: pos === 1,
+        promoted: false,
+        relegated: false,
+        lines: summary,
+        awards: seasonAwards(cfg, c),
+    };
     const fee = cfg.career.matchFee[u.tier]!;
     c.history.push({ season: c.season, tier: u.tier, position: pos });
-    if (pos === 1) { book(c, 'Season goal: champions', fee * cfg.career.goalTitle); summary.push(`Champions of division ${u.tier + 1}!`); }
-    else if (pos <= 4) { book(c, 'Season goal: top four', fee * cfg.career.goalTop4); summary.push(`Finished ${ordinal(pos)}: top-four bonus.`); }
-    else summary.push(`Finished ${ordinal(pos)}.`);
+    if (pos === 1) {
+        book(c, 'Season goal: champions', fee * cfg.career.goalTitle);
+        summary.push(`Champions of division ${u.tier + 1}!`);
+    } else if (pos <= 4) {
+        book(c, 'Season goal: top four', fee * cfg.career.goalTop4);
+        summary.push(`Finished ${ordinal(pos)}: top-four bonus.`);
+    } else summary.push(`Finished ${ordinal(pos)}.`);
     if (pos <= cfg.career.clubsPerDivision - cfg.career.relegate) book(c, 'Season goal: survival', fee * cfg.career.goalSurvive);
 
     // promotion / relegation between adjacent tiers
@@ -432,7 +626,8 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
         c.clubs[mv.id]!.tier = mv.to;
         if (mv.id === u.id) {
             summary.push(mv.to < from.tier ? `PROMOTED to division ${mv.to + 1}!` : `Relegated to division ${mv.to + 1}.`);
-            if (mv.to < from.tier) ceremony.promoted = true; else ceremony.relegated = true;
+            if (mv.to < from.tier) ceremony.promoted = true;
+            else ceremony.relegated = true;
         }
     }
 
@@ -451,7 +646,15 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
             const classes = Object.keys(cfg.career.squadMake) as ClassId[];
             while (club.squad.length < cfg.career.squadMin) {
                 const needKeeper = !club.squad.some((p) => p.cls === 'keeper');
-                const p = newPlayer(cfg, rng, c, needKeeper ? 'keeper' : rng.pick(classes), club.tier, Math.max(0, ...club.squad.map((q) => q.number)) + 1, [17, 19]);
+                const p = newPlayer(
+                    cfg,
+                    rng,
+                    c,
+                    needKeeper ? 'keeper' : rng.pick(classes),
+                    club.tier,
+                    Math.max(0, ...club.squad.map((q) => q.number)) + 1,
+                    [17, 19],
+                );
                 club.squad.push(p);
                 summary.push(`Academy trialist ${p.name} (${cfg.classes[p.cls].short}) joins to fill the squad.`);
             }

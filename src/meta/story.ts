@@ -15,7 +15,16 @@ import { gainXp, money, ovr, playerValue } from './player';
 
 export type SeasonLine = { apps: number; goals: number; assists: number; ratingSum: number; motm: number };
 export type Choice = { label: string; hint: string };
-export type Letter = { id: string; kind: string; from: string; title: string; body: string; choices: Choice[]; subject?: string; amount?: number };
+export type Letter = {
+    id: string;
+    kind: string;
+    from: string;
+    title: string;
+    body: string;
+    choices: Choice[];
+    subject?: string;
+    amount?: number;
+};
 export type Quest = { id: string; title: string; desc: string; target: number; progress: number; reward: number; done: boolean };
 export type Award = { season: number; title: string; who: string };
 export type PlayerMatchLine = { goals: number; assists: number; rating: number };
@@ -48,7 +57,9 @@ const storyOf = (c: Career): Story => {
     return s.story;
 };
 /** The story state of a career (created on first access, so old saves just work). */
-export const story = Object.assign(storyOf, { recordFixture: (c: Career, lines: Record<string, PlayerMatchLine>) => recordFixture(c, lines) });
+export const story = Object.assign(storyOf, {
+    recordFixture: (c: Career, lines: Record<string, PlayerMatchLine>) => recordFixture(c, lines),
+});
 
 const hashKey = (s: string) => {
     let h = 2166136261;
@@ -70,7 +81,8 @@ export const rivalOf = (c: Career): CareerClub | null => {
     return c.clubs[s.rival] ?? null;
 };
 
-export const moraleLabel = (m: number) => (m >= 85 ? 'Euphoric' : m >= 70 ? 'Buoyant' : m >= 55 ? 'Settled' : m >= 40 ? 'Uneasy' : m >= 25 ? 'Low' : 'Mutinous');
+export const moraleLabel = (m: number) =>
+    m >= 85 ? 'Euphoric' : m >= 70 ? 'Buoyant' : m >= 55 ? 'Settled' : m >= 40 ? 'Uneasy' : m >= 25 ? 'Low' : 'Mutinous';
 export const shiftMorale = (c: Career, d: number) => {
     const s = story(c);
     s.morale = Math.max(MORALE.min, Math.min(MORALE.max, Math.round(s.morale + d)));
@@ -99,15 +111,23 @@ const weighted = (rng: Rng, items: Player[], w: (p: Player) => number) => {
 export const simLines = (rng: Rng, club: CareerClub, goals: number, conceded: number): Record<string, PlayerMatchLine> => {
     const xi = club.lineup.map((id) => club.squad.find((p) => p.id === id)).filter(Boolean) as Player[];
     const out: Record<string, PlayerMatchLine> = {};
-    for (const p of xi) out[p.id] = { goals: 0, assists: 0, rating: 6.2 + (rng() - 0.5) * 1.2 + (goals > conceded ? 0.3 : goals < conceded ? -0.3 : 0) };
+    for (const p of xi)
+        out[p.id] = { goals: 0, assists: 0, rating: 6.2 + (rng() - 0.5) * 1.2 + (goals > conceded ? 0.3 : goals < conceded ? -0.3 : 0) };
     for (let g = 0; g < goals; g++) {
         const scorer = weighted(rng, xi, (p) => SCORE_W[p.cls] * (p.stats.shooting / 50));
         if (!scorer) continue;
         out[scorer.id]!.goals++;
         out[scorer.id]!.rating += 1;
         if (rng.chance(0.7)) {
-            const a = weighted(rng, xi.filter((p) => p.id !== scorer.id), (p) => ASSIST_W[p.cls] * (p.stats.passing / 50));
-            if (a) { out[a.id]!.assists++; out[a.id]!.rating += 0.6; }
+            const a = weighted(
+                rng,
+                xi.filter((p) => p.id !== scorer.id),
+                (p) => ASSIST_W[p.cls] * (p.stats.passing / 50),
+            );
+            if (a) {
+                out[a.id]!.assists++;
+                out[a.id]!.rating += 0.6;
+            }
         }
     }
     for (const p of xi) if (p.cls === 'keeper' || p.cls === 'defender') out[p.id]!.rating -= conceded * 0.2;
@@ -147,10 +167,25 @@ const QUESTS: QuestDef[] = [
 
 const newQuests = (rng: Rng): Quest[] => {
     const pool = [...QUESTS].sort(() => rng() - 0.5).slice(0, 3);
-    return pool.map((q) => ({ id: q.id, title: q.title, desc: q.desc(q.target), target: q.target, progress: 0, reward: q.reward, done: false }));
+    return pool.map((q) => ({
+        id: q.id,
+        title: q.title,
+        desc: q.desc(q.target),
+        target: q.target,
+        progress: 0,
+        reward: q.reward,
+        done: false,
+    }));
 };
 
-const bumpQuest = (cfg: GameConfig, c: Career, id: string, value: number, mode: 'set' | 'add' | 'max', reward: (amount: number, title: string) => void) => {
+const bumpQuest = (
+    cfg: GameConfig,
+    c: Career,
+    id: string,
+    value: number,
+    mode: 'set' | 'add' | 'max',
+    reward: (amount: number, title: string) => void,
+) => {
     for (const q of story(c).quests) {
         if (q.id !== id || q.done) continue;
         q.progress = mode === 'add' ? q.progress + value : mode === 'max' ? Math.max(q.progress, value) : value;
@@ -167,7 +202,9 @@ const bumpQuest = (cfg: GameConfig, c: Career, id: string, value: number, mode: 
 // ------------------------------------------------------------------ letters (the writer's room)
 
 type LetterDef = {
-    id: string; from: string; title: string;
+    id: string;
+    from: string;
+    title: string;
     when: (c: Career, u: CareerClub) => boolean;
     body: (v: Vars) => string;
     choices: (v: Vars) => Choice[];
@@ -179,35 +216,65 @@ type Ctx = { cfg: GameConfig; c: Career; u: CareerClub; rng: Rng; pay: (label: s
 
 const LETTERS: LetterDef[] = [
     {
-        id: 'bard', from: 'Odo Lutewright, Bard', title: 'An anthem for the ages',
+        id: 'bard',
+        from: 'Odo Lutewright, Bard',
+        title: 'An anthem for the ages',
         when: () => true,
-        body: (v) => `Esteemed manager! I have heard tales of ${v.club} and my lute aches to sing them. For a modest ${money(v.amount)} I shall compose an anthem so stirring that grown blacksmiths will weep into their aprons. Your players will march out to it every match. Decline, and, well, a bard must sing about *something*.`,
-        choices: (v) => [{ label: `Commission it (${money(v.amount)})`, hint: 'Morale up a lot' }, { label: 'Politely decline', hint: 'Risk a mocking ballad' }],
+        body: (v) =>
+            `Esteemed manager! I have heard tales of ${v.club} and my lute aches to sing them. For a modest ${money(v.amount)} I shall compose an anthem so stirring that grown blacksmiths will weep into their aprons. Your players will march out to it every match. Decline, and, well, a bard must sing about *something*.`,
+        choices: (v) => [
+            { label: `Commission it (${money(v.amount)})`, hint: 'Morale up a lot' },
+            { label: 'Politely decline', hint: 'Risk a mocking ballad' },
+        ],
         resolve: (ch, v, x) => {
-            if (ch === 0) { x.pay('Club anthem', -v.amount); shiftMorale(x.c, 12); return 'The new anthem echoes round the ground. The squad walks taller.'; }
+            if (ch === 0) {
+                x.pay('Club anthem', -v.amount);
+                shiftMorale(x.c, 12);
+                return 'The new anthem echoes round the ground. The squad walks taller.';
+            }
             shiftMorale(x.c, -3);
             followUp(x.c, 'ballad', 4, { amount: v.amount });
             return 'Odo has written a ballad about your "tight purse". It is catchy. Annoyingly so.';
         },
     },
     {
-        id: 'extra', from: 'Your captain', title: 'Extra sessions',
+        id: 'extra',
+        from: 'Your captain',
+        title: 'Extra sessions',
         when: (_c, u) => u.squad.some((p) => !p.injury),
-        body: (v) => `Boss, ${v.p!.name} has been staying behind after training every night, running drills until the lanterns go out. They want permission for double sessions this week. The physio is muttering about "overcooking the goose".`,
-        choices: () => [{ label: 'Let them push on', hint: 'Big XP, small injury risk' }, { label: 'Order them to rest', hint: 'Safe, slightly deflating' }],
+        body: (v) =>
+            `Boss, ${v.p!.name} has been staying behind after training every night, running drills until the lanterns go out. They want permission for double sessions this week. The physio is muttering about "overcooking the goose".`,
+        choices: () => [
+            { label: 'Let them push on', hint: 'Big XP, small injury risk' },
+            { label: 'Order them to rest', hint: 'Safe, slightly deflating' },
+        ],
         resolve: (ch, v, x) => {
             const p = v.p!;
-            if (ch === 1) { shiftMorale(x.c, -2); return `${p.name} rests, grumbling.`; }
+            if (ch === 1) {
+                shiftMorale(x.c, -2);
+                return `${p.name} rests, grumbling.`;
+            }
             const ups = gainXp(x.cfg, x.rng, p, p.cls, 90);
-            if (x.rng.chance(0.22)) { p.injury = Math.max(p.injury ?? 0, 3); return `${p.name} overdid it: strained something, out 3 days.${ups ? ' But they levelled up first!' : ''}`; }
-            return ups ? `${p.name}'s extra work pays off: they reach ${x.cfg.classes[p.cls].short} ${classLevel(p, p.cls)}!` : `${p.name} banks a heap of experience.`;
+            if (x.rng.chance(0.22)) {
+                p.injury = Math.max(p.injury ?? 0, 3);
+                return `${p.name} overdid it: strained something, out 3 days.${ups ? ' But they levelled up first!' : ''}`;
+            }
+            return ups
+                ? `${p.name}'s extra work pays off: they reach ${x.cfg.classes[p.cls].short} ${classLevel(p, p.cls)}!`
+                : `${p.name} banks a heap of experience.`;
         },
     },
     {
-        id: 'trialist', from: 'A muddy stranger', title: 'Knock at the gate',
+        id: 'trialist',
+        from: 'A muddy stranger',
+        title: 'Knock at the gate',
         when: (_c, u) => u.squad.length < 20,
-        body: (v) => `A youngster turned up at the training ground at dawn, boots tied round their neck, and asked for a trial. Name's ${v.p!.name}, ${v.p!.age} years old, plays ${v.p!.cls}. The lads say they've got something. Wages would be modest.`,
-        choices: (v) => [{ label: 'Sign them on', hint: `Free, ~${money(v.amount)}/matchday` }, { label: 'Send them home', hint: 'Nothing happens' }],
+        body: (v) =>
+            `A youngster turned up at the training ground at dawn, boots tied round their neck, and asked for a trial. Name's ${v.p!.name}, ${v.p!.age} years old, plays ${v.p!.cls}. The lads say they've got something. Wages would be modest.`,
+        choices: (v) => [
+            { label: 'Sign them on', hint: `Free, ~${money(v.amount)}/matchday` },
+            { label: 'Send them home', hint: 'Nothing happens' },
+        ],
         resolve: (ch, v, x) => {
             if (ch === 1) return `${v.p!.name} trudges off into the rain.`;
             const p = v.p!;
@@ -219,45 +286,83 @@ const LETTERS: LetterDef[] = [
         },
     },
     {
-        id: 'taunt', from: 'The Gazette', title: 'Rival mouths off',
+        id: 'taunt',
+        from: 'The Gazette',
+        title: 'Rival mouths off',
         when: () => true,
-        body: (v) => `The manager of ${v.rival} has told the Gazette your squad "couldn't pass a ball to each other in an empty corridor". The paper wants your response for tomorrow's edition.`,
-        choices: () => [{ label: 'Fire back publicly', hint: 'Fires the squad up… usually' }, { label: 'Rise above it', hint: 'Stay calm' }],
+        body: (v) =>
+            `The manager of ${v.rival} has told the Gazette your squad "couldn't pass a ball to each other in an empty corridor". The paper wants your response for tomorrow's edition.`,
+        choices: () => [
+            { label: 'Fire back publicly', hint: 'Fires the squad up… usually' },
+            { label: 'Rise above it', hint: 'Stay calm' },
+        ],
         resolve: (ch, v, x) => {
-            if (ch === 1) { shiftMorale(x.c, 1); return 'You say nothing. Dignified. Slightly boring.'; }
-            if (x.rng.chance(0.7)) { shiftMorale(x.c, 9); return `"See you on the pitch." The squad pins the article to the dressing-room wall.`; }
-            shiftMorale(x.c, -6); return `Your reply is misquoted as a love letter to ${v.rival}. The dressing room is merciless.`;
+            if (ch === 1) {
+                shiftMorale(x.c, 1);
+                return 'You say nothing. Dignified. Slightly boring.';
+            }
+            if (x.rng.chance(0.7)) {
+                shiftMorale(x.c, 9);
+                return `"See you on the pitch." The squad pins the article to the dressing-room wall.`;
+            }
+            shiftMorale(x.c, -6);
+            return `Your reply is misquoted as a love letter to ${v.rival}. The dressing room is merciless.`;
         },
     },
     {
-        id: 'sponsor', from: 'The Gilded Goose Alehouse', title: 'A sponsorship offer',
+        id: 'sponsor',
+        from: 'The Gilded Goose Alehouse',
+        title: 'A sponsorship offer',
         when: () => true,
-        body: (v) => `Greetings! The Gilded Goose would be honoured to put its name across your shirts for the rest of the season. We offer ${money(v.amount)}, paid today. Our logo is a goose. It is gold. It is large.`,
-        choices: (v) => [{ label: `Take the gold (${money(v.amount)})`, hint: 'Cash now, fans grumble' }, { label: 'Keep the shirts clean', hint: 'Fans approve' }],
+        body: (v) =>
+            `Greetings! The Gilded Goose would be honoured to put its name across your shirts for the rest of the season. We offer ${money(v.amount)}, paid today. Our logo is a goose. It is gold. It is large.`,
+        choices: (v) => [
+            { label: `Take the gold (${money(v.amount)})`, hint: 'Cash now, fans grumble' },
+            { label: 'Keep the shirts clean', hint: 'Fans approve' },
+        ],
         resolve: (ch, v, x) => {
             if (ch === 0) {
-                x.pay('Shirt sponsor: Gilded Goose', v.amount); shiftMorale(x.c, -4);
-                followUp(x.c, 'goose', 6, { amount: Math.round(v.amount * 0.3 / 1000) * 1000 });
+                x.pay('Shirt sponsor: Gilded Goose', v.amount);
+                shiftMorale(x.c, -4);
+                followUp(x.c, 'goose', 6, { amount: Math.round((v.amount * 0.3) / 1000) * 1000 });
                 return 'The goose is on the shirts. It is very large indeed.';
             }
-            shiftMorale(x.c, 3); return 'The supporters club sends a thank-you pie.';
+            shiftMorale(x.c, 3);
+            return 'The supporters club sends a thank-you pie.';
         },
     },
     {
-        id: 'homesick', from: 'Club physio', title: 'A homesick player',
+        id: 'homesick',
+        from: 'Club physio',
+        title: 'A homesick player',
         when: (_c, u) => u.squad.length > 0,
-        body: (v) => `${v.p!.name} hasn't been themselves. Missing home, by all accounts — barely touched their stew at supper. A couple of days' leave might do wonders, but they'd miss training and possibly a match.`,
-        choices: () => [{ label: 'Grant leave', hint: 'Out 3 days, morale up' }, { label: 'Keep them here', hint: 'Morale down' }],
+        body: (v) =>
+            `${v.p!.name} hasn't been themselves. Missing home, by all accounts — barely touched their stew at supper. A couple of days' leave might do wonders, but they'd miss training and possibly a match.`,
+        choices: () => [
+            { label: 'Grant leave', hint: 'Out 3 days, morale up' },
+            { label: 'Keep them here', hint: 'Morale down' },
+        ],
         resolve: (ch, v, x) => {
-            if (ch === 0) { v.p!.injury = Math.max(v.p!.injury ?? 0, 3); shiftMorale(x.c, 6); return `${v.p!.name} heads home for a few days. The squad appreciates the gesture.`; }
-            shiftMorale(x.c, -6); return `${v.p!.name} stays, sulking. The mood in the camp dips.`;
+            if (ch === 0) {
+                v.p!.injury = Math.max(v.p!.injury ?? 0, 3);
+                shiftMorale(x.c, 6);
+                return `${v.p!.name} heads home for a few days. The squad appreciates the gesture.`;
+            }
+            shiftMorale(x.c, -6);
+            return `${v.p!.name} stays, sulking. The mood in the camp dips.`;
         },
     },
     {
-        id: 'scout', from: 'Mags, your scout', title: 'A whisper from the road',
+        id: 'scout',
+        from: 'Mags, your scout',
+        title: 'A whisper from the road',
         when: () => true,
-        body: (v) => `Gaffer — I've seen something special. A kid playing in a village up past the moors, raw as anything but the potential is ridiculous. For ${money(v.amount)} in travel and bribes I can get their name on the transfer list where only we know to look.`,
-        choices: (v) => [{ label: `Fund the trip (${money(v.amount)})`, hint: 'Adds a high-potential youngster to the market' }, { label: 'Not now, Mags', hint: 'Nothing happens' }],
+        body: (v) =>
+            `Gaffer — I've seen something special. A kid playing in a village up past the moors, raw as anything but the potential is ridiculous. For ${money(v.amount)} in travel and bribes I can get their name on the transfer list where only we know to look.`,
+        choices: (v) => [
+            { label: `Fund the trip (${money(v.amount)})`, hint: 'Adds a high-potential youngster to the market' },
+            { label: 'Not now, Mags', hint: 'Nothing happens' },
+        ],
         resolve: (ch, v, x) => {
             if (ch === 1) return 'Mags shrugs and goes back to her pipe.';
             x.pay("Scout's expedition", -v.amount);
@@ -269,26 +374,48 @@ const LETTERS: LetterDef[] = [
         },
     },
     {
-        id: 'feast', from: 'The town council', title: 'Feast of the Harvest Moon',
+        id: 'feast',
+        from: 'The town council',
+        title: 'Feast of the Harvest Moon',
         when: () => true,
-        body: () => 'The whole town is feasting tonight in honour of the Harvest Moon, and the council has invited your squad as guests of honour. There will be roast boar. There will be mead. There will be, inevitably, dancing.',
-        choices: () => [{ label: 'Let them celebrate', hint: 'Morale soars, someone may overdo it' }, { label: 'Early night, lads', hint: 'Safe and sober' }],
+        body: () =>
+            'The whole town is feasting tonight in honour of the Harvest Moon, and the council has invited your squad as guests of honour. There will be roast boar. There will be mead. There will be, inevitably, dancing.',
+        choices: () => [
+            { label: 'Let them celebrate', hint: 'Morale soars, someone may overdo it' },
+            { label: 'Early night, lads', hint: 'Safe and sober' },
+        ],
         resolve: (ch, _v, x) => {
-            if (ch === 1) { shiftMorale(x.c, -2); return 'The squad watches the fireworks from the dormitory window.'; }
+            if (ch === 1) {
+                shiftMorale(x.c, -2);
+                return 'The squad watches the fireworks from the dormitory window.';
+            }
             shiftMorale(x.c, 12);
             const fit = x.u.squad.filter((p) => !p.injury);
-            if (fit.length && x.rng.chance(0.3)) { const p = x.rng.pick(fit); p.injury = 2; return `A legendary night. ${p.name} fell off a table during the jig and is out for 2 days.`; }
+            if (fit.length && x.rng.chance(0.3)) {
+                const p = x.rng.pick(fit);
+                p.injury = 2;
+                return `A legendary night. ${p.name} fell off a table during the jig and is out for 2 days.`;
+            }
             return 'A legendary night. Nobody fell off anything. Mostly.';
         },
     },
     {
-        id: 'bid', from: 'A rival club', title: 'An offer for your player',
+        id: 'bid',
+        from: 'A rival club',
+        title: 'An offer for your player',
         when: (_c, u) => u.squad.length > 14,
-        body: (v) => `${v.rival} would like to buy ${v.p!.name}, and they're offering ${money(v.amount)} — well above what we'd get on the open market. Their agent is waiting in the corridor, smelling faintly of turnips.`,
-        choices: (v) => [{ label: `Sell (${money(v.amount)})`, hint: 'Lose the player, gain the money' }, { label: 'Not for sale', hint: 'The squad notices your loyalty' }],
+        body: (v) =>
+            `${v.rival} would like to buy ${v.p!.name}, and they're offering ${money(v.amount)} — well above what we'd get on the open market. Their agent is waiting in the corridor, smelling faintly of turnips.`,
+        choices: (v) => [
+            { label: `Sell (${money(v.amount)})`, hint: 'Lose the player, gain the money' },
+            { label: 'Not for sale', hint: 'The squad notices your loyalty' },
+        ],
         resolve: (ch, v, x) => {
             const p = v.p!;
-            if (ch === 1) { shiftMorale(x.c, 4); return `You send the agent packing. ${p.name} buys the squad a round.`; }
+            if (ch === 1) {
+                shiftMorale(x.c, 4);
+                return `You send the agent packing. ${p.name} buys the squad a round.`;
+            }
             x.u.squad = x.u.squad.filter((q) => q.id !== p.id);
             x.u.lineup = x.u.lineup.filter((id) => id !== p.id);
             delete x.c.plan[p.id];
@@ -297,51 +424,92 @@ const LETTERS: LetterDef[] = [
         },
     },
     {
-        id: 'healer', from: 'Hedda the herbalist', title: 'Poultices and promises',
+        id: 'healer',
+        from: 'Hedda the herbalist',
+        title: 'Poultices and promises',
         when: (_c, u) => u.squad.some((p) => (p.injury ?? 0) >= 3),
-        body: (v) => `I hear ${v.p!.name} is laid up. My poultices — moss, honey, and one ingredient I shan't name — have mended broken knights. For ${money(v.amount)} they'll be running by morning. Probably.`,
-        choices: (v) => [{ label: `Pay Hedda (${money(v.amount)})`, hint: 'Probably heals the injury' }, { label: 'Trust the physio', hint: 'Let nature take its course' }],
+        body: (v) =>
+            `I hear ${v.p!.name} is laid up. My poultices — moss, honey, and one ingredient I shan't name — have mended broken knights. For ${money(v.amount)} they'll be running by morning. Probably.`,
+        choices: (v) => [
+            { label: `Pay Hedda (${money(v.amount)})`, hint: 'Probably heals the injury' },
+            { label: 'Trust the physio', hint: 'Let nature take its course' },
+        ],
         resolve: (ch, v, x) => {
             if (ch === 1) return 'The physio nods approvingly. Hedda does not.';
             x.pay("Hedda's poultice", -v.amount);
-            if (x.rng.chance(0.8)) { delete v.p!.injury; return `${v.p!.name} is up and running by morning. Nobody asks about the ingredient.`; }
+            if (x.rng.chance(0.8)) {
+                delete v.p!.injury;
+                return `${v.p!.name} is up and running by morning. Nobody asks about the ingredient.`;
+            }
             return `${v.p!.name} now smells of moss. Still injured.`;
         },
     },
     // ---- situational letters
     {
-        id: 'minutes', from: 'A frustrated player', title: 'A word about minutes',
+        id: 'minutes',
+        from: 'A frustrated player',
+        title: 'A word about minutes',
         when: (c) => Object.values(story(c).benched ?? {}).some((n) => n >= 3) && !story(c).promise,
-        body: (v) => `Gaffer, it's ${v.p!.name}. I've sat on that bench for ${v.amount} matches now. I train hard, I'm ready, and I didn't come here to keep a seat warm. Give me a chance.`,
-        choices: () => [{ label: 'Promise a start next match', hint: 'Break it and the dressing room will know' }, { label: 'Tell them to earn it', hint: 'Morale dips a little' }],
+        body: (v) =>
+            `Gaffer, it's ${v.p!.name}. I've sat on that bench for ${v.amount} matches now. I train hard, I'm ready, and I didn't come here to keep a seat warm. Give me a chance.`,
+        choices: () => [
+            { label: 'Promise a start next match', hint: 'Break it and the dressing room will know' },
+            { label: 'Tell them to earn it', hint: 'Morale dips a little' },
+        ],
         resolve: (ch, v, x) => {
             const p = v.p!;
             (story(x.c).benched ??= {})[p.id] = 0;
-            if (ch === 0) { story(x.c).promise = { id: p.id, name: p.name }; return `You promise ${p.name} a start in the next match. Better pick them.`; }
+            if (ch === 0) {
+                story(x.c).promise = { id: p.id, name: p.name };
+                return `You promise ${p.name} a start in the next match. Better pick them.`;
+            }
             shiftMorale(x.c, -3);
             return `${p.name} nods, jaw tight. "I'll earn it, then."`;
         },
     },
     {
-        id: 'curse', from: 'Old Mother Grimble', title: 'A curse on your house?',
+        id: 'curse',
+        from: 'Old Mother Grimble',
+        title: 'A curse on your house?',
         when: (c) => (story(c).lossRun ?? 0) >= 3,
-        body: (v) => `Three defeats on the bounce? That'll be the curse, dearie. Somebody buried a hexed boot under your centre spot — I can smell it from here. For ${money(v.amount)} I'll dig it up and say the proper words.`,
-        choices: (v) => [{ label: `Pay her (${money(v.amount)})`, hint: 'The squad believes it, even if you don\'t' }, { label: 'We make our own luck', hint: 'Shrug it off' }],
+        body: (v) =>
+            `Three defeats on the bounce? That'll be the curse, dearie. Somebody buried a hexed boot under your centre spot — I can smell it from here. For ${money(v.amount)} I'll dig it up and say the proper words.`,
+        choices: (v) => [
+            { label: `Pay her (${money(v.amount)})`, hint: "The squad believes it, even if you don't" },
+            { label: 'We make our own luck', hint: 'Shrug it off' },
+        ],
         resolve: (ch, v, x) => {
-            if (ch === 0) { x.pay('Curse removal', -v.amount); shiftMorale(x.c, 9); return 'Grimble digs up a rotten old boot. The squad cheers. Nobody asks how it got there.'; }
-            if (x.rng.chance(0.5)) { shiftMorale(x.c, -3); return 'The players keep glancing at the centre spot.'; }
+            if (ch === 0) {
+                x.pay('Curse removal', -v.amount);
+                shiftMorale(x.c, 9);
+                return 'Grimble digs up a rotten old boot. The squad cheers. Nobody asks how it got there.';
+            }
+            if (x.rng.chance(0.5)) {
+                shiftMorale(x.c, -3);
+                return 'The players keep glancing at the centre spot.';
+            }
             return 'You laugh it off. Somehow that helps.';
         },
     },
     {
-        id: 'clearAir', from: 'Your captain', title: 'Clear the air',
+        id: 'clearAir',
+        from: 'Your captain',
+        title: 'Clear the air',
         when: (c) => story(c).morale < 36,
-        body: (v) => `Boss, ${v.p!.name} here. The lads are low and some are whispering in corners. I think we need a proper sit-down: everyone says their piece, no grudges after. Or we just run it off on the training pitch. Your call.`,
-        choices: () => [{ label: 'Hold the meeting', hint: 'Usually a big lift; can get heated' }, { label: 'Run it off', hint: 'Small XP for everyone, mood stays low' }],
+        body: (v) =>
+            `Boss, ${v.p!.name} here. The lads are low and some are whispering in corners. I think we need a proper sit-down: everyone says their piece, no grudges after. Or we just run it off on the training pitch. Your call.`,
+        choices: () => [
+            { label: 'Hold the meeting', hint: 'Usually a big lift; can get heated' },
+            { label: 'Run it off', hint: 'Small XP for everyone, mood stays low' },
+        ],
         resolve: (ch, _v, x) => {
             if (ch === 0) {
-                if (x.rng.chance(0.7)) { shiftMorale(x.c, 13); return 'Words were said, hands were shaken. The dressing room feels lighter.'; }
-                shiftMorale(x.c, 3); return 'It got heated. A chair was thrown. But something shifted, a little.';
+                if (x.rng.chance(0.7)) {
+                    shiftMorale(x.c, 13);
+                    return 'Words were said, hands were shaken. The dressing room feels lighter.';
+                }
+                shiftMorale(x.c, 3);
+                return 'It got heated. A chair was thrown. But something shifted, a little.';
             }
             for (const p of x.u.squad.filter((q) => !q.injury)) gainXp(x.cfg, x.rng, p, p.cls, 20);
             shiftMorale(x.c, -1);
@@ -349,13 +517,23 @@ const LETTERS: LetterDef[] = [
         },
     },
     {
-        id: 'veteran', from: 'Your oldest player', title: 'One more season?',
+        id: 'veteran',
+        from: 'Your oldest player',
+        title: 'One more season?',
         when: (_c, u) => u.squad.some((p) => p.age >= 32),
-        body: (v) => `It's ${v.p!.name}. I'm ${v.p!.age} now and my knees sound like a cart going over cobbles. I've been thinking this might be my last year... unless you still need me out there.`,
-        choices: () => [{ label: 'We need you', hint: 'Morale up; they age a little more gracefully' }, { label: 'Ask them to coach the kids', hint: 'Young players gain XP now' }],
+        body: (v) =>
+            `It's ${v.p!.name}. I'm ${v.p!.age} now and my knees sound like a cart going over cobbles. I've been thinking this might be my last year... unless you still need me out there.`,
+        choices: () => [
+            { label: 'We need you', hint: 'Morale up; they age a little more gracefully' },
+            { label: 'Ask them to coach the kids', hint: 'Young players gain XP now' },
+        ],
         resolve: (ch, v, x) => {
             const p = v.p!;
-            if (ch === 0) { shiftMorale(x.c, 5); p.peakAge += 1; return `${p.name} grins. "One more, then." The squad loves it.`; }
+            if (ch === 0) {
+                shiftMorale(x.c, 5);
+                p.peakAge += 1;
+                return `${p.name} grins. "One more, then." The squad loves it.`;
+            }
             const kids = x.u.squad.filter((q) => q.age <= 21 && q.id !== p.id);
             for (const q of kids) gainXp(x.cfg, x.rng, q, q.cls, 45);
             return `${p.name} takes the youngsters under their wing. ${kids.length} of them are already sharper.`;
@@ -363,33 +541,65 @@ const LETTERS: LetterDef[] = [
     },
     // ---- follow-ups (only ever arrive as consequences)
     {
-        id: 'ballad', from: 'Odo Lutewright, Bard', title: 'The Ballad of the Tight Purse',
+        id: 'ballad',
+        from: 'Odo Lutewright, Bard',
+        title: 'The Ballad of the Tight Purse',
         when: () => false,
-        body: (v) => `Manager! My little ballad about your purse has become a tavern favourite from here to the coast. Children sing it. Goats, I'm told, hum it. I could write a second verse — a kinder one — for, say, ${money(v.amount)}.`,
-        choices: (v) => [{ label: `Buy the kinder verse (${money(v.amount)})`, hint: 'Morale up' }, { label: 'Let them sing', hint: 'Morale down' }],
+        body: (v) =>
+            `Manager! My little ballad about your purse has become a tavern favourite from here to the coast. Children sing it. Goats, I'm told, hum it. I could write a second verse — a kinder one — for, say, ${money(v.amount)}.`,
+        choices: (v) => [
+            { label: `Buy the kinder verse (${money(v.amount)})`, hint: 'Morale up' },
+            { label: 'Let them sing', hint: 'Morale down' },
+        ],
         resolve: (ch, v, x) => {
-            if (ch === 0) { x.pay('A kinder verse', -v.amount); shiftMorale(x.c, 7); return 'Verse two calls you "wise beyond your purse". The squad hums it on the bus.'; }
-            shiftMorale(x.c, -4); return 'The away fans have learned the ballad. All of it.';
+            if (ch === 0) {
+                x.pay('A kinder verse', -v.amount);
+                shiftMorale(x.c, 7);
+                return 'Verse two calls you "wise beyond your purse". The squad hums it on the bus.';
+            }
+            shiftMorale(x.c, -4);
+            return 'The away fans have learned the ballad. All of it.';
         },
     },
     {
-        id: 'goose', from: 'The Gilded Goose Alehouse', title: 'The goose wants a word',
+        id: 'goose',
+        from: 'The Gilded Goose Alehouse',
+        title: 'The goose wants a word',
         when: () => false,
-        body: () => 'Per section nine of our sponsorship (the small print, beneath the goose), your squad shall attend the annual Goose Festival. There will be geese. Your players will be asked to wear beaks. Decline, and we keep a slice of the fee.',
-        choices: (v) => [{ label: 'Beaks on', hint: 'Keep the money, lose some dignity' }, { label: 'Absolutely not', hint: `Pay back ${money(v.amount)}, squad approves` }],
+        body: () =>
+            'Per section nine of our sponsorship (the small print, beneath the goose), your squad shall attend the annual Goose Festival. There will be geese. Your players will be asked to wear beaks. Decline, and we keep a slice of the fee.',
+        choices: (v) => [
+            { label: 'Beaks on', hint: 'Keep the money, lose some dignity' },
+            { label: 'Absolutely not', hint: `Pay back ${money(v.amount)}, squad approves` },
+        ],
         resolve: (ch, v, x) => {
-            if (ch === 0) { shiftMorale(x.c, -4); return 'Photographs of your striker in a beak are now on every tavern wall.'; }
-            x.pay('Goose Festival penalty', -v.amount); shiftMorale(x.c, 5); return 'You refuse the beaks. The squad would follow you anywhere. Except a Goose Festival.';
+            if (ch === 0) {
+                shiftMorale(x.c, -4);
+                return 'Photographs of your striker in a beak are now on every tavern wall.';
+            }
+            x.pay('Goose Festival penalty', -v.amount);
+            shiftMorale(x.c, 5);
+            return 'You refuse the beaks. The squad would follow you anywhere. Except a Goose Festival.';
         },
     },
     {
-        id: 'trialistBuzz', from: 'Mags, your scout', title: 'The trialist is turning heads',
+        id: 'trialistBuzz',
+        from: 'Mags, your scout',
+        title: 'The trialist is turning heads',
         when: () => false,
-        body: (v) => `${v.p!.name} — the muddy kid from the gate — has been tearing up training. Two of the senior lads asked me where on earth you found them. Give them a run and I reckon they'll grow fast. Or let them simmer.`,
-        choices: () => [{ label: 'Fast-track them', hint: 'Big XP now' }, { label: 'Let them simmer', hint: 'Higher growth for the rest of their career' }],
+        body: (v) =>
+            `${v.p!.name} — the muddy kid from the gate — has been tearing up training. Two of the senior lads asked me where on earth you found them. Give them a run and I reckon they'll grow fast. Or let them simmer.`,
+        choices: () => [
+            { label: 'Fast-track them', hint: 'Big XP now' },
+            { label: 'Let them simmer', hint: 'Higher growth for the rest of their career' },
+        ],
         resolve: (ch, v, x) => {
             const p = v.p!;
-            if (ch === 0) { const ups = gainXp(x.cfg, x.rng, p, p.cls, 120); shiftMorale(x.c, 2); return ups ? `${p.name} levels up already. What a find.` : `${p.name} soaks it all up.`; }
+            if (ch === 0) {
+                const ups = gainXp(x.cfg, x.rng, p, p.cls, 120);
+                shiftMorale(x.c, 2);
+                return ups ? `${p.name} levels up already. What a find.` : `${p.name} soaks it all up.`;
+            }
             p.growth = +(p.growth + 0.35).toFixed(2);
             return `${p.name} will be given time. Mags reckons patience will pay.`;
         },
@@ -422,23 +632,47 @@ export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng) => {
     let p: Player | null = null;
     let amount = 0;
     switch (def.id) {
-        case 'bard': amount = Math.round(fee * 0.6 / 1000) * 1000; break;
-        case 'sponsor': amount = Math.round(fee * 2.2 / 1000) * 1000; break;
-        case 'scout': amount = Math.round(fee * 0.8 / 1000) * 1000; break;
-        case 'healer': p = rng.pick(u.squad.filter((q) => (q.injury ?? 0) >= 3)); amount = Math.round(fee * 0.5 / 1000) * 1000; break;
-        case 'extra': p = rng.pick(u.squad.filter((q) => !q.injury)); break;
-        case 'homesick': p = rng.pick(u.squad); break;
+        case 'bard':
+            amount = Math.round((fee * 0.6) / 1000) * 1000;
+            break;
+        case 'sponsor':
+            amount = Math.round((fee * 2.2) / 1000) * 1000;
+            break;
+        case 'scout':
+            amount = Math.round((fee * 0.8) / 1000) * 1000;
+            break;
+        case 'healer':
+            p = rng.pick(u.squad.filter((q) => (q.injury ?? 0) >= 3));
+            amount = Math.round((fee * 0.5) / 1000) * 1000;
+            break;
+        case 'extra':
+            p = rng.pick(u.squad.filter((q) => !q.injury));
+            break;
+        case 'homesick':
+            p = rng.pick(u.squad);
+            break;
         case 'bid': {
             const young = [...u.squad].sort((a, b) => playerValue(cfg, b) - playerValue(cfg, a)).slice(0, 4);
             p = rng.pick(young);
             amount = Math.round((playerValue(cfg, p) * 1.6) / 1000) * 1000;
             break;
         }
-        case 'ballad': case 'goose': amount = due?.amount ?? Math.round(fee * 0.4 / 1000) * 1000; break;
-        case 'trialistBuzz': p = u.squad.find((q) => q.id === due?.subject) ?? null; break;
-        case 'curse': amount = Math.round(fee * 0.4 / 1000) * 1000; break;
-        case 'clearAir': p = [...u.squad].sort((a, b) => b.level - a.level)[0]!; break;
-        case 'veteran': p = [...u.squad].sort((a, b) => b.age - a.age)[0]!; break;
+        case 'ballad':
+        case 'goose':
+            amount = due?.amount ?? Math.round((fee * 0.4) / 1000) * 1000;
+            break;
+        case 'trialistBuzz':
+            p = u.squad.find((q) => q.id === due?.subject) ?? null;
+            break;
+        case 'curse':
+            amount = Math.round((fee * 0.4) / 1000) * 1000;
+            break;
+        case 'clearAir':
+            p = [...u.squad].sort((a, b) => b.level - a.level)[0]!;
+            break;
+        case 'veteran':
+            p = [...u.squad].sort((a, b) => b.age - a.age)[0]!;
+            break;
         case 'minutes': {
             const [id, n] = Object.entries(s.benched ?? {}).sort((a, b) => b[1] - a[1])[0]!;
             p = u.squad.find((q) => q.id === id) ?? null;
@@ -448,13 +682,26 @@ export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng) => {
         }
         case 'trialist': {
             const classes: ClassId[] = ['defender', 'midfielder', 'winger', 'striker'];
-            p = generatePlayer(cfg, rng, rng.pick(classes), '', 0, `p${c.nextId++}`, { levelRange: cfg.career.tierLevels[u.tier], talentShift: cfg.career.tierTalent[u.tier], age: [17, 20] });
+            p = generatePlayer(cfg, rng, rng.pick(classes), '', 0, `p${c.nextId++}`, {
+                levelRange: cfg.career.tierLevels[u.tier],
+                talentShift: cfg.career.tierTalent[u.tier],
+                age: [17, 20],
+            });
             amount = 600;
             break;
         }
     }
     const v: Vars = { p, club: u.name, amount, fee, rival };
-    s.inbox = { id: `${def.id}-${c.season}-${c.day}`, kind: def.id, from: def.from, title: def.title, body: def.body(v), choices: def.choices(v), subject: p?.id, amount };
+    s.inbox = {
+        id: `${def.id}-${c.season}-${c.day}`,
+        kind: def.id,
+        from: def.from,
+        title: def.title,
+        body: def.body(v),
+        choices: def.choices(v),
+        subject: p?.id,
+        amount,
+    };
     // stash the generated trialist so the choice can sign them
     if (def.id === 'trialist' && p) (s.inbox as Letter & { player?: Player }).player = p;
     (s.inbox as Letter & { rival?: string }).rival = rival;
@@ -462,7 +709,13 @@ export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng) => {
 };
 
 /** Apply the user's answer to the pending letter; returns the outcome line. */
-export const answerLetter = (cfg: GameConfig, c: Career, rng: Rng, choice: number, pay: (label: string, amount: number) => void): string => {
+export const answerLetter = (
+    cfg: GameConfig,
+    c: Career,
+    rng: Rng,
+    choice: number,
+    pay: (label: string, amount: number) => void,
+): string => {
     const s = story(c);
     const letter = s.inbox as (Letter & { player?: Player; rival?: string }) | null;
     if (!letter) return '';
@@ -482,7 +735,18 @@ export const initStory = (c: Career, rng: Rng) => {
 };
 
 /** After every matchday: morale, streaks, quests, season stats. */
-export const afterMatchday = (cfg: GameConfig, c: Career, rng: Rng, f: Fixture, gf: number, ga: number, lines: Record<string, PlayerMatchLine>, played: boolean, pay: (label: string, amount: number) => void, news: (t: string, tone: 'good' | 'bad' | 'info') => void) => {
+export const afterMatchday = (
+    cfg: GameConfig,
+    c: Career,
+    rng: Rng,
+    f: Fixture,
+    gf: number,
+    ga: number,
+    lines: Record<string, PlayerMatchLine>,
+    played: boolean,
+    pay: (label: string, amount: number) => void,
+    news: (t: string, tone: 'good' | 'bad' | 'info') => void,
+) => {
     const s = story(c);
     rivalOf(c);
     shiftMorale(c, gf > ga ? MORALE.win : gf === ga ? MORALE.draw : MORALE.loss);
@@ -492,18 +756,30 @@ export const afterMatchday = (cfg: GameConfig, c: Career, rng: Rng, f: Fixture, 
     if (s.rival && (f.home === s.rival || f.away === s.rival)) {
         const rival = c.clubs[s.rival]!;
         const sw = cfg.career.prep.derbySwing;
-        if (gf > ga) { shiftMorale(c, sw); news(`Derby win over ${rival.name}! The town will be talking about it for weeks.`, 'good'); }
-        else if (gf < ga) { shiftMorale(c, -sw); news(`Derby defeat to ${rival.name}. Nobody in town will let you forget it.`, 'bad'); }
-        else news(`Honours even in the derby with ${rival.name}.`, 'info');
+        if (gf > ga) {
+            shiftMorale(c, sw);
+            news(`Derby win over ${rival.name}! The town will be talking about it for weeks.`, 'good');
+        } else if (gf < ga) {
+            shiftMorale(c, -sw);
+            news(`Derby defeat to ${rival.name}. Nobody in town will let you forget it.`, 'bad');
+        } else news(`Honours even in the derby with ${rival.name}.`, 'info');
     }
     // promises and playing time
     if (s.promise) {
         const kept = u0.lineup.includes(s.promise.id);
         shiftMorale(c, kept ? 4 : -10);
-        news(kept ? `You kept your word: ${s.promise.name} started.` : `You promised ${s.promise.name} a start and didn't deliver. The dressing room noticed.`, kept ? 'good' : 'bad');
+        news(
+            kept
+                ? `You kept your word: ${s.promise.name} started.`
+                : `You promised ${s.promise.name} a start and didn't deliver. The dressing room noticed.`,
+            kept ? 'good' : 'bad',
+        );
         delete s.promise;
     }
-    const starters = u0.lineup.map((id) => u0.squad.find((p) => p.id === id)).filter(Boolean).map((p) => ovr(cfg, p!));
+    const starters = u0.lineup
+        .map((id) => u0.squad.find((p) => p.id === id))
+        .filter(Boolean)
+        .map((p) => ovr(cfg, p!));
     const bar = starters.length ? [...starters].sort((a, b) => a - b)[Math.floor(starters.length / 3)]! : 0;
     const benched = (s.benched ??= {});
     for (const p of u0.squad) {
@@ -511,10 +787,13 @@ export const afterMatchday = (cfg: GameConfig, c: Career, rng: Rng, f: Fixture, 
         benched[p.id] = eligible && !u0.lineup.includes(p.id) ? (benched[p.id] ?? 0) + 1 : 0;
     }
     s.streak = gf > ga ? Math.max(1, s.streak + 1) : gf === ga ? (s.streak > 0 ? 0 : s.streak - 1) : 0;
-    const unbeaten = (c as Career & { unbeatenRun?: number });
+    const unbeaten = c as Career & { unbeatenRun?: number };
     unbeaten.unbeatenRun = gf >= ga ? (unbeaten.unbeatenRun ?? 0) + 1 : 0;
     recordLines(c, lines);
-    const reward = (amount: number, title: string) => { pay(`Quest complete: ${title}`, amount); news(`Quest complete: ${title}! +${money(amount)} and the squad is buzzing.`, 'good'); };
+    const reward = (amount: number, title: string) => {
+        pay(`Quest complete: ${title}`, amount);
+        news(`Quest complete: ${title}! +${money(amount)} and the squad is buzzing.`, 'good');
+    };
     bumpQuest(cfg, c, 'streak', Math.max(0, s.streak), 'max', reward);
     bumpQuest(cfg, c, 'goals', gf, 'add', reward);
     if (ga === 0) bumpQuest(cfg, c, 'cleans', 1, 'add', reward);
@@ -530,8 +809,19 @@ export const afterMatchday = (cfg: GameConfig, c: Career, rng: Rng, f: Fixture, 
     maybeLetter(cfg, c, rng);
 };
 
-export const afterTraining = (cfg: GameConfig, c: Career, rng: Rng, newClass: boolean, pay: (label: string, amount: number) => void, news: (t: string, tone: 'good' | 'bad' | 'info') => void) => {
-    if (newClass) bumpQuest(cfg, c, 'newclass', 1, 'add', (amount, title) => { pay(`Quest complete: ${title}`, amount); news(`Quest complete: ${title}! +${money(amount)}.`, 'good'); });
+export const afterTraining = (
+    cfg: GameConfig,
+    c: Career,
+    rng: Rng,
+    newClass: boolean,
+    pay: (label: string, amount: number) => void,
+    news: (t: string, tone: 'good' | 'bad' | 'info') => void,
+) => {
+    if (newClass)
+        bumpQuest(cfg, c, 'newclass', 1, 'add', (amount, title) => {
+            pay(`Quest complete: ${title}`, amount);
+            news(`Quest complete: ${title}! +${money(amount)}.`, 'good');
+        });
     // morale drifts back towards "settled"
     const s = story(c);
     s.morale += Math.sign(60 - s.morale);
@@ -539,7 +829,10 @@ export const afterTraining = (cfg: GameConfig, c: Career, rng: Rng, newClass: bo
 };
 
 /** Season awards + reset. Returns ceremony lines. */
-export const seasonAwards = (cfg: GameConfig, c: Career): Array<{ title: string; who: string; detail: string; icon: 'cup' | 'medal' | 'boot' | 'star' }> => {
+export const seasonAwards = (
+    cfg: GameConfig,
+    c: Career,
+): Array<{ title: string; who: string; detail: string; icon: 'cup' | 'medal' | 'boot' | 'star' }> => {
     const s = story(c);
     const u = c.clubs[c.userClubId]!;
     const out: Array<{ title: string; who: string; detail: string; icon: 'cup' | 'medal' | 'boot' | 'star' }> = [];
@@ -547,12 +840,19 @@ export const seasonAwards = (cfg: GameConfig, c: Career): Array<{ title: string;
     // golden boot across the user's division
     const everyone = div.clubs.flatMap((id) => c.clubs[id]!.squad.map((p) => ({ p, club: c.clubs[id]!, l: s.seasonStats[p.id] })));
     const boot = everyone.filter((x) => x.l).sort((a, b) => b.l!.goals - a.l!.goals)[0];
-    if (boot && boot.l!.goals > 0) out.push({ title: 'Golden Boot', who: `${boot.p.name} (${boot.club.short})`, detail: `${boot.l!.goals} goals`, icon: 'boot' });
+    if (boot && boot.l!.goals > 0)
+        out.push({ title: 'Golden Boot', who: `${boot.p.name} (${boot.club.short})`, detail: `${boot.l!.goals} goals`, icon: 'boot' });
     const mine = u.squad.map((p) => ({ p, l: s.seasonStats[p.id] })).filter((x) => x.l && x.l.apps >= 3);
     const pots = mine.sort((a, b) => avgRating(b.l) - avgRating(a.l))[0];
-    if (pots) out.push({ title: 'Player of the Season', who: pots.p.name, detail: `avg rating ${avgRating(pots.l).toFixed(2)}`, icon: 'star' });
+    if (pots)
+        out.push({ title: 'Player of the Season', who: pots.p.name, detail: `avg rating ${avgRating(pots.l).toFixed(2)}`, icon: 'star' });
     const done = s.quests.filter((q) => q.done).length;
-    out.push({ title: 'Quests completed', who: `${done} of ${s.quests.length}`, detail: s.quests.map((q) => `${q.done ? '✓' : '✗'} ${q.title}`).join(' · '), icon: 'medal' });
+    out.push({
+        title: 'Quests completed',
+        who: `${done} of ${s.quests.length}`,
+        detail: s.quests.map((q) => `${q.done ? '✓' : '✗'} ${q.title}`).join(' · '),
+        icon: 'medal',
+    });
     for (const a of out.filter((x) => x.icon !== 'medal')) s.awards.push({ season: c.season, title: a.title, who: a.who });
     void cfg;
     return out;

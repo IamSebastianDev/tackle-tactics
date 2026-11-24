@@ -78,7 +78,10 @@ class Radio {
             this.el = new Audio();
             this.el.preload = 'auto';
             this.el.addEventListener('ended', () => this.next());
-            this.el.addEventListener('error', () => { this.tracks = this.tracks.filter((x) => x !== nowPlaying()); if (this.tracks.length) this.next(); });
+            this.el.addEventListener('error', () => {
+                this.tracks = this.tracks.filter((x) => x !== nowPlaying());
+                if (this.tracks.length) this.next();
+            });
         }
         nowPlaying.set(t);
         this.el.src = t.url;
@@ -94,7 +97,10 @@ class Radio {
         this.queue = this.queue.filter(enabled);
         if (!this.queue.length) this.refill();
         const t = this.queue.shift();
-        if (!t) { this.stop(); return; }
+        if (!t) {
+            this.stop();
+            return;
+        }
         const cur = nowPlaying();
         if (cur) this.history.push(cur);
         this.play(t);
@@ -102,7 +108,10 @@ class Radio {
 
     /** Play a specific song now (from the settings list). */
     playNow(t: Track) {
-        if (!this.started) { this.started = true; void this.load(); }
+        if (!this.started) {
+            this.started = true;
+            void this.load();
+        }
         radioPlaying.set(true);
         if (!prefs().radioOn) setPref('radioOn', true);
         const cur = nowPlaying();
@@ -125,17 +134,26 @@ class Radio {
 
     prev() {
         // restart the song if we're into it; otherwise go back one
-        if (this.el && this.el.currentTime > 4) { this.el.currentTime = 0; return; }
+        if (this.el && this.el.currentTime > 4) {
+            this.el.currentTime = 0;
+            return;
+        }
         let t = this.history.pop();
         while (t && !enabled(t)) t = this.history.pop();
-        if (!t) { if (this.el) this.el.currentTime = 0; return; }
+        if (!t) {
+            if (this.el) this.el.currentTime = 0;
+            return;
+        }
         const cur = nowPlaying();
         if (cur) this.queue.unshift(cur);
         this.play(t);
     }
 
     toggle() {
-        if (!this.started) { void this.start(); return; }
+        if (!this.started) {
+            void this.start();
+            return;
+        }
         const on = !radioPlaying();
         radioPlaying.set(on);
         if (!this.el) return;

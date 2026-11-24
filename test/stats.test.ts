@@ -20,7 +20,18 @@ it('stats: goals line up with the score, ratings in range, assists happen', () =
         const t1 = stats.team(1);
         expect(t0.possession + t1.possession).toBeGreaterThanOrEqual(99);
         expect(stats.motm()).toBeDefined();
-        console.log(seed, `${a}-${b}`, 'poss', t0.possession, t1.possession, 'pass%', Math.round((t0.passesOk / Math.max(1, t0.passes)) * 100), 'motm', stats.motm()!.player.name, stats.rating(stats.motm()!));
+        console.log(
+            seed,
+            `${a}-${b}`,
+            'poss',
+            t0.possession,
+            t1.possession,
+            'pass%',
+            Math.round((t0.passesOk / Math.max(1, t0.passes)) * 100),
+            'motm',
+            stats.motm()!.player.name,
+            stats.rating(stats.motm()!),
+        );
     }
     console.log('goals', goals, 'assisted', assists);
 }, 60_000);

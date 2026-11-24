@@ -7,22 +7,68 @@ import { createRng } from './rng';
 import { generateClub } from './world/generate';
 
 export type SimStats = {
-    score: [number, number]; actions: number; passes: number; completed: number; shots: number; goals: number;
-    tackles: number; tacklesWon: number; intercepts: number; turnovers: number; abilities: Record<string, number>;
-    cards: number; reds: number; subs: number; chains: number; longestChain: number; fouls: number; corners: number; freeKicks: number; avgSpell: number; ownHalfTurnovers: number;
+    score: [number, number];
+    actions: number;
+    passes: number;
+    completed: number;
+    shots: number;
+    goals: number;
+    tackles: number;
+    tacklesWon: number;
+    intercepts: number;
+    turnovers: number;
+    abilities: Record<string, number>;
+    cards: number;
+    reds: number;
+    subs: number;
+    chains: number;
+    longestChain: number;
+    fouls: number;
+    corners: number;
+    freeKicks: number;
+    avgSpell: number;
+    ownHalfTurnovers: number;
 };
 
-export const simulate = (cfg: GameConfig, seed: number, difficulty: Difficulty = 'normal', formations: [string, string] = ['4-3-3', '4-4-2'], styles?: [TeamStyle, TeamStyle]) => {
+export const simulate = (
+    cfg: GameConfig,
+    seed: number,
+    difficulty: Difficulty = 'normal',
+    formations: [string, string] = ['4-3-3', '4-4-2'],
+    styles?: [TeamStyle, TeamStyle],
+) => {
     const rng = createRng(seed);
     const names = new Set<string>();
     const a = generateClub(cfg, rng, 'home', 'blue', 'keeper_pink', formations[0], names);
     const b = generateClub(cfg, rng, 'away', 'yellow', 'keeper_black', formations[1], names);
-    if (styles) { a.style = styles[0]; b.style = styles[1]; }
+    if (styles) {
+        a.style = styles[0];
+        b.style = styles[1];
+    }
     const m = new Match(cfg, [a, b], seed);
     const brains = [new Brain(m, createRng(seed + 1), difficulty), new Brain(m, createRng(seed + 2), difficulty)];
     const st: SimStats = {
-        score: [0, 0], actions: 0, passes: 0, completed: 0, shots: 0, goals: 0, tackles: 0, tacklesWon: 0, intercepts: 0,
-        turnovers: 0, abilities: {}, cards: 0, reds: 0, subs: 0, chains: 0, longestChain: 0, fouls: 0, corners: 0, freeKicks: 0, avgSpell: 0, ownHalfTurnovers: 0,
+        score: [0, 0],
+        actions: 0,
+        passes: 0,
+        completed: 0,
+        shots: 0,
+        goals: 0,
+        tackles: 0,
+        tacklesWon: 0,
+        intercepts: 0,
+        turnovers: 0,
+        abilities: {},
+        cards: 0,
+        reds: 0,
+        subs: 0,
+        chains: 0,
+        longestChain: 0,
+        fouls: 0,
+        corners: 0,
+        freeKicks: 0,
+        avgSpell: 0,
+        ownHalfTurnovers: 0,
     };
     const stats = new MatchStats(m);
     let run = 0;
@@ -85,9 +131,18 @@ export const simulate = (cfg: GameConfig, seed: number, difficulty: Difficulty =
             if (e.t === 'ability') st.abilities[e.ability] = (st.abilities[e.ability] ?? 0) + 1;
             if (e.t === 'move' && e.ability) st.abilities[e.ability] = (st.abilities[e.ability] ?? 0) + 1;
             if (e.t === 'foul') st.fouls++;
-            if (e.t === 'setpiece') { if (e.kind === 'corner') st.corners++; else st.freeKicks++; }
-            if (e.t === 'card') { st.cards++; if (e.card === 'red') st.reds++; }
-            if (e.t === 'goal') { st.goals++; m.restartAfterGoal(e.team); }
+            if (e.t === 'setpiece') {
+                if (e.kind === 'corner') st.corners++;
+                else st.freeKicks++;
+            }
+            if (e.t === 'card') {
+                st.cards++;
+                if (e.card === 'red') st.reds++;
+            }
+            if (e.t === 'goal') {
+                st.goals++;
+                m.restartAfterGoal(e.team);
+            }
         }
         track();
         for (let guard = 0; guard < 12 && m.state.setPiece?.stage === 'setup'; guard++) {
@@ -99,10 +154,15 @@ export const simulate = (cfg: GameConfig, seed: number, difficulty: Difficulty =
         m.state.phase = 'done';
         const round = m.state.round;
         m.nextTurn();
-        if (m.state.round !== round) for (const t of [0, 1] as const) {
-            const d = brains[t]!.decideSub(t);
-            if (d) { const ev = m.substitute(t, d.off, d.on); stats.observe(ev); st.subs += ev.length; }
-        }
+        if (m.state.round !== round)
+            for (const t of [0, 1] as const) {
+                const d = brains[t]!.decideSub(t);
+                if (d) {
+                    const ev = m.substitute(t, d.off, d.on);
+                    stats.observe(ev);
+                    st.subs += ev.length;
+                }
+            }
         st.actions++;
         track();
     }

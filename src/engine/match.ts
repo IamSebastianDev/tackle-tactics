@@ -8,9 +8,7 @@ import type { GameConfig } from '../config';
 import { createRng, type Rng } from '../rng';
 import type { BallState, Cell, Club, MatchEvent, MatchState, Piece, Referee, RefStyle, SetPiece, SetPieceKind, TeamSide } from '../types';
 import { abilityDef, hasAbility, type AbilityId } from './abilities';
-import {
-    attackGoalX, cheb, clampToPitch, dist, eq, facingFor, forward, goalRows, inPitch, key, line, neighbours8, ownGoalX,
-} from './grid';
+import { attackGoalX, cheb, clampToPitch, dist, eq, facingFor, forward, goalRows, inPitch, key, line, neighbours8, ownGoalX } from './grid';
 import { interceptChance, movePoints, saveChance, scatterRadius, tackleChance, trickChance, type KickMods } from './rules';
 
 export type Reach = { cost: number; path: Cell[]; danger: number };
@@ -30,7 +28,7 @@ const hashName = (s: string) => {
 export const refereeStyle = (cfg: GameConfig, name: string): RefStyle => {
     const w = cfg.referee.weights;
     const total = w.lenient + w.fair + w.strict;
-    const r = (hashName(name) % 1000) / 1000 * total;
+    const r = ((hashName(name) % 1000) / 1000) * total;
     return r < w.lenient ? 'lenient' : r < w.lenient + w.fair ? 'fair' : 'strict';
 };
 export const pickReferee = (cfg: GameConfig, seed: number): Referee => {
@@ -56,16 +54,41 @@ export class Match {
         clubs.forEach((club, team) =>
             club.squad.forEach((player, slot) =>
                 pieces.push({
-                    id: player.id, player, team: team as TeamSide, slot, pos: { x: 0, y: 0 },
-                    facing: team === 0 ? 'right' : 'left', reactionReady: true, staggered: false,
-                    cooldowns: {}, status: {}, yellows: 0, stamina: 100, morale: club.morale,
+                    id: player.id,
+                    player,
+                    team: team as TeamSide,
+                    slot,
+                    pos: { x: 0, y: 0 },
+                    facing: team === 0 ? 'right' : 'left',
+                    reactionReady: true,
+                    staggered: false,
+                    cooldowns: {},
+                    status: {},
+                    yellows: 0,
+                    stamina: 100,
+                    morale: club.morale,
                 }),
             ),
         );
         this.state = {
-            clubs, pieces, ball: { kind: 'loose', at: { x: 0, y: 0 }, restrictedTo: null }, score: [0, 0],
-            round: 1, order: [], turnIndex: 0, phase: 'move', log: [], over: false, halftimeDone: false, seed, sentOff: [], knocks: {},
-            referee: referee ?? pickReferee(cfg, seed), setPiece: null, subs: [0, 0], subbedOff: [],
+            clubs,
+            pieces,
+            ball: { kind: 'loose', at: { x: 0, y: 0 }, restrictedTo: null },
+            score: [0, 0],
+            round: 1,
+            order: [],
+            turnIndex: 0,
+            phase: 'move',
+            log: [],
+            over: false,
+            halftimeDone: false,
+            seed,
+            sentOff: [],
+            knocks: {},
+            referee: referee ?? pickReferee(cfg, seed),
+            setPiece: null,
+            subs: [0, 0],
+            subbedOff: [],
         };
         this.kickoff(kickoff);
         this.buildOrder();
@@ -75,7 +98,10 @@ export class Match {
     // ---------------------------------------------------------------- queries
 
     piece = (id: string) => {
-        const p = this.state.pieces.find((q) => q.id === id) ?? this.state.sentOff.find((q) => q.id === id) ?? this.state.subbedOff.find((q) => q.id === id);
+        const p =
+            this.state.pieces.find((q) => q.id === id) ??
+            this.state.sentOff.find((q) => q.id === id) ??
+            this.state.subbedOff.find((q) => q.id === id);
         if (!p) throw new Error(`no piece ${id}`);
         return p;
     };
@@ -137,29 +163,42 @@ export class Match {
         if ((def.phase === 'move' || def.phase === 'pre') && phase !== 'move') return 'Only before moving';
         if (def.phase === 'act' && phase !== 'act') return 'Only after moving';
         switch (id) {
-            case 'sprint': return p.status.fouled ? 'You were fouled: no moving this turn' : null;
-            case 'run': case 'press': case 'rush': return holds ? 'Only without the ball' : null;
+            case 'sprint':
+                return p.status.fouled ? 'You were fouled: no moving this turn' : null;
+            case 'run':
+            case 'press':
+            case 'rush':
+                return holds ? 'Only without the ball' : null;
             case 'trick':
                 if (!holds) return 'Needs the ball';
                 if (p.status.tricked) return 'Already used this turn';
-                return this.opponents(p.team).some((o) => this.canReact(o) && cheb(o.pos, p.pos) === 1) ? null : 'No defender next to you with a reaction';
-            case 'placed': case 'power': case 'chip':
+                return this.opponents(p.team).some((o) => this.canReact(o) && cheb(o.pos, p.pos) === 1)
+                    ? null
+                    : 'No defender next to you with a reaction';
+            case 'placed':
+            case 'power':
+            case 'chip':
                 if (!holds) return 'Needs the ball';
                 return this.shotBlocked(p) ? 'Extra turn: no shooting' : null;
-            case 'through': return holds ? null : 'Needs the ball';
+            case 'through':
+                return holds ? null : 'Needs the ball';
             case 'cross':
                 if (!holds) return 'Needs the ball';
                 return this.crossZone(p) ? null : 'Get wide in the final third first';
-            case 'tempo': return this.tempoTargets(p).length ? null : 'No teammate left to act this round';
+            case 'tempo':
+                return this.tempoTargets(p).length ? null : 'No teammate left to act this round';
             case 'slide': {
                 const c = this.carrier();
-                if (!c || c.team === p.team) return 'Opponents don\'t have the ball';
+                if (!c || c.team === p.team) return "Opponents don't have the ball";
                 if (c.status.fouled) return 'Carrier has a free kick';
                 return cheb(c.pos, p.pos) <= cfg.abilities.slide.reach ? null : `Carrier must be within ${cfg.abilities.slide.reach} cells`;
             }
-            case 'foul': return this.canTackle(p) ? null : 'Must be next to the opposing carrier';
-            case 'mark': return this.markTargets(p).length ? null : `No opponent within ${cfg.abilities.mark.range} cells`;
-            case 'command': return this.mates(p).some((q) => cheb(q.pos, p.pos) <= cfg.abilities.command.radius) ? null : 'No teammate within range';
+            case 'foul':
+                return this.canTackle(p) ? null : 'Must be next to the opposing carrier';
+            case 'mark':
+                return this.markTargets(p).length ? null : `No opponent within ${cfg.abilities.mark.range} cells`;
+            case 'command':
+                return this.mates(p).some((q) => cheb(q.pos, p.pos) <= cfg.abilities.command.radius) ? null : 'No teammate within range';
         }
         return null;
     };
@@ -170,18 +209,24 @@ export class Match {
     usableAbilities = (p: Piece) => (Object.keys(this.cfg.abilities) as AbilityId[]).filter((id) => this.abilityUsable(p, id));
 
     tempoTargets = (p: Piece) => this.mates(p).filter((q) => this.state.order.indexOf(q.id) > this.state.turnIndex + 1);
-    markTargets = (p: Piece) => this.opponents(p.team).filter((o) => o.player.cls !== 'keeper' && cheb(o.pos, p.pos) <= this.cfg.abilities.mark.range);
+    markTargets = (p: Piece) =>
+        this.opponents(p.team).filter((o) => o.player.cls !== 'keeper' && cheb(o.pos, p.pos) <= this.cfg.abilities.mark.range);
 
     // ---------------------------------------------------------------- movement
 
     private moveMode(ability?: MoveAbility) {
         const a = this.cfg.abilities;
         switch (ability) {
-            case 'sprint': return { bonus: a.sprint.bonusMove, ignoreZoc: false, straight: true };
-            case 'run': return { bonus: a.run.bonusMove, ignoreZoc: true, straight: false };
-            case 'press': return { bonus: a.press.bonusMove, ignoreZoc: true, straight: false };
-            case 'rush': return { bonus: a.rush.bonusMove, ignoreZoc: true, straight: false };
-            default: return { bonus: 0, ignoreZoc: false, straight: false };
+            case 'sprint':
+                return { bonus: a.sprint.bonusMove, ignoreZoc: false, straight: true };
+            case 'run':
+                return { bonus: a.run.bonusMove, ignoreZoc: true, straight: false };
+            case 'press':
+                return { bonus: a.press.bonusMove, ignoreZoc: true, straight: false };
+            case 'rush':
+                return { bonus: a.rush.bonusMove, ignoreZoc: true, straight: false };
+            default:
+                return { bonus: 0, ignoreZoc: false, straight: false };
         }
     }
 
@@ -228,7 +273,8 @@ export class Match {
                     const dy = n.y - o.y;
                     if (!(dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy))) continue;
                     if (cheb(n, o) !== cheb(c, o) + 1) continue;
-                    if (!isStart && (Math.sign(n.x - c.x) !== Math.sign(c.x - o.x) || Math.sign(n.y - c.y) !== Math.sign(c.y - o.y))) continue;
+                    if (!isStart && (Math.sign(n.x - c.x) !== Math.sign(c.x - o.x) || Math.sign(n.y - c.y) !== Math.sign(c.y - o.y)))
+                        continue;
                 }
                 const nk = key(n);
                 if (occupied.has(nk)) continue;
@@ -331,7 +377,10 @@ export class Match {
         const s = p.status;
         delete s.markOn;
         delete s.commanded;
-        if (s.groundedNext) { s.grounded = true; delete s.groundedNext; }
+        if (s.groundedNext) {
+            s.grounded = true;
+            delete s.groundedNext;
+        }
         this.state.phase = 'move';
         const sp = this.state.setPiece;
         if (sp?.stage === 'take' && sp.taker === p.id) {
@@ -356,7 +405,10 @@ export class Match {
 
     private afterMove(p: Piece) {
         if (this.state.phase === 'done') return;
-        if (this.state.bonusTurn === p.id && this.cfg.match.tackleBonusMode === 'move') { this.state.phase = 'done'; return; }
+        if (this.state.bonusTurn === p.id && this.cfg.match.tackleBonusMode === 'move') {
+            this.state.phase = 'done';
+            return;
+        }
         this.state.phase = 'act';
         const holds = this.carrier()?.id === p.id;
         if (holds || this.canTackle(p)) return;
@@ -485,7 +537,12 @@ export class Match {
                         const played = call.some((e) => e.t === 'foul' && e.advantage);
                         if (!played) {
                             // whistle: the run stops here; a plain free kick is taken right away
-                            if (this.state.setPiece || this.carrier()?.id !== p.id || call.some((e) => e.t === 'goal' || e.t === 'save' || e.t === 'wide')) this.state.phase = 'done';
+                            if (
+                                this.state.setPiece ||
+                                this.carrier()?.id !== p.id ||
+                                call.some((e) => e.t === 'goal' || e.t === 'save' || e.t === 'wide')
+                            )
+                                this.state.phase = 'done';
                             else this.state.phase = 'act'; // fouled: the free kick is taken now
                             return done();
                         }
@@ -531,7 +588,10 @@ export class Match {
                 o.staggered = true;
             }
             events.push({ t: 'trick', by: p.id, on: o.id, success });
-            this.log(success ? `${p.player.name} sells ${o.player.name} a dummy.` : `${o.player.name} doesn't bite.`, success ? p.team : o.team);
+            this.log(
+                success ? `${p.player.name} sells ${o.player.name} a dummy.` : `${o.player.name} doesn't bite.`,
+                success ? p.team : o.team,
+            );
         }
         return events;
     };
@@ -548,7 +608,10 @@ export class Match {
         const c = this.carrier();
         if (!c || !this.abilityUsable(p, 'slide')) return [];
         this.startCooldown(p, 'slide');
-        return [{ t: 'ability', by: p.id, ability: 'slide', target: c.id }, ...this.resolveTackle(p, c, this.cfg.abilities.slide.bonus, true)];
+        return [
+            { t: 'ability', by: p.id, ability: 'slide', target: c.id },
+            ...this.resolveTackle(p, c, this.cfg.abilities.slide.bonus, true),
+        ];
     };
 
     private resolveTackle(p: Piece, c: Piece, bonus: number, slide: boolean): MatchEvent[] {
@@ -600,7 +663,8 @@ export class Match {
         if (off.id === this.turnPieceId && this.state.phase !== 'done') return 'Not the player whose turn it is';
         if (this.carrier()?.id === off.id) return 'Not while they have the ball';
         if (this.state.setPiece) return 'Not during a set piece';
-        if ((off.player.cls === 'keeper') !== (on.cls === 'keeper')) return off.player.cls === 'keeper' ? 'A keeper can only be replaced by a keeper' : 'Keepers only replace keepers';
+        if ((off.player.cls === 'keeper') !== (on.cls === 'keeper'))
+            return off.player.cls === 'keeper' ? 'A keeper can only be replaced by a keeper' : 'Keepers only replace keepers';
         return null;
     };
 
@@ -613,8 +677,19 @@ export class Match {
         const player = club.bench!.find((p) => p.id === onId)!;
         club.bench = club.bench!.filter((p) => p.id !== onId);
         const on: Piece = {
-            id: player.id, player, team, slot: off.slot, pos: { ...off.pos }, facing: off.facing, reactionReady: true, staggered: false,
-            cooldowns: {}, status: {}, yellows: 0, stamina: 100, morale: off.morale,
+            id: player.id,
+            player,
+            team,
+            slot: off.slot,
+            pos: { ...off.pos },
+            facing: off.facing,
+            reactionReady: true,
+            staggered: false,
+            cooldowns: {},
+            status: {},
+            yellows: 0,
+            stamina: 100,
+            morale: off.morale,
         };
         s.pieces[s.pieces.indexOf(off)] = on;
         const oi = s.order.indexOf(off.id);
@@ -646,16 +721,34 @@ export class Match {
         const st = this.refStyle();
         const penalty = this.inOwnBox(fouler.team, victim.pos);
         // advantage: the victim kept the ball going forward, so let it run (never in the box)
-        const advantage = !penalty && !o.cynical && this.carrier()?.id === victim.id
-            && forward(cfg, victim.team, victim.pos) >= 0.5 && this.rng.chance(st.advantage);
+        const advantage =
+            !penalty &&
+            !o.cynical &&
+            this.carrier()?.id === victim.id &&
+            forward(cfg, victim.team, victim.pos) >= 0.5 &&
+            this.rng.chance(st.advantage);
         this.knock(victim.id);
         if (!advantage) delete this.state.bonusNext; // the ball goes back: no reward for a foul
         const events: MatchEvent[] = [{ t: 'foul', by: fouler.id, on: victim.id, penalty, advantage, tackle: !o.cynical }];
-        if (o.cynical) this.log(penalty ? `${fouler.player.name} brings ${victim.player.name} down in the box — penalty!` : `${fouler.player.name} cynically stops ${victim.player.name}.`, fouler.team);
+        if (o.cynical)
+            this.log(
+                penalty
+                    ? `${fouler.player.name} brings ${victim.player.name} down in the box — penalty!`
+                    : `${fouler.player.name} cynically stops ${victim.player.name}.`,
+                fouler.team,
+            );
         else if (advantage) this.log(`${this.state.referee.name} plays advantage after ${fouler.player.name}'s foul.`, victim.team);
-        else this.log(penalty ? `${fouler.player.name} clips ${victim.player.name} in the box — penalty!` : `Foul by ${fouler.player.name}. ${this.state.referee.name} blows.`, fouler.team);
+        else
+            this.log(
+                penalty
+                    ? `${fouler.player.name} clips ${victim.player.name} in the box — penalty!`
+                    : `Foul by ${fouler.player.name}. ${this.state.referee.name} blows.`,
+                fouler.team,
+            );
         const fair = cfg.referee.styles.fair.card;
-        const cardChance = o.cynical ? cfg.abilities.foul.yellowChance * (st.card / fair) : st.card * (o.slide ? 1.4 : 1) * (penalty ? 1.3 : 1);
+        const cardChance = o.cynical
+            ? cfg.abilities.foul.yellowChance * (st.card / fair)
+            : st.card * (o.slide ? 1.4 : 1) * (penalty ? 1.3 : 1);
         if (o.slide && !o.cynical && this.rng.chance(st.red)) {
             this.log(`Straight red! ${fouler.player.name} went in two-footed.`, fouler.team);
             this.sendOff(fouler);
@@ -665,7 +758,8 @@ export class Match {
         this.state.ball = { kind: 'held', by: victim.id };
         this.state.phase = 'done';
         if (penalty) return [...events, ...this.penalty(victim)];
-        if (forward(cfg, victim.team, victim.pos) >= cfg.setPieces.freeKickForward) return [...events, ...this.awardSetPiece('freekick', victim.team, victim, victim.pos)];
+        if (forward(cfg, victim.team, victim.pos) >= cfg.setPieces.freeKickForward)
+            return [...events, ...this.awardSetPiece('freekick', victim.team, victim, victim.pos)];
         victim.status.fouled = true;
         return events;
     }
@@ -705,7 +799,10 @@ export class Match {
     private penalty(taker: Piece): MatchEvent[] {
         const cfg = this.cfg;
         const gx = attackGoalX(cfg, taker.team);
-        const spot: Cell = { x: gx < 0 ? cfg.pitch.penaltySpot - 1 : cfg.pitch.cols - cfg.pitch.penaltySpot, y: Math.floor((cfg.pitch.rows - 1) / 2) };
+        const spot: Cell = {
+            x: gx < 0 ? cfg.pitch.penaltySpot - 1 : cfg.pitch.cols - cfg.pitch.penaltySpot,
+            y: Math.floor((cfg.pitch.rows - 1) / 2),
+        };
         const occupant = this.pieceAt(spot);
         if (occupant && occupant.id !== taker.id) occupant.pos = this.freeNear(spot, new Set([key(spot)]));
         taker.pos = spot;
@@ -789,7 +886,10 @@ export class Match {
         events.push({ t: 'kick', by: p.id, kind, from: p.pos, target, landing, radius });
 
         // ball flight & interception reactions
-        const lineEnd = kind === 'shot' ? { x: landing.x === -1 ? 0 : cfg.pitch.cols - 1, y: Math.max(0, Math.min(cfg.pitch.rows - 1, landing.y)) } : landing;
+        const lineEnd =
+            kind === 'shot'
+                ? { x: landing.x === -1 ? 0 : cfg.pitch.cols - 1, y: Math.max(0, Math.min(cfg.pitch.rows - 1, landing.y)) }
+                : landing;
         const path = line(p.pos, lineEnd).slice(1);
         const lofted = (kind === 'pass' && d > cfg.ball.loftThreshold) || ability === 'cross' || ability === 'chip' || delivery;
         const n = cfg.ball.loftInterceptCells;
@@ -809,8 +909,14 @@ export class Match {
                 events.push({ t: 'intercept', by: o.id, at: c, success, block: kind === 'shot' });
                 if (success) {
                     this.state.ball = { kind: 'held', by: o.id };
-                    this.log(kind === 'shot' ? `${o.player.name} throws a body on the line — blocked!` : `${o.player.name} reads it and intercepts.`, o.team);
-                    if (kind === 'shot' && this.rng.chance(cfg.setPieces.blockCorner)) return [...events, ...this.awardSetPiece('corner', p.team, null, this.cornerSpot(p.team, landing.y))];
+                    this.log(
+                        kind === 'shot'
+                            ? `${o.player.name} throws a body on the line — blocked!`
+                            : `${o.player.name} reads it and intercepts.`,
+                        o.team,
+                    );
+                    if (kind === 'shot' && this.rng.chance(cfg.setPieces.blockCorner))
+                        return [...events, ...this.awardSetPiece('corner', p.team, null, this.cornerSpot(p.team, landing.y))];
                     return events;
                 }
                 o.staggered = true;
@@ -839,7 +945,11 @@ export class Match {
         const at = clampToPitch(this.cfg, landing);
         const gx = attackGoalX(this.cfg, kicker.team);
         const overByline = gx < 0 ? landing.x < 0 : landing.x >= this.cfg.pitch.cols;
-        if (overByline && this.opponents(kicker.team).some((o) => cheb(o.pos, at) <= 2) && this.rng.chance(this.cfg.setPieces.bylineCorner)) {
+        if (
+            overByline &&
+            this.opponents(kicker.team).some((o) => cheb(o.pos, at) <= 2) &&
+            this.rng.chance(this.cfg.setPieces.bylineCorner)
+        ) {
             this.log(`Deflected behind — corner.`, kicker.team);
             return this.awardSetPiece('corner', kicker.team, null, this.cornerSpot(kicker.team, at.y));
         }
@@ -851,7 +961,9 @@ export class Match {
 
     /** A marker steps in when the player they shadow receives the ball. */
     private markerChallenge(receiver: Piece): MatchEvent[] {
-        const marker = this.opponents(receiver.team).find((o) => o.status.markOn === receiver.id && this.canReact(o) && cheb(o.pos, receiver.pos) <= 2);
+        const marker = this.opponents(receiver.team).find(
+            (o) => o.status.markOn === receiver.id && this.canReact(o) && cheb(o.pos, receiver.pos) <= 2,
+        );
         if (!marker) return [];
         marker.reactionReady = false;
         const success = this.rng.chance(tackleChance(this.cfg, marker, receiver, false));
@@ -869,7 +981,10 @@ export class Match {
     private receive(kicker: Piece, r: Piece): MatchEvent[] {
         this.state.ball = { kind: 'held', by: r.id };
         r.facing = facingFor(r.pos, kicker.pos, r.facing);
-        this.log(r.team === kicker.team ? `${kicker.player.name} finds ${r.player.name}.` : `${r.player.name} picks off the stray ball.`, r.team);
+        this.log(
+            r.team === kicker.team ? `${kicker.player.name} finds ${r.player.name}.` : `${r.player.name} picks off the stray ball.`,
+            r.team,
+        );
         const ev: MatchEvent[] = [{ t: 'receive', by: r.id, at: r.pos }];
         return r.team === kicker.team ? [...ev, ...this.markerChallenge(r)] : ev;
     }
@@ -898,7 +1013,8 @@ export class Match {
             .sort((a, b) => dist(a.pos, landing) - dist(b.pos, landing));
         const runner = runners[0];
         const oppBest = oppNear.sort((a, b) => dist(a.pos, landing) - dist(b.pos, landing))[0];
-        if (!runner || occupant || (oppBest && dist(oppBest.pos, landing) < dist(runner.pos, landing))) return this.resolveLanding(kicker, landing);
+        if (!runner || occupant || (oppBest && dist(oppBest.pos, landing) < dist(runner.pos, landing)))
+            return this.resolveLanding(kicker, landing);
         const path = line(runner.pos, landing);
         runner.facing = facingFor(runner.pos, landing, runner.facing);
         runner.pos = landing;
@@ -915,8 +1031,11 @@ export class Match {
             .filter((q) => q.id !== kicker.id && q.player.cls !== 'keeper' && cheb(q.pos, landing) <= R)
             .map((q) => ({
                 q,
-                d: dist(q.pos, landing) + this.rng() * 1.2 - (q.team !== kicker.team ? cfg.setPieces.defenderEdge : 0)
-                    - (q.player.stats.composure - 50) * cfg.setPieces.composureWeight,
+                d:
+                    dist(q.pos, landing) +
+                    this.rng() * 1.2 -
+                    (q.team !== kicker.team ? cfg.setPieces.defenderEdge : 0) -
+                    (q.player.stats.composure - 50) * cfg.setPieces.composureWeight,
             }))
             .sort((a, b) => a.d - b.d);
         const keeper = this.keeperOf((1 - kicker.team) as TeamSide);
@@ -936,7 +1055,10 @@ export class Match {
             this.state.ball = { kind: 'held', by: winner.id };
             if (this.rng.chance(cfg.setPieces.clearCorner)) {
                 this.log(`${winner.player.name} heads it behind for a corner.`, winner.team);
-                return [{ t: 'header', by: winner.id, at: winner.pos }, ...this.awardSetPiece('corner', kicker.team, null, this.cornerSpot(kicker.team, landing.y))];
+                return [
+                    { t: 'header', by: winner.id, at: winner.pos },
+                    ...this.awardSetPiece('corner', kicker.team, null, this.cornerSpot(kicker.team, landing.y)),
+                ];
             }
             this.log(`${winner.player.name} heads the cross clear.`, winner.team);
             return [{ t: 'receive', by: winner.id, at: winner.pos }];
@@ -967,10 +1089,18 @@ export class Match {
             this.log(`${shooter.player.name} drags it wide.`, shooter.team);
             if (this.rng.chance(cfg.setPieces.wideCorner)) {
                 this.log(`Off a defender's heel — corner.`, shooter.team);
-                return [{ t: 'wide', team: shooter.team }, ...this.awardSetPiece('corner', shooter.team, null, this.cornerSpot(shooter.team, landing.y))];
+                return [
+                    { t: 'wide', team: shooter.team },
+                    ...this.awardSetPiece('corner', shooter.team, null, this.cornerSpot(shooter.team, landing.y)),
+                ];
             }
             if (keeper) this.state.ball = { kind: 'held', by: keeper.id };
-            else this.state.ball = { kind: 'loose', at: { x: landing.x < 0 ? 2 : cfg.pitch.cols - 3, y: Math.floor(cfg.pitch.rows / 2) }, restrictedTo: defTeam };
+            else
+                this.state.ball = {
+                    kind: 'loose',
+                    at: { x: landing.x < 0 ? 2 : cfg.pitch.cols - 3, y: Math.floor(cfg.pitch.rows / 2) },
+                    restrictedTo: defTeam,
+                };
             return [{ t: 'wide', team: shooter.team }];
         }
         if (keeper) {
@@ -984,7 +1114,10 @@ export class Match {
                     this.log(`${keeper.player.name} gathers it — great save!`, defTeam);
                 } else if (this.rng.chance(cfg.setPieces.parryCorner)) {
                     this.log(`${keeper.player.name} tips it round the post!`, defTeam);
-                    return [{ t: 'save', by: keeper.id, held, at: lineCell }, ...this.awardSetPiece('corner', shooter.team, null, this.cornerSpot(shooter.team, landing.y))];
+                    return [
+                        { t: 'save', by: keeper.id, held, at: lineCell },
+                        ...this.awardSetPiece('corner', shooter.team, null, this.cornerSpot(shooter.team, landing.y)),
+                    ];
                 } else {
                     const dir = landing.x < 0 ? 1 : -1;
                     let at = clampToPitch(cfg, { x: lineCell.x + dir * this.rng.int(2, 4), y: landing.y + this.rng.int(-4, 4) });
@@ -1021,7 +1154,8 @@ export class Match {
             if (p.team !== team) {
                 const half = (cols - 1) / 2;
                 const r = cfg.pitch.circleRadius + 1;
-                if (Math.abs(c.x - half) < r && Math.abs(c.y - (rows - 1) / 2) < r) c = { x: p.team === 0 ? Math.floor(half - r) : Math.ceil(half + r), y: c.y };
+                if (Math.abs(c.x - half) < r && Math.abs(c.y - (rows - 1) / 2) < r)
+                    c = { x: p.team === 0 ? Math.floor(half - r) : Math.ceil(half + r), y: c.y };
             }
             while (taken.has(key(c))) c = { x: c.x, y: c.y + 1 };
             taken.add(key(c));
@@ -1053,11 +1187,17 @@ export class Match {
     freeNear = (c: Cell, taken: Set<string>): Cell => {
         const start = clampToPitch(this.cfg, c);
         for (let r = 0; r < 12; r++) {
-            for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-                if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-                const n = { x: start.x + dx, y: start.y + dy };
-                if (inPitch(this.cfg, n) && !taken.has(key(n)) && !this.state.pieces.some((q) => eq(q.pos, n) && !taken.has(`id:${q.id}`))) return n;
-            }
+            for (let dy = -r; dy <= r; dy++)
+                for (let dx = -r; dx <= r; dx++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+                    const n = { x: start.x + dx, y: start.y + dy };
+                    if (
+                        inPitch(this.cfg, n) &&
+                        !taken.has(key(n)) &&
+                        !this.state.pieces.some((q) => eq(q.pos, n) && !taken.has(`id:${q.id}`))
+                    )
+                        return n;
+                }
         }
         return start;
     };
@@ -1065,9 +1205,11 @@ export class Match {
     /** Stop play and set up a corner or a free kick for `team`. Ends the current turn. */
     private awardSetPiece(kind: SetPieceKind, team: TeamSide, taker: Piece | null, spot: Cell): MatchEvent[] {
         const cfg = this.cfg;
-        const t = taker ?? this.state.pieces
-            .filter((q) => q.team === team && q.player.cls !== 'keeper')
-            .sort((a, b) => b.player.stats.passing - a.player.stats.passing)[0];
+        const t =
+            taker ??
+            this.state.pieces
+                .filter((q) => q.team === team && q.player.cls !== 'keeper')
+                .sort((a, b) => b.player.stats.passing - a.player.stats.passing)[0];
         if (!t) return [];
         const n = cfg.setPieces.placements;
         const sp: SetPiece = { kind, team, taker: t.id, spot, stage: 'setup', next: team, left: [n, n] };
@@ -1075,7 +1217,12 @@ export class Match {
         this.arrangeSetPiece(sp);
         this.state.ball = { kind: 'held', by: t.id };
         this.state.phase = 'done';
-        this.log(kind === 'corner' ? `Corner to ${this.state.clubs[team].name}.` : `Free kick to ${this.state.clubs[team].name} in a dangerous area.`, team);
+        this.log(
+            kind === 'corner'
+                ? `Corner to ${this.state.clubs[team].name}.`
+                : `Free kick to ${this.state.clubs[team].name} in a dangerous area.`,
+            team,
+        );
         return [{ t: 'setpiece', kind, team, taker: t.id, at: spot }];
     }
 
@@ -1114,7 +1261,13 @@ export class Match {
         const spots = [at(2, side * 2), at(3, -side * 3), at(penaltySpot - 1, 0), at(boxDepth + 1, -side)];
         runners.forEach((r, i) => put(r, spots[i % spots.length]!));
         const short = pool(att).sort((a, b) => dist(a.pos, sp.spot) - dist(b.pos, sp.spot))[0];
-        if (short) put(short, sp.kind === 'corner' ? { x: lineX + dir * 2, y: sp.spot.y - side * 3 } : { x: sp.spot.x, y: sp.spot.y + (sp.spot.y > mid ? -3 : 3) });
+        if (short)
+            put(
+                short,
+                sp.kind === 'corner'
+                    ? { x: lineX + dir * 2, y: sp.spot.y - side * 3 }
+                    : { x: sp.spot.x, y: sp.spot.y + (sp.spot.y > mid ? -3 : 3) },
+            );
         // the rest of the attackers hold a rest defence; their keeper stays home
         const slotOf = (q: Piece) => {
             const f = cfg.formations.find((x) => x.id === this.state.clubs[q.team].formationId) ?? cfg.formations[0]!;
@@ -1124,7 +1277,10 @@ export class Match {
             const c = { x: Math.round(fx * (cols - 1)), y: Math.round(fy * (rows - 1)) };
             return team === 0 ? c : { x: cols - 1 - c.x, y: rows - 1 - c.y };
         };
-        for (const q of pool(att)) { const sl = slotOf(q); put(q, frame(att, 0.42 + sl.x * 0.22, sl.y)); }
+        for (const q of pool(att)) {
+            const sl = slotOf(q);
+            put(q, frame(att, 0.42 + sl.x * 0.22, sl.y));
+        }
         for (const k of this.state.pieces.filter((q) => q.player.cls === 'keeper')) {
             if (k.team === att) put(k, frame(att, 0.04, 0.5));
             else put(k, at(0, side));
@@ -1139,7 +1295,10 @@ export class Match {
             const len = Math.hypot(gc.x - sp.spot.x, gc.y - sp.spot.y) || 1;
             const ux = (gc.x - sp.spot.x) / len;
             const uy = (gc.y - sp.spot.y) / len;
-            const centre = { x: Math.round(sp.spot.x + ux * cfg.setPieces.wallDistance), y: Math.round(sp.spot.y + uy * cfg.setPieces.wallDistance) };
+            const centre = {
+                x: Math.round(sp.spot.x + ux * cfg.setPieces.wallDistance),
+                y: Math.round(sp.spot.y + uy * cfg.setPieces.wallDistance),
+            };
             const px = Math.round(-uy) || 0;
             const py = Math.round(ux) || (px ? 0 : 1);
             const offs = [0, 1, -1, 2, -2];
@@ -1149,9 +1308,18 @@ export class Match {
             }
         }
         // zonal cover, then the most advanced stay up as an outlet
-        const outlets = pool(def).sort((a, b) => slotOf(b).x - slotOf(a).x).slice(0, sp.kind === 'corner' ? 2 : 1);
+        const outlets = pool(def)
+            .sort((a, b) => slotOf(b).x - slotOf(a).x)
+            .slice(0, sp.kind === 'corner' ? 2 : 1);
         for (const q of outlets) put(q, frame(def, 0.5 + slotOf(q).x * 0.1, slotOf(q).y));
-        const zonal = [at(2, side * 4), at(boxDepth, 0), at(4, -side * 2), at(boxDepth, side * 5), at(boxDepth, -side * 5), at(5, side * 6)];
+        const zonal = [
+            at(2, side * 4),
+            at(boxDepth, 0),
+            at(4, -side * 2),
+            at(boxDepth, side * 5),
+            at(boxDepth, -side * 5),
+            at(5, side * 6),
+        ];
         pool(def).forEach((q, i) => put(q, zonal[i % zonal.length]!));
         for (const q of this.state.pieces) {
             if (!placed.has(q.id)) put(q, q.pos);
@@ -1170,13 +1338,14 @@ export class Match {
         const lineX = attackGoalX(cfg, sp.team) < 0 ? 0 : cols - 1;
         const keep = team !== sp.team && sp.kind === 'freekick' ? cfg.setPieces.wallDistance : 2;
         const out: Cell[] = [];
-        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-            const depth = Math.abs(x - lineX);
-            if (depth >= boxDepth + m || Math.abs(y - (rows - 1) / 2) > boxWidth / 2 + m) continue;
-            const c = { x, y };
-            if (cheb(c, sp.spot) < keep) continue;
-            out.push(c);
-        }
+        for (let y = 0; y < rows; y++)
+            for (let x = 0; x < cols; x++) {
+                const depth = Math.abs(x - lineX);
+                if (depth >= boxDepth + m || Math.abs(y - (rows - 1) / 2) > boxWidth / 2 + m) continue;
+                const c = { x, y };
+                if (cheb(c, sp.spot) < keep) continue;
+                out.push(c);
+            }
         return out;
     };
 

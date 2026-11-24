@@ -8,9 +8,19 @@ export type AbilityPhase = 'pre' | 'move' | 'act';
 
 export const classLevel = (p: Player, cls: ClassId) => p.levels[cls] ?? 0;
 
-export const abilityDef = (cfg: GameConfig, id: AbilityId) => cfg.abilities[id] as GameConfig['abilities'][AbilityId] & {
-    cls: ClassId; unlock: number; phase: AbilityPhase; cooldown: number; label: string; key: string; icon: string; desc: string; short: string; how: string;
-};
+export const abilityDef = (cfg: GameConfig, id: AbilityId) =>
+    cfg.abilities[id] as GameConfig['abilities'][AbilityId] & {
+        cls: ClassId;
+        unlock: number;
+        phase: AbilityPhase;
+        cooldown: number;
+        label: string;
+        key: string;
+        icon: string;
+        desc: string;
+        short: string;
+        how: string;
+    };
 
 export const allAbilities = (cfg: GameConfig) => Object.keys(cfg.abilities) as AbilityId[];
 

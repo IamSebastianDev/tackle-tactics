@@ -9,7 +9,16 @@ import { MatchReport } from './Report';
 import { audio } from './audio';
 import { CONTROL_MODES, prefs, setPref } from './prefs';
 import { stageSize } from './stage';
-import { abilitiesOf, abilityDef, allAbilities, classLabel, classLevel, cooldownLeft, passivesOf, type AbilityId } from '../engine/abilities';
+import {
+    abilitiesOf,
+    abilityDef,
+    allAbilities,
+    classLabel,
+    classLevel,
+    cooldownLeft,
+    passivesOf,
+    type AbilityId,
+} from '../engine/abilities';
 import { attackGoalX, cheb, dist, disc, fromKey, goalRows, inPitch, isGoalCell, key } from '../engine/grid';
 import type { KickAbility, MoveAbility } from '../engine/match';
 import { movePoints } from '../engine/rules';
@@ -23,7 +32,8 @@ type Overlay = { k: string; x: number; y: number; kind: OverlayKind };
 
 export { isLightKit, kitColor };
 
-const statBar = (label: string, v: number) => html`<div class="stat"><span>${label}</span><i style="--v:${v}%"></i><b>${String(v)}</b></div>`;
+const statBar = (label: string, v: number) =>
+    html`<div class="stat"><span>${label}</span><i style="--v:${v}%"></i><b>${String(v)}</b></div>`;
 
 export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?: () => void, continueLabel?: string) => {
     const m = ctl.match;
@@ -62,72 +72,84 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
     };
 
     // ------------------------------------------------------------ overlays
-    const overlays = derived(combined([ctl.tick, ctl.hover, ctl.flightZone, ctl.awaitingHuman, ctl.mode, ctl.preview, ctl.setupSel]), ([, hover, flight, awaiting, selected, preview]) => {
-        const mode = selected ?? preview;
-        const out = new Map<string, Overlay>();
-        const put = (c: Cell, kind: OverlayKind) => out.set(`${c.x},${c.y}`, { k: `${kind}:${c.x},${c.y}`, x: c.x, y: c.y, kind });
-        const showable = (c: Cell) => inPitch(cfg, c) || isGoalCell(cfg, c);
-        if (m.state.over) return [];
-        const sp = m.state.setPiece;
-        if (sp?.stage === 'setup') {
-            // placing: the legal zone, who can move, where the picked player would go
-            if (awaiting && ctl.isHuman(sp.next)) {
-                for (const c of m.placeZone(sp.next)) if (!m.pieceAt(c)) put(c, 'move');
-                for (const q of m.state.pieces) if (m.canPlacePiece(q)) put(q.pos, 'pick');
-                const sel = ctl.setupSel();
-                if (sel) put(m.piece(sel).pos, 'active');
-                if (sel && hover && m.canPlace(sel, hover)) put(hover, 'target');
+    const overlays = derived(
+        combined([ctl.tick, ctl.hover, ctl.flightZone, ctl.awaitingHuman, ctl.mode, ctl.preview, ctl.setupSel]),
+        ([, hover, flight, awaiting, selected, preview]) => {
+            const mode = selected ?? preview;
+            const out = new Map<string, Overlay>();
+            const put = (c: Cell, kind: OverlayKind) => out.set(`${c.x},${c.y}`, { k: `${kind}:${c.x},${c.y}`, x: c.x, y: c.y, kind });
+            const showable = (c: Cell) => inPitch(cfg, c) || isGoalCell(cfg, c);
+            if (m.state.over) return [];
+            const sp = m.state.setPiece;
+            if (sp?.stage === 'setup') {
+                // placing: the legal zone, who can move, where the picked player would go
+                if (awaiting && ctl.isHuman(sp.next)) {
+                    for (const c of m.placeZone(sp.next)) if (!m.pieceAt(c)) put(c, 'move');
+                    for (const q of m.state.pieces) if (m.canPlacePiece(q)) put(q.pos, 'pick');
+                    const sel = ctl.setupSel();
+                    if (sel) put(m.piece(sel).pos, 'active');
+                    if (sel && hover && m.canPlace(sel, hover)) put(hover, 'target');
+                }
+                return [...out.values()];
             }
-            return [...out.values()];
-        }
-        const p = m.active();
-        const carrier = m.carrier();
-        const isCarrier = carrier?.id === p.id;
+            const p = m.active();
+            const carrier = m.carrier();
+            const isCarrier = carrier?.id === p.id;
 
-        if (awaiting && m.state.phase === 'move') {
-            const ability = moveMode();
-            const reach = reachFor(p, ability);
-            const danger = isCarrier ? m.dangerCells(p.team) : new Set<string>();
-            for (const k of reach.keys()) put(fromKey(k), danger.has(k) ? 'danger' : 'move');
-            if (hover) {
-                const r = reach.get(key(hover));
-                if (r) for (const c of r.path.slice(1)) put(c, danger.has(key(c)) ? 'danger' : 'path');
-            }
-        }
-        if (awaiting && m.state.phase === 'act') {
-            if (isCarrier) {
-                const ability = kickMode();
-                const taking = sp?.stage === 'take' && sp.taker === p.id;
-                if (taking && hover && !ability && m.kickKind(p, hover) === 'pass' && m.inOwnBox((1 - p.team) as TeamSide, hover)) {
-                    for (const c of disc(hover, cfg.abilities.cross.headRadius)) if (inPitch(cfg, c)) put(c, 'run');
-                }
-                if (ability === 'cross' || (taking && !ability)) {
-                    // the box is the cross's target zone
-                    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (m.inOwnBox((1 - p.team) as TeamSide, { x, y })) put({ x, y }, 'zone');
-                }
-                const aim = hover ?? (ability && ['placed', 'power', 'chip'].includes(ability) ? { x: p.team === 0 ? cols : -1, y: Math.floor((rows - 1) / 2) } : null);
-                if (aim && hover === null && ability) {
-                    const r = m.kickRadius(p, aim, ability);
-                    for (const c of disc(aim, r)) if (showable(c)) put(c, 'scatter');
-                }
-                if (hover && m.kickKind(p, hover, ability)) {
-                    const r = m.kickRadius(p, hover, ability);
-                    for (const c of disc(hover, r)) if (showable(c)) put(c, 'scatter');
-                    if (ability === 'through') for (const c of disc(hover, cfg.abilities.through.runRadius)) if (inPitch(cfg, c) && !out.has(key(c))) put(c, 'run');
-                    if (ability === 'cross') for (const c of disc(hover, cfg.abilities.cross.headRadius)) if (inPitch(cfg, c) && out.get(key(c))?.kind !== 'scatter') put(c, 'run');
-                    put(hover, 'target');
+            if (awaiting && m.state.phase === 'move') {
+                const ability = moveMode();
+                const reach = reachFor(p, ability);
+                const danger = isCarrier ? m.dangerCells(p.team) : new Set<string>();
+                for (const k of reach.keys()) put(fromKey(k), danger.has(k) ? 'danger' : 'move');
+                if (hover) {
+                    const r = reach.get(key(hover));
+                    if (r) for (const c of r.path.slice(1)) put(c, danger.has(key(c)) ? 'danger' : 'path');
                 }
             }
-            if (mode === 'mark') for (const o of m.markTargets(p)) put(o.pos, 'pick');
-            if (mode === 'tempo') for (const q of m.tempoTargets(p)) put(q.pos, 'pick');
-            if (carrier && carrier.team !== p.team && (m.canTackle(p) || m.abilityUsable(p, 'slide'))) put(carrier.pos, 'tackle');
-        }
-        if (flight) {
-            for (const c of disc(flight.target, flight.radius)) if (showable(c)) put(c, 'scatter');
-        }
-        if (!ctl.moveMs.has(p.id)) put(p.pos, 'active'); // don't run ahead of the walking sprite
-        return [...out.values()];
-    });
+            if (awaiting && m.state.phase === 'act') {
+                if (isCarrier) {
+                    const ability = kickMode();
+                    const taking = sp?.stage === 'take' && sp.taker === p.id;
+                    if (taking && hover && !ability && m.kickKind(p, hover) === 'pass' && m.inOwnBox((1 - p.team) as TeamSide, hover)) {
+                        for (const c of disc(hover, cfg.abilities.cross.headRadius)) if (inPitch(cfg, c)) put(c, 'run');
+                    }
+                    if (ability === 'cross' || (taking && !ability)) {
+                        // the box is the cross's target zone
+                        for (let y = 0; y < rows; y++)
+                            for (let x = 0; x < cols; x++) if (m.inOwnBox((1 - p.team) as TeamSide, { x, y })) put({ x, y }, 'zone');
+                    }
+                    const aim =
+                        hover ??
+                        (ability && ['placed', 'power', 'chip'].includes(ability)
+                            ? { x: p.team === 0 ? cols : -1, y: Math.floor((rows - 1) / 2) }
+                            : null);
+                    if (aim && hover === null && ability) {
+                        const r = m.kickRadius(p, aim, ability);
+                        for (const c of disc(aim, r)) if (showable(c)) put(c, 'scatter');
+                    }
+                    if (hover && m.kickKind(p, hover, ability)) {
+                        const r = m.kickRadius(p, hover, ability);
+                        for (const c of disc(hover, r)) if (showable(c)) put(c, 'scatter');
+                        if (ability === 'through')
+                            for (const c of disc(hover, cfg.abilities.through.runRadius))
+                                if (inPitch(cfg, c) && !out.has(key(c))) put(c, 'run');
+                        if (ability === 'cross')
+                            for (const c of disc(hover, cfg.abilities.cross.headRadius))
+                                if (inPitch(cfg, c) && out.get(key(c))?.kind !== 'scatter') put(c, 'run');
+                        put(hover, 'target');
+                    }
+                }
+                if (mode === 'mark') for (const o of m.markTargets(p)) put(o.pos, 'pick');
+                if (mode === 'tempo') for (const q of m.tempoTargets(p)) put(q.pos, 'pick');
+                if (carrier && carrier.team !== p.team && (m.canTackle(p) || m.abilityUsable(p, 'slide'))) put(carrier.pos, 'tackle');
+            }
+            if (flight) {
+                for (const c of disc(flight.target, flight.radius)) if (showable(c)) put(c, 'scatter');
+            }
+            if (!ctl.moveMs.has(p.id)) put(p.pos, 'active'); // don't run ahead of the walking sprite
+            return [...out.values()];
+        },
+    );
 
     /**
      * Zones of control, from the active player's point of view: opponents' adjacent cells stop
@@ -135,7 +157,8 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
      * cover shows where *their* runs will stop.
      */
     const zoc = derived(combined([ctl.tick, ctl.awaitingHuman, prefs]), ([, awaiting, pr]) => {
-        if (!pr.showZoc || !awaiting || m.state.over) return [] as Array<{ k: string; x: number; y: number; kind: 'opp' | 'spent' | 'own' }>;
+        if (!pr.showZoc || !awaiting || m.state.over)
+            return [] as Array<{ k: string; x: number; y: number; kind: 'opp' | 'spent' | 'own' }>;
         const me = m.active();
         const out = new Map<string, { k: string; x: number; y: number; kind: 'opp' | 'spent' | 'own' }>();
         const rank = { own: 0, spent: 1, opp: 2 } as const;
@@ -179,9 +202,16 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         const riding = ctl.followBall && !prefs().reduceMotion;
         const sp = m.state.setPiece;
         // set pieces: frame the ball and the box together
-        const spFocus = sp ? { x: (sp.spot.x + (attackGoalX(cfg, sp.team) < 0 ? cfg.pitch.boxDepth / 2 : cols - 1 - cfg.pitch.boxDepth / 2)) / 2, y: (sp.spot.y + (rows - 1) / 2) / 2 } : null;
+        const spFocus = sp
+            ? {
+                  x: (sp.spot.x + (attackGoalX(cfg, sp.team) < 0 ? cfg.pitch.boxDepth / 2 : cols - 1 - cfg.pitch.boxDepth / 2)) / 2,
+                  y: (sp.spot.y + (rows - 1) / 2) / 2,
+              }
+            : null;
         const f = riding ? (ctl.ballAt ?? m.ballCell()) : (spFocus ?? az.focus ?? p?.pos);
-        const ride = riding ? `transition:transform ${Math.max(ctl.ballMs, 260)}ms cubic-bezier(.3,.6,.4,1), transform-origin ${Math.max(ctl.ballMs, 260)}ms cubic-bezier(.3,.6,.4,1)` : '';
+        const ride = riding
+            ? `transition:transform ${Math.max(ctl.ballMs, 260)}ms cubic-bezier(.3,.6,.4,1), transform-origin ${Math.max(ctl.ballMs, 260)}ms cubic-bezier(.3,.6,.4,1)`
+            : '';
         const fx = f ? (f.x + margin) * C + C / 2 : W / 2;
         const fy = f ? (f.y + margin) * C + C / 2 : H / 2;
         const k = cfg.camera;
@@ -189,12 +219,17 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             `transform-origin:${fx}px ${fy}px`,
             `transform:translate3d(${vp.w / 2 - fx}px, ${vp.h * (k.tiltDeg ? 0.52 : 0.5) - fy}px, 0) rotateX(${k.tiltDeg}deg) scale(${k.scale * az.zoom * bias})`,
             `--tilt:${k.tiltDeg}deg`,
-            `width:${W}px`, `height:${H}px`,
+            `width:${W}px`,
+            `height:${H}px`,
             ride,
-        ].filter(Boolean).join(';');
+        ]
+            .filter(Boolean)
+            .join(';');
     });
     // flat 2D needs no perspective (it would only nudge the raised layers out of register)
-    const viewportStyle = cfg.camera.tiltDeg ? `perspective:${cfg.camera.perspectivePx}px;perspective-origin:${cfg.camera.originX} ${cfg.camera.originY}` : '';
+    const viewportStyle = cfg.camera.tiltDeg
+        ? `perspective:${cfg.camera.perspectivePx}px;perspective-origin:${cfg.camera.originX} ${cfg.camera.originY}`
+        : '';
 
     // ------------------------------------------------------------ static pitch
     /**
@@ -218,9 +253,11 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         const w = 128 * sx;
         const h = 256 * sy;
         const box = `left:${-postX * sx}px;top:${-h}px;width:${w}px;height:${h}px`;
-        const art = derived(ctl.net, (n) => n === side
-            ? `${box};background-image:url(assets/fx/goal_${side}_net_billow.png);background-size:${24 * w}px ${h}px;--strip:${24 * w}px;animation:strip 1.2s steps(24) 1 forwards`
-            : `${box};background-image:url(assets/props/goal_${side}.png);background-size:${w}px ${h}px;animation:none`);
+        const art = derived(ctl.net, (n) =>
+            n === side
+                ? `${box};background-image:url(assets/fx/goal_${side}_net_billow.png);background-size:${24 * w}px ${h}px;--strip:${24 * w}px;animation:strip 1.2s steps(24) 1 forwards`
+                : `${box};background-image:url(assets/props/goal_${side}.png);background-size:${w}px ${h}px;animation:none`,
+        );
         return html`<div class="goal-sprite" style="left:${String(anchorX)}px;top:${String(anchorY)}px;z-index:${String(Math.round(anchorY))}"><div class="stand"><div class="goal-art" ${attr({ style: art })}></div></div></div>`;
     };
 
@@ -328,9 +365,17 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             const crowd = !!carrier && !holds && cheb(p.pos, carrier.pos) <= 2;
             return `token team${p.team}${active ? ' active' : ''}${p.staggered ? ' staggered' : ''}${!p.reactionReady ? ' spent' : ''}${holds ? ' carrier' : ''}${crowd ? ' crowd' : ''}`;
         });
-        const sprite = derived(ctl.tick, () => `${spriteStyle(cfg, p.player.sprite, currentAnim(p), p.facing, p.player)};width:${R}px;height:${R}px;left:${-R / 2}px;top:${-feet}px`);
+        const sprite = derived(
+            ctl.tick,
+            () =>
+                `${spriteStyle(cfg, p.player.sprite, currentAnim(p), p.facing, p.player)};width:${R}px;height:${R}px;left:${-R / 2}px;top:${-feet}px`,
+        );
         const kit = kitColor(m.state.clubs[p.team].kit);
-        const tokenStam = derived(ctl.tick, () => (p.stamina < cfg.fatigue.tired ? html`<div class="tok-stam ${p.stamina < cfg.fatigue.exhausted ? 'low' : ''}"><i style="width:${String(Math.round(p.stamina * 2))}%"></i></div>` : html``));
+        const tokenStam = derived(ctl.tick, () =>
+            p.stamina < cfg.fatigue.tired
+                ? html`<div class="tok-stam ${p.stamina < cfg.fatigue.exhausted ? 'low' : ''}"><i style="width:${String(Math.round(p.stamina * 2))}%"></i></div>`
+                : html``,
+        );
         const badges = derived(ctl.tick, () => {
             const s = p.status;
             const b: string[] = [];
@@ -383,8 +428,10 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         return `Round ${m.state.round} / ${cfg.match.rounds} · ${half}`;
     });
     const noTimer = cfg.match.timerSeconds <= 0;
-    const timerStyle = derived(combined([ctl.timer, ctl.awaitingHuman]), ([t, a]) => `transform:scaleX(${a ? t : 0});${t < 0.3 ? 'background:var(--danger)' : ''}`);
-
+    const timerStyle = derived(
+        combined([ctl.timer, ctl.awaitingHuman]),
+        ([t, a]) => `transform:scaleX(${a ? t : 0});${t < 0.3 ? 'background:var(--danger)' : ''}`,
+    );
 
     /** Every ability of the player's classes, locked ones greyed with their unlock level. */
     const kitList = (p: Piece) => {
@@ -428,58 +475,79 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         </div>`;
     });
 
-    const hint = derived(combined([ctl.tick, ctl.awaitingHuman, ctl.hover, ctl.mode, ctl.tip, ctl.setupSel]), ([, awaiting, hover, mode]) => {
-        if (m.state.over) return 'Full time.';
-        const sp = m.state.setPiece;
-        if (sp?.stage === 'setup') {
-            const what = sp.kind === 'corner' ? 'Corner' : 'Free kick';
-            if (!awaiting) return `${what}: ${club(sp.next).short} ${sp.next === sp.team ? 'push players forward' : 'organise the defence'}…`;
-            const left = sp.left[sp.next];
-            const role = sp.next === sp.team ? 'Lose your markers: put runners in space near goal.' : 'Mark their runners goal-side: cover the dangerous ones.';
-            return `${what} setup (${left} move${left === 1 ? '' : 's'} left). ${role} Click a highlighted player, then a cell. Space when you're happy.`;
-        }
-        const p = m.active();
-        if (m.state.bonusTurn === p.id && awaiting && !mode) {
-            return m.state.phase === 'move'
-                ? 'Extra turn for winning the ball: carry it clear of the scrum (or Space to stay).'
-                : 'Extra turn: pass it on, or Space to keep it. Shooting waits for your normal turn.';
-        }
-        if (sp?.stage === 'take' && sp.taker === p.id && awaiting) {
-            return sp.kind === 'corner'
-                ? 'Corner: aim into the box — teammates within 2 of the drop attack a header. Or play it short.'
-                : 'Free kick: shoot over the wall, whip it into the box, or play it short. Nobody can tackle you.';
-        }
-        if (ctl.tip()) return 'Coach Marlow has a word. Enter to carry on — the clock is paused.';
-        if (!awaiting) return ctl.isHuman(p.team) ? (ctl.needsOrders(p) ? 'Resolving…' : `${p.player.name} keeps formation on their own (Focus: F)`) : `${club(p.team).short} is thinking…`;
-        const isCarrier = m.carrier()?.id === p.id;
-        if (mode) {
-            const a = abilityDef(cfg, mode);
-            const extra = mode === 'mark' || mode === 'tempo' ? ' Click a highlighted player.' : MOVE_MODES.includes(mode) ? ' Click a cell.' : ' Aim with the mouse.';
-            return `${a.icon} ${a.label}: ${a.desc}${extra} (Esc cancels)`;
-        }
-        if (m.state.phase === 'move') {
-            if (p.status.fouled) return 'You were fouled: free kick. Stay put (Space), then pass or shoot.';
-            return isCarrier
-                ? 'Dribble: click a cell (pink = a defender can react). Click yourself or Space to stay and pass/shoot.'
-                : 'Move: click a blue cell. Click yourself or Space to hold position.';
-        }
-        if (isCarrier) {
-            if (hover) {
-                const kind = m.kickKind(p, hover);
-                if (kind === 'shot') return `Shoot — the orange zone is where it may go. ${dist(p.pos, hover) > 18 ? 'Speculative from here.' : ''}`;
-                if (kind === 'pass') return `Pass ${dist(p.pos, hover) > cfg.ball.loftThreshold ? '(lofted: only contestable at take-off and landing)' : '(driven: contestable along the whole lane)'}`;
+    const hint = derived(
+        combined([ctl.tick, ctl.awaitingHuman, ctl.hover, ctl.mode, ctl.tip, ctl.setupSel]),
+        ([, awaiting, hover, mode]) => {
+            if (m.state.over) return 'Full time.';
+            const sp = m.state.setPiece;
+            if (sp?.stage === 'setup') {
+                const what = sp.kind === 'corner' ? 'Corner' : 'Free kick';
+                if (!awaiting)
+                    return `${what}: ${club(sp.next).short} ${sp.next === sp.team ? 'push players forward' : 'organise the defence'}…`;
+                const left = sp.left[sp.next];
+                const role =
+                    sp.next === sp.team
+                        ? 'Lose your markers: put runners in space near goal.'
+                        : 'Mark their runners goal-side: cover the dangerous ones.';
+                return `${what} setup (${left} move${left === 1 ? '' : 's'} left). ${role} Click a highlighted player, then a cell. Space when you're happy.`;
             }
-            return 'Aim a pass at any cell, or the goal mouth to shoot. Space keeps the ball.';
-        }
-        const c = m.carrier();
-        if (c && c.team !== p.team && cheb(c.pos, p.pos) <= 2) return 'Click the carrier to tackle, or use an ability. Space ends your turn.';
-        return 'Use an ability, or Space to end your turn.';
-    });
+            const p = m.active();
+            if (m.state.bonusTurn === p.id && awaiting && !mode) {
+                return m.state.phase === 'move'
+                    ? 'Extra turn for winning the ball: carry it clear of the scrum (or Space to stay).'
+                    : 'Extra turn: pass it on, or Space to keep it. Shooting waits for your normal turn.';
+            }
+            if (sp?.stage === 'take' && sp.taker === p.id && awaiting) {
+                return sp.kind === 'corner'
+                    ? 'Corner: aim into the box — teammates within 2 of the drop attack a header. Or play it short.'
+                    : 'Free kick: shoot over the wall, whip it into the box, or play it short. Nobody can tackle you.';
+            }
+            if (ctl.tip()) return 'Coach Marlow has a word. Enter to carry on — the clock is paused.';
+            if (!awaiting)
+                return ctl.isHuman(p.team)
+                    ? ctl.needsOrders(p)
+                        ? 'Resolving…'
+                        : `${p.player.name} keeps formation on their own (Focus: F)`
+                    : `${club(p.team).short} is thinking…`;
+            const isCarrier = m.carrier()?.id === p.id;
+            if (mode) {
+                const a = abilityDef(cfg, mode);
+                const extra =
+                    mode === 'mark' || mode === 'tempo'
+                        ? ' Click a highlighted player.'
+                        : MOVE_MODES.includes(mode)
+                          ? ' Click a cell.'
+                          : ' Aim with the mouse.';
+                return `${a.icon} ${a.label}: ${a.desc}${extra} (Esc cancels)`;
+            }
+            if (m.state.phase === 'move') {
+                if (p.status.fouled) return 'You were fouled: free kick. Stay put (Space), then pass or shoot.';
+                return isCarrier
+                    ? 'Dribble: click a cell (pink = a defender can react). Click yourself or Space to stay and pass/shoot.'
+                    : 'Move: click a blue cell. Click yourself or Space to hold position.';
+            }
+            if (isCarrier) {
+                if (hover) {
+                    const kind = m.kickKind(p, hover);
+                    if (kind === 'shot')
+                        return `Shoot — the orange zone is where it may go. ${dist(p.pos, hover) > 18 ? 'Speculative from here.' : ''}`;
+                    if (kind === 'pass')
+                        return `Pass ${dist(p.pos, hover) > cfg.ball.loftThreshold ? '(lofted: only contestable at take-off and landing)' : '(driven: contestable along the whole lane)'}`;
+                }
+                return 'Aim a pass at any cell, or the goal mouth to shoot. Space keeps the ball.';
+            }
+            const c = m.carrier();
+            if (c && c.team !== p.team && cheb(c.pos, p.pos) <= 2)
+                return 'Click the carrier to tackle, or use an ability. Space ends your turn.';
+            return 'Use an ability, or Space to end your turn.';
+        },
+    );
 
     const phaseAbilities = (p: Piece) => {
         const phase = m.state.phase;
-        return abilitiesOf(cfg, p.player).filter((id) => (phase === 'move' ? abilityDef(cfg, id).phase !== 'act' : abilityDef(cfg, id).phase === 'act'));
-    
+        return abilitiesOf(cfg, p.player).filter((id) =>
+            phase === 'move' ? abilityDef(cfg, id).phase !== 'act' : abilityDef(cfg, id).phase === 'act',
+        );
     };
 
     const phaseStep = derived(combined([ctl.tick, ctl.awaitingHuman]), ([, awaiting]) => {
@@ -505,7 +573,9 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             const a = abilityDef(cfg, id);
             const reason = m.blockReason(p, id);
             const cls = `acard${mode === id ? ' on' : ''}${reason ? ' off' : ''}`;
-            const enter = on('mouseenter', () => { if (!reason) ctl.preview.set(id); });
+            const enter = on('mouseenter', () => {
+                if (!reason) ctl.preview.set(id);
+            });
             const leave = on('mouseleave', () => ctl.preview.set(null));
             return html`<button class="${cls}" ${enter} ${leave} ${on('click', () => ctl.useAbility(id))}>
                 <span class="ic">${a.icon}</span>
@@ -527,7 +597,9 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
 
     const queue = derived(ctl.tick, () => {
         // a tackle winner's extra turn sits in front of the normal order
-        const ids = m.state.bonusTurn ? [m.state.bonusTurn, ...m.state.order.slice(m.state.turnIndex + 1, m.state.turnIndex + 12)] : m.state.order.slice(m.state.turnIndex, m.state.turnIndex + 12);
+        const ids = m.state.bonusTurn
+            ? [m.state.bonusTurn, ...m.state.order.slice(m.state.turnIndex + 1, m.state.turnIndex + 12)]
+            : m.state.order.slice(m.state.turnIndex, m.state.turnIndex + 12);
         return html`<div class="queue">${ids.map((id, i) => {
             const p = m.piece(id);
             const auto = ctl.isHuman(p.team) && !ctl.needsOrders(p);
@@ -538,11 +610,18 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         })}</div>`;
     });
 
-    const log = derived(ctl.commentary, (lines) =>
-        html`<div class="log"><h5>Commentary <small>B. Quill</small></h5><ul>${lines.slice(0, 8).map((l) => html`<li class="${l.team === null ? '' : `t${l.team}`} ${l.tone}"><b>${String(l.minute)}'</b> ${l.text}</li>`)}</ul></div>`);
+    const log = derived(
+        ctl.commentary,
+        (lines) =>
+            html`<div class="log"><h5>Commentary <small>B. Quill</small></h5><ul>${lines.slice(0, 8).map((l) => html`<li class="${l.team === null ? '' : `t${l.team}`} ${l.tone}"><b>${String(l.minute)}'</b> ${l.text}</li>`)}</ul></div>`,
+    );
 
-    const caption = derived(ctl.caption, (c) => (c ? html`<div class="caption ${c.team === null ? '' : `t${c.team}`}" style="--kit:${c.team === null ? 'var(--gold)' : kitColor(club(c.team).kit)}">
-        <b>${c.title}</b><span>${c.text}</span></div>` : html``));
+    const caption = derived(ctl.caption, (c) =>
+        c
+            ? html`<div class="caption ${c.team === null ? '' : `t${c.team}`}" style="--kit:${c.team === null ? 'var(--gold)' : kitColor(club(c.team).kit)}">
+        <b>${c.title}</b><span>${c.text}</span></div>`
+            : html``,
+    );
 
     const shakeClass = derived(ctl.shake, (n) => `viewport ${n ? (n % 2 ? 'shake-a' : 'shake-b') : ''}`);
 
@@ -568,15 +647,20 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         return html`<div class="burst ${b.kind}" style="left:${cx(b.at.x)}px;top:${px(b.at.y) + C / 2}px"><div class="stand">${parts}</div></div>`;
     };
 
-    const tipPanel = derived(ctl.tip, (t) => (t ? html`<div class="tip">
+    const tipPanel = derived(ctl.tip, (t) =>
+        t
+            ? html`<div class="tip">
         <div class="coach"><div class="sprite" style="${spriteStyle(cfg, 'coach', 'shout', 'down')};width:96px;height:96px;background-size:${String((cfg.animFrames.shout ?? 12) * 96)}px 96px;--strip:${String((cfg.animFrames.shout ?? 12) * 96)}px"></div></div>
         <div class="tip-body"><small>Coach Marlow</small><h3>${t.title}</h3><p>${t.text}</p>
             <div class="tip-actions"><button class="ghost" ${on('click', () => ctl.dismissTip(true))}>No more tips</button><button class="primary" ${on('click', () => ctl.dismissTip())}>Got it <kbd>Enter</kbd></button></div></div>
-    </div>` : html``));
+    </div>`
+            : html``,
+    );
 
     const lessonPanel = derived(combined([ctl.lesson, ctl.tutorialDone]), ([l, done]) => {
         const coach = html`<div class="coach"><div class="sprite" style="${spriteStyle(cfg, 'coach', 'shout', 'down')};width:96px;height:96px;background-size:${String((cfg.animFrames.shout ?? 12) * 96)}px 96px;--strip:${String((cfg.animFrames.shout ?? 12) * 96)}px"></div></div>`;
-        if (done) return html`<div class="tip lesson done">${coach}<div class="tip-body"><small>Training complete</small><h3>You're ready.</h3>
+        if (done)
+            return html`<div class="tip lesson done">${coach}<div class="tip-body"><small>Training complete</small><h3>You're ready.</h3>
             <p>That's the whole game: make space, move the ball, deny space, beat the clock. A quick match against Easy AI is a good next step, then a career.</p>
             <div class="tip-actions"><button class="primary" ${on('click', onExit)}>Back to menu</button></div></div></div>`;
         if (!l) return html``;
@@ -586,17 +670,31 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
     });
 
     const toast = derived(ctl.toast, (t) => (t ? html`<div class="toast">${t}</div>` : html``));
-    const focusChip = derived(combined([prefs, ctl.tick]), ([p]) => html`<button class="ghost focus-chip" title="Which of your players ask for orders" ${on('click', () => ctl.cycleControl())}>Focus: ${CONTROL_MODES.find((c) => c.id === p.controlMode)!.label} <kbd>F</kbd></button>`);
-    const radioBtn = derived(combined([prefs, nowPlaying]), ([p, t]) => html`<button class="set-btn ${p.radioOn ? '' : 'dim'}" title="${p.radioOn ? `Radio: ${t?.title ?? 'on'} · N next · R off` : 'Radio off · R on'}" ${on('click', () => radio.setOn(!p.radioOn))}>♫</button>`);
-    const muteChip = derived(prefs, (p) => html`<button class="set-btn" title="Mute (M)" ${on('click', () => setPref('muted', !p.muted))}>${p.muted ? '♪̸' : '♪'}</button>`);
+    const focusChip = derived(
+        combined([prefs, ctl.tick]),
+        ([p]) =>
+            html`<button class="ghost focus-chip" title="Which of your players ask for orders" ${on('click', () => ctl.cycleControl())}>Focus: ${CONTROL_MODES.find((c) => c.id === p.controlMode)!.label} <kbd>F</kbd></button>`,
+    );
+    const radioBtn = derived(
+        combined([prefs, nowPlaying]),
+        ([p, t]) =>
+            html`<button class="set-btn ${p.radioOn ? '' : 'dim'}" title="${p.radioOn ? `Radio: ${t?.title ?? 'on'} · N next · R off` : 'Radio off · R on'}" ${on('click', () => radio.setOn(!p.radioOn))}>♫</button>`,
+    );
+    const muteChip = derived(
+        prefs,
+        (p) =>
+            html`<button class="set-btn" title="Mute (M)" ${on('click', () => setPref('muted', !p.muted))}>${p.muted ? '♪̸' : '♪'}</button>`,
+    );
     const report = derived(ctl.report, (r) => (r ? MatchReport(ctl, onExit, continueLabel) : html``));
 
     const minimap = derived(ctl.tick, () => {
         const s = 4;
-        const dots = m.state.pieces.map((p) => {
-            const active = !m.state.over && m.active().id === p.id;
-            return `<circle cx="${p.pos.x * s + s / 2}" cy="${p.pos.y * s + s / 2}" r="${active ? 3.4 : 2.4}" fill="${kitColor(club(p.team).kit)}" stroke="${active ? 'var(--active)' : '#0008'}" stroke-width="${active ? 1.5 : 0.8}" />`;
-        }).join('');
+        const dots = m.state.pieces
+            .map((p) => {
+                const active = !m.state.over && m.active().id === p.id;
+                return `<circle cx="${p.pos.x * s + s / 2}" cy="${p.pos.y * s + s / 2}" r="${active ? 3.4 : 2.4}" fill="${kitColor(club(p.team).kit)}" stroke="${active ? 'var(--active)' : '#0008'}" stroke-width="${active ? 1.5 : 0.8}" />`;
+            })
+            .join('');
         const b = m.ballCell();
         const svg = `<svg width="${cols * s}" height="${rows * s}" viewBox="0 0 ${cols * s} ${rows * s}">
             <rect width="100%" height="100%" fill="#2f6b34" />
@@ -605,16 +703,21 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             <rect x="${cols * s - 2}" y="${gTop * s}" width="2" height="${cfg.pitch.goalWidth * s}" fill="#fff" />
             ${dots}<circle cx="${b.x * s + s / 2}" cy="${b.y * s + s / 2}" r="3.2" fill="#fff" stroke="#2f8cff" stroke-width="1.6" />
         </svg>`;
-        return html`<div class="minimap" ${createDirective((n) => { n.innerHTML = svg; })}></div>`;
+        return html`<div class="minimap" ${createDirective((n) => {
+            n.innerHTML = svg;
+        })}></div>`;
     });
 
     const banner = derived(ctl.banner, (b) =>
-        b ? html`<div class="banner"><div class="banner-text">${b.text}</div>${b.sub ? html`<div class="banner-sub">${b.sub}</div>` : html``}
-              </div>` : html``,
+        b
+            ? html`<div class="banner"><div class="banner-text">${b.text}</div>${b.sub ? html`<div class="banner-sub">${b.sub}</div>` : html``}
+              </div>`
+            : html``,
     );
 
     // ------------------------------------------------------------ bench & substitutions
-    const staminaBar = (v: number) => html`<span class="stam-bar ${v < cfg.fatigue.exhausted ? 'low' : v < cfg.fatigue.tired ? 'mid' : ''}"><i style="width:${String(Math.round(v))}%"></i></span>`;
+    const staminaBar = (v: number) =>
+        html`<span class="stam-bar ${v < cfg.fatigue.exhausted ? 'low' : v < cfg.fatigue.tired ? 'mid' : ''}"><i style="width:${String(Math.round(v))}%"></i></span>`;
     const benchPanel = derived(combined([ctl.tick, benchPick, ctl.awaitingHuman]), ([, pick, awaiting]) => {
         // whose bench: the human side (in hotseat, whoever is on the move)
         const team: TeamSide = ctl.isHuman(0) && ctl.isHuman(1) ? m.active().team : ctl.isHuman(1) ? 1 : 0;
@@ -633,12 +736,24 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
         return html`<div class="modal-body bench-panel">
             <header><h2>Bench · ${club(team).short}</h2><span class="subs-left">${String(left)} of ${String(cfg.subs.max)} substitutions left</span><button class="ghost" ${on('click', () => showBench.set(false))}>Close <kbd>Esc</kbd></button></header>
             <div class="bench-grid">
-                <section><h4>On the pitch <small>tiredest first</small></h4><ul class="bench-list">${onPitch.map((p) => html`<li class="${pick.off === p.id ? 'on' : ''}" ${on('click', () => benchPick.set({ ...pick, off: p.id, msg: null }))}>
+                <section><h4>On the pitch <small>tiredest first</small></h4><ul class="bench-list">${onPitch.map(
+                    (
+                        p,
+                    ) => html`<li class="${pick.off === p.id ? 'on' : ''}" ${on('click', () => benchPick.set({ ...pick, off: p.id, msg: null }))}>
                     <div class="sprite still" style="${spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player)}"></div>
-                    <b>#${String(p.player.number)} ${p.player.name}</b><span class="cl">${cfg.classes[p.player.cls].short}</span>${staminaBar(p.stamina)}<span class="num">${String(Math.round(p.stamina))}</span></li>`)}</ul></section>
-                <section><h4>Bench</h4>${bench.length ? html`<ul class="bench-list">${bench.map((p) => html`<li class="${pick.on === p.id ? 'on' : ''}" ${on('click', () => benchPick.set({ ...pick, on: p.id, msg: null }))}>
+                    <b>#${String(p.player.number)} ${p.player.name}</b><span class="cl">${cfg.classes[p.player.cls].short}</span>${staminaBar(p.stamina)}<span class="num">${String(Math.round(p.stamina))}</span></li>`,
+                )}</ul></section>
+                <section><h4>Bench</h4>${
+                    bench.length
+                        ? html`<ul class="bench-list">${bench.map(
+                              (
+                                  p,
+                              ) => html`<li class="${pick.on === p.id ? 'on' : ''}" ${on('click', () => benchPick.set({ ...pick, on: p.id, msg: null }))}>
                     <div class="sprite still" style="${spriteStyle(cfg, p.sprite, 'idle', 'down', p)}"></div>
-                    <b>#${String(p.number)} ${p.name}</b><span class="cl">${classLabel(cfg, p)}</span><span class="num">Lv ${String(p.level)}</span></li>`)}</ul>` : html`<p class="muted">Nobody left on the bench.</p>`}</section>
+                    <b>#${String(p.number)} ${p.name}</b><span class="cl">${classLabel(cfg, p)}</span><span class="num">Lv ${String(p.level)}</span></li>`,
+                          )}</ul>`
+                        : html`<p class="muted">Nobody left on the bench.</p>`
+                }</section>
             </div>
             <footer class="bench-foot">
                 <span class="muted">${pick.msg ?? why ?? (!mine ? 'Watching: the AI manages its own bench.' : !awaiting ? 'Substitutions happen on your turn.' : 'Tired players move less (under 50) and react worse (under 25). Pick one off, one on.')}</span>
@@ -651,15 +766,26 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
     const lifecycle = mounted<HTMLDivElement>(() => {
         const onKey = (e: KeyboardEvent) => {
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-            if (ctl.tip() && (e.key === 'Enter' || e.code === 'Space' || e.key === 'Escape')) { e.preventDefault(); ctl.dismissTip(); return; }
-            if (ctl.lesson()?.info && e.key === 'Enter') { e.preventDefault(); ctl.nextLesson(); return; }
+            if (ctl.tip() && (e.key === 'Enter' || e.code === 'Space' || e.key === 'Escape')) {
+                e.preventDefault();
+                ctl.dismissTip();
+                return;
+            }
+            if (ctl.lesson()?.info && e.key === 'Enter') {
+                e.preventDefault();
+                ctl.nextLesson();
+                return;
+            }
             if (e.code === 'Space') {
                 e.preventDefault();
                 ctl.pass();
             } else if (e.key === 't' || e.key === 'T') ctl.input({ t: 'act', d: { kind: 'tackle' } });
             else if (e.key === 'a' || e.key === 'A') ctl.input({ t: 'auto' });
-            else if (e.key === 'Escape') { ctl.mode.set(null); showPlaybook.set(false); showBench.set(false); }
-            else if (e.key === 'b' || e.key === 'B') showBench.update((v) => !v);
+            else if (e.key === 'Escape') {
+                ctl.mode.set(null);
+                showPlaybook.set(false);
+                showBench.set(false);
+            } else if (e.key === 'b' || e.key === 'B') showBench.update((v) => !v);
             else if (e.key === 'h' || e.key === 'H') showPlaybook.update((v) => !v);
             else if (e.key === 'f' || e.key === 'F') ctl.cycleControl();
             else if (e.key === 'p' || e.key === 'P') ctl.togglePause();
@@ -699,20 +825,44 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
                 <div class="pitch cond-${stadium.condition}" style="width:${W}px;height:${H}px" ${pitchLayer}></div>
                 <div class="grid" style="width:${W}px;height:${H}px" ${gridLayer}></div>
                 <div class="overlays">
-                    ${$each(zoc).$withKey((z) => z.k).$as((z) => html`<div class="zoc zoc-${z.kind}" style="left:${px(z.x)}px;top:${px(z.y)}px;width:${C}px;height:${C}px"></div>`)}
-                    ${$each(overlays).$withKey((o) => o.k).$as((o) => html`<div class="ov ov-${o.kind}" style="left:${px(o.x)}px;top:${px(o.y)}px;width:${C}px;height:${C}px"></div>`)}
-                    ${$each(reactors).$withKey((p) => p.id).$as((p) => html`<div class="reactor" ${attr({ style: derived(ctl.tick, () => `left:${cx(p.pos.x)}px;top:${px(p.pos.y) + C / 2}px`) })}></div>`)}
+                    ${$each(zoc)
+                        .$withKey((z) => z.k)
+                        .$as(
+                            (z) =>
+                                html`<div class="zoc zoc-${z.kind}" style="left:${px(z.x)}px;top:${px(z.y)}px;width:${C}px;height:${C}px"></div>`,
+                        )}
+                    ${$each(overlays)
+                        .$withKey((o) => o.k)
+                        .$as(
+                            (o) =>
+                                html`<div class="ov ov-${o.kind}" style="left:${px(o.x)}px;top:${px(o.y)}px;width:${C}px;height:${C}px"></div>`,
+                        )}
+                    ${$each(reactors)
+                        .$withKey((p) => p.id)
+                        .$as(
+                            (p) =>
+                                html`<div class="reactor" ${attr({ style: derived(ctl.tick, () => `left:${cx(p.pos.x)}px;top:${px(p.pos.y) + C / 2}px`) })}></div>`,
+                        )}
                 </div>
                 <div class="tokens">
                     ${stadiumProps(stadium, conditions, kitColor(club(0).kit), { L: px(0), T: px(0), PW: cols * C, PH: rows * C, C, W, H, S: cfg.sprites.renderPx / cfg.sprites.framePx, tilt: cfg.camera.tiltDeg })}
                     ${goalSprite('left')}${goalSprite('right')}
-                    ${$each(() => m.state.pieces).$withKey((p) => p.id).$as(Token)}
+                    ${$each(() => m.state.pieces)
+                        .$withKey((p) => p.id)
+                        .$as(Token)}
                     <div class="ball" ${attr({ style: ballStyle })}>
                         <div class="ball-shadow"></div><div class="ball-ring"></div>
                         <div class="stand"><img class="ball-img" src="assets/props/ball_classic.png" ${attr({ style: ballImgStyle })} /></div>
                     </div>
-                    ${$each(ctl.popups).$withKey((p) => p.id).$as((p) => html`<div class="popup ${p.tone}" style="left:${cx(p.at.x)}px;top:${px(p.at.y)}px"><div class="stand"><span>${p.text}</span></div></div>`)}
-                    ${$each(ctl.bursts).$withKey((b) => b.id).$as(burst)}
+                    ${$each(ctl.popups)
+                        .$withKey((p) => p.id)
+                        .$as(
+                            (p) =>
+                                html`<div class="popup ${p.tone}" style="left:${cx(p.at.x)}px;top:${px(p.at.y)}px"><div class="stand"><span>${p.text}</span></div></div>`,
+                        )}
+                    ${$each(ctl.bursts)
+                        .$withKey((b) => b.id)
+                        .$as(burst)}
                 </div>
             </div>
         ${atmosphere(conditions)}
@@ -755,10 +905,19 @@ export const MatchView = (ctl: MatchController, onExit: () => void, onSettings?:
             ${$render(actions)}
         </footer>
 
-        ${$if(showPlaybook).$then(() => html`<div class="modal" ${on('click', (e) => { if (e.target === e.currentTarget) showPlaybook.set(false); })}>
+        ${$if(showPlaybook).$then(
+            () => html`<div class="modal" ${on('click', (e) => {
+                if (e.target === e.currentTarget) showPlaybook.set(false);
+            })}>
             <div class="modal-body"><header><h2>Playbook</h2><button class="ghost" ${on('click', () => showPlaybook.set(false))}>Close <kbd>Esc</kbd></button></header>${Playbook(cfg)}</div>
-        </div>`)}
-        ${$if(showBench).$then(() => html`<div class="modal" ${on('click', (e) => { if (e.target === e.currentTarget) showBench.set(false); })}>${$render(benchPanel)}</div>`)}
+        </div>`,
+        )}
+        ${$if(showBench).$then(
+            () =>
+                html`<div class="modal" ${on('click', (e) => {
+                    if (e.target === e.currentTarget) showBench.set(false);
+                })}>${$render(benchPanel)}</div>`,
+        )}
         ${$render(tipPanel)}
         ${$render(lessonPanel)}
         ${$if(ctl.paused).$then(() => html`<div class="pause-veil"><div class="banner"><div class="banner-text">Paused</div><div class="banner-sub">Read the commentary, plan your move. P to resume.</div><button class="primary" ${on('click', () => ctl.togglePause())}>Resume</button></div></div>`)}

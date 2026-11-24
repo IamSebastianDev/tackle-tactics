@@ -34,5 +34,8 @@ export const fitStage = (stage: HTMLElement) => {
     apply();
     window.addEventListener('resize', apply);
     const unsub = prefs.subscribe(apply);
-    return () => { window.removeEventListener('resize', apply); unsub(); };
+    return () => {
+        window.removeEventListener('resize', apply);
+        unsub();
+    };
 };

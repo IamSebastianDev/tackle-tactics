@@ -19,7 +19,14 @@ import type { Plugin } from 'vite';
 
 const DIRECT = new Set(['.mp3', '.m4a', '.aac', '.ogg', '.oga', '.opus']);
 const TRANSCODE = new Set(['.wav', '.aif', '.aiff', '.flac']);
-const MIME: Record<string, string> = { '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.oga': 'audio/ogg', '.opus': 'audio/ogg' };
+const MIME: Record<string, string> = {
+    '.mp3': 'audio/mpeg',
+    '.m4a': 'audio/mp4',
+    '.aac': 'audio/aac',
+    '.ogg': 'audio/ogg',
+    '.oga': 'audio/ogg',
+    '.opus': 'audio/ogg',
+};
 const VIRTUAL = 'virtual:playlist';
 const RESOLVED = '\0' + VIRTUAL;
 
@@ -32,13 +39,20 @@ export const parseName = (file: string) => {
     let name = basename(file, extname(file)).replace(/_/g, ' ').trim();
     let order = Number.POSITIVE_INFINITY;
     const num = name.match(/^(\d{1,3})\s*[-.)]?\s+/);
-    if (num) { order = Number(num[1]); name = name.slice(num[0].length); }
+    if (num) {
+        order = Number(num[1]);
+        name = name.slice(num[0].length);
+    }
     const parts = name.split(/\s+[-–—]\s+/);
     const [artist, title] = parts.length >= 2 ? [parts[0]!.trim(), parts.slice(1).join(' - ').trim()] : [null, name];
     return { order, artist, title };
 };
 
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const slug = (s: string) =>
+    s
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
 
 export const musicPlugin = (dir: string, cacheDir: string): Plugin => {
     let entries: Entry[] = [];
@@ -50,15 +64,21 @@ export const musicPlugin = (dir: string, cacheDir: string): Plugin => {
         if (existsSync(out)) return out;
         // 192 kbps AAC; low-rate or mono sources can't take that, so fall back to the encoder's default
         const ok = has('afconvert')
-            ? spawnSync('afconvert', ['-f', 'm4af', '-d', 'aac', '-b', '192000', src, out]).status === 0
-                || spawnSync('afconvert', ['-f', 'm4af', '-d', 'aac', src, out]).status === 0
-            : has('ffmpeg') && spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-c:a', 'aac', '-b:a', '192k', out]).status === 0;
+            ? spawnSync('afconvert', ['-f', 'm4af', '-d', 'aac', '-b', '192000', src, out]).status === 0 ||
+              spawnSync('afconvert', ['-f', 'm4af', '-d', 'aac', src, out]).status === 0
+            : has('ffmpeg') &&
+              spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-c:a', 'aac', '-b:a', '192k', out]).status === 0;
         return ok && existsSync(out) ? out : null;
     };
 
     const scan = () => {
-        if (!existsSync(dir)) { entries = []; return; }
-        const files = readdirSync(dir).filter((f) => !f.startsWith('.')).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        if (!existsSync(dir)) {
+            entries = [];
+            return;
+        }
+        const files = readdirSync(dir)
+            .filter((f) => !f.startsWith('.'))
+            .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
         const next: Entry[] = [];
         for (const f of files) {
             const ext = extname(f).toLowerCase();
@@ -73,12 +93,17 @@ export const musicPlugin = (dir: string, cacheDir: string): Plugin => {
         // numbered tracks first in their order, then the rest alphabetically
         entries = next.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
     };
-    const urlOf = (e: Entry, i: number) => `music/${String(i + 1).padStart(2, '0')}-${slug(e.title) || 'track'}${extname(e.out).toLowerCase()}`;
+    const urlOf = (e: Entry, i: number) =>
+        `music/${String(i + 1).padStart(2, '0')}-${slug(e.title) || 'track'}${extname(e.out).toLowerCase()}`;
 
     return {
         name: 'tt-music',
-        buildStart() { scan(); },
-        resolveId(id) { return id === VIRTUAL ? RESOLVED : null; },
+        buildStart() {
+            scan();
+        },
+        resolveId(id) {
+            return id === VIRTUAL ? RESOLVED : null;
+        },
         load(id) {
             if (id !== RESOLVED) return null;
             const list = entries.map((e, i) => ({ url: urlOf(e, i), title: e.title, artist: e.artist }));
@@ -108,7 +133,12 @@ export const musicPlugin = (dir: string, cacheDir: string): Plugin => {
                 if (range) {
                     const start = range[1] ? Number(range[1]) : 0;
                     const end = range[2] ? Number(range[2]) : size - 1;
-                    res.writeHead(206, { 'Content-Type': type, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1 });
+                    res.writeHead(206, {
+                        'Content-Type': type,
+                        'Content-Range': `bytes ${start}-${end}/${size}`,
+                        'Accept-Ranges': 'bytes',
+                        'Content-Length': end - start + 1,
+                    });
                     createReadStream(file, { start, end }).pipe(res);
                 } else {
                     res.writeHead(200, { 'Content-Type': type, 'Content-Length': size, 'Accept-Ranges': 'bytes' });

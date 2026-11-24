@@ -7,9 +7,18 @@ describe('set pieces and the referee', () => {
         const tot = { shots: 0, tackles: 0, fouls: 0, cards: 0, reds: 0, corners: 0, freeKicks: 0, goals: 0, matches: 0 };
         for (let seed = 1; seed <= 12; seed++) {
             const { st } = simulate(defaultConfig, seed * 7919);
-            tot.shots += st.shots; tot.tackles += st.tackles; tot.fouls += st.fouls; tot.cards += st.cards; tot.reds += st.reds; tot.corners += st.corners; tot.freeKicks += st.freeKicks; tot.goals += st.goals; tot.matches++;
+            tot.shots += st.shots;
+            tot.tackles += st.tackles;
+            tot.fouls += st.fouls;
+            tot.cards += st.cards;
+            tot.reds += st.reds;
+            tot.corners += st.corners;
+            tot.freeKicks += st.freeKicks;
+            tot.goals += st.goals;
+            tot.matches++;
         }
-        if (process.env.TT_VERBOSE) console.log('per match', Object.fromEntries(Object.entries(tot).map(([k, v]) => [k, +(v / tot.matches).toFixed(2)])));
+        if (process.env.TT_VERBOSE)
+            console.log('per match', Object.fromEntries(Object.entries(tot).map(([k, v]) => [k, +(v / tot.matches).toFixed(2)])));
         expect(tot.fouls).toBeGreaterThan(0);
         expect(tot.corners).toBeGreaterThan(0);
     }, 60000);
@@ -24,9 +33,14 @@ describe('corner flow', () => {
         const cfg = defaultConfig;
         const rng = createRng(42);
         const names = new Set<string>();
-        const clubs = [generateClub(cfg, rng, 'home', 'blue', 'keeper_pink', '4-3-3', names), generateClub(cfg, rng, 'away', 'yellow', 'keeper_black', '4-4-2', names)] as const;
+        const clubs = [
+            generateClub(cfg, rng, 'home', 'blue', 'keeper_pink', '4-3-3', names),
+            generateClub(cfg, rng, 'away', 'yellow', 'keeper_black', '4-4-2', names),
+        ] as const;
         const m = new Match(cfg, [clubs[0], clubs[1]], 42);
-        const award = (m as unknown as { awardSetPiece: (k: string, t: number, p: null, c: { x: number; y: number }) => unknown }).awardSetPiece.bind(m);
+        const award = (
+            m as unknown as { awardSetPiece: (k: string, t: number, p: null, c: { x: number; y: number }) => unknown }
+        ).awardSetPiece.bind(m);
         award('corner', 0, null, m.cornerSpot(0, 0));
         const sp = m.state.setPiece!;
         expect(sp.stage).toBe('setup');

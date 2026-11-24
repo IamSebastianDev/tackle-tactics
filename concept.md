@@ -85,10 +85,10 @@ Movement range, hit/success chances, and reaction outcomes all derive from stats
 Borrowed from the DnD reaction concept. A player with a reaction available can act _outside their own turn_ when a trigger occurs nearby, closing the hole where the ball could otherwise walk past a defender untouched. This makes every square genuinely contested.
 
 - **Trigger windows are narrow and spatial** (this specific square, this moment), so ball movement stays possible and danger is legible before you commit:
-  - Ball passes into/through an adjacent square → **Intercept**
-  - Ball-carrier moves into/through a defender's adjacent square → **Tackle / Steal**
-  - Shot taken → Goalkeeper **Save**
-  - Player runs into a defender's zone → **Block run / Mark**
+    - Ball passes into/through an adjacent square → **Intercept**
+    - Ball-carrier moves into/through a defender's adjacent square → **Tackle / Steal**
+    - Shot taken → Goalkeeper **Save**
+    - Player runs into a defender's zone → **Block run / Mark**
 - **One reaction per turn cycle**, refreshed at the start of the player's next turn (DnD-style). A defender who has spent their reaction is visibly vulnerable and exploitable.
 - **Outcomes are stat + RNG** — high Reflexes widens the save/intercept window, high Tackle improves steals and lowers injury risk, high Composure reduces fatigue/pressure penalties, low Agility means a successful reaction still leaves you out of position.
 - RNG sits on a stat floor, so upsets are possible but unlikely — a low-level defender _can_ dispossess a star, just rarely.

@@ -6,16 +6,49 @@ import type { MatchEvent, Piece, TeamSide } from '../types';
 import type { Match } from './match';
 
 export type PlayerLine = {
-    goals: number; assists: number; shots: number; onTarget: number; passes: number; passesOk: number;
-    tackles: number; tacklesWon: number; intercepts: number; saves: number; dribbles: number; fouls: number;
-    yellows: number; red: boolean; conceded: number;
+    goals: number;
+    assists: number;
+    shots: number;
+    onTarget: number;
+    passes: number;
+    passesOk: number;
+    tackles: number;
+    tacklesWon: number;
+    intercepts: number;
+    saves: number;
+    dribbles: number;
+    fouls: number;
+    yellows: number;
+    red: boolean;
+    conceded: number;
 };
 export type GoalNote = { team: TeamSide; scorer: string; assist?: string; minute: number; how: 'open' | 'header' | 'penalty' | 'through' };
-export type TeamLine = { possession: number; shots: number; onTarget: number; passes: number; passesOk: number; tacklesWon: number; saves: number };
+export type TeamLine = {
+    possession: number;
+    shots: number;
+    onTarget: number;
+    passes: number;
+    passesOk: number;
+    tacklesWon: number;
+    saves: number;
+};
 
 const blank = (): PlayerLine => ({
-    goals: 0, assists: 0, shots: 0, onTarget: 0, passes: 0, passesOk: 0, tackles: 0, tacklesWon: 0, intercepts: 0, saves: 0,
-    dribbles: 0, fouls: 0, yellows: 0, red: false, conceded: 0,
+    goals: 0,
+    assists: 0,
+    shots: 0,
+    onTarget: 0,
+    passes: 0,
+    passesOk: 0,
+    tackles: 0,
+    tacklesWon: 0,
+    intercepts: 0,
+    saves: 0,
+    dribbles: 0,
+    fouls: 0,
+    yellows: 0,
+    red: false,
+    conceded: 0,
 });
 
 export class MatchStats {
@@ -30,7 +63,10 @@ export class MatchStats {
 
     line = (id: string) => {
         let l = this.players.get(id);
-        if (!l) { l = blank(); this.players.set(id, l); }
+        if (!l) {
+            l = blank();
+            this.players.set(id, l);
+        }
         return l;
     };
 
@@ -117,7 +153,8 @@ export class MatchStats {
                     const how: GoalNote['how'] = penalty ? 'penalty' : lp && lp.to === scorer ? lp.how : 'open';
                     this.goals.push({ team: e.team, scorer, assist, minute: this.minute(), how });
                     // keeper & back line concede
-                    for (const p of this.m.state.pieces) if (p.team !== e.team && (p.player.cls === 'keeper' || p.player.cls === 'defender')) this.line(p.id).conceded++;
+                    for (const p of this.m.state.pieces)
+                        if (p.team !== e.team && (p.player.cls === 'keeper' || p.player.cls === 'defender')) this.line(p.id).conceded++;
                     this.lastPass = null;
                     break;
                 }
@@ -128,12 +165,20 @@ export class MatchStats {
     }
 
     team = (t: TeamSide): TeamLine => {
-        const ids = this.m.everyone().filter((p) => p.team === t).map((p) => p.id);
+        const ids = this.m
+            .everyone()
+            .filter((p) => p.team === t)
+            .map((p) => p.id);
         const sum = (k: keyof PlayerLine) => ids.reduce((a, id) => a + Number(this.players.get(id)?.[k] ?? 0), 0);
         const total = this.possessionTurns[0] + this.possessionTurns[1];
         return {
             possession: total ? Math.round((this.possessionTurns[t] / total) * 100) : 50,
-            shots: sum('shots'), onTarget: sum('onTarget'), passes: sum('passes'), passesOk: sum('passesOk'), tacklesWon: sum('tacklesWon'), saves: sum('saves'),
+            shots: sum('shots'),
+            onTarget: sum('onTarget'),
+            passes: sum('passes'),
+            passesOk: sum('passesOk'),
+            tacklesWon: sum('tacklesWon'),
+            saves: sum('saves'),
         };
     };
 

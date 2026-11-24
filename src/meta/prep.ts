@@ -17,7 +17,13 @@ export type TeamTalk = 'calm' | 'fire' | 'demand';
 export type Prep = { fixtureId: string; plan: TeamStyle; talk: TeamTalk; referee: Referee; conditions: Conditions; applied?: boolean };
 
 /** Rock-paper-scissors between styles; Balanced neither counters nor is countered. */
-export const COUNTERS: Record<TeamStyle, TeamStyle | null> = { press: 'possession', possession: 'deep', deep: 'direct', direct: 'press', balanced: null };
+export const COUNTERS: Record<TeamStyle, TeamStyle | null> = {
+    press: 'possession',
+    possession: 'deep',
+    deep: 'direct',
+    direct: 'press',
+    balanced: null,
+};
 export const planEdge = (mine: TeamStyle, theirs: TeamStyle) => (COUNTERS[mine] === theirs ? 1 : COUNTERS[theirs] === mine ? -1 : 0);
 
 export const TALKS: Record<TeamTalk, { label: string; note: string }> = {
@@ -76,11 +82,17 @@ export const applyTalk = (cfg: GameConfig, c: Career, f: Fixture, p: Prep, rng: 
             return `A calm word${derby}. The squad settles.`;
         }
         case 'fire':
-            if (m >= t.overheatAt && rng() < t.overheatChance) { shiftMorale(c, t.overheat); return `You fired them up${derby}, but they were already boiling. Heads are a little scrambled.`; }
+            if (m >= t.overheatAt && rng() < t.overheatChance) {
+                shiftMorale(c, t.overheat);
+                return `You fired them up${derby}, but they were already boiling. Heads are a little scrambled.`;
+            }
             shiftMorale(c, t.fire);
             return `A thunderous team talk${derby}. They can't wait to get out there.`;
         case 'demand':
-            if (m >= 55) { shiftMorale(c, t.demandUp); return `You demanded more${derby}, and the squad rose to it.`; }
+            if (m >= 55) {
+                shiftMorale(c, t.demandUp);
+                return `You demanded more${derby}, and the squad rose to it.`;
+            }
             shiftMorale(c, t.demandDown);
             return `You demanded more${derby}. A fragile squad took it badly.`;
     }

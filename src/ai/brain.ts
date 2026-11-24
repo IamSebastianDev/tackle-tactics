@@ -14,8 +14,12 @@ import type { Cell, Club, MatchEvent, Piece, TeamSide } from '../types';
 export type MoveDecision = { kind: 'move'; to: Cell; ability?: MoveAbility } | { kind: 'hold' } | { kind: 'trick' };
 export type ActDecision =
     | { kind: 'kick'; target: Cell; ability?: KickAbility }
-    | { kind: 'tackle' } | { kind: 'slide' } | { kind: 'foul' } | { kind: 'command' }
-    | { kind: 'mark'; target: string } | { kind: 'tempo'; target: string }
+    | { kind: 'tackle' }
+    | { kind: 'slide' }
+    | { kind: 'foul' }
+    | { kind: 'command' }
+    | { kind: 'mark'; target: string }
+    | { kind: 'tempo'; target: string }
     | { kind: 'end' };
 
 export const applyMove = (m: Match, d: MoveDecision): MatchEvent[] =>
@@ -23,14 +27,22 @@ export const applyMove = (m: Match, d: MoveDecision): MatchEvent[] =>
 
 export const applyAct = (m: Match, d: ActDecision): MatchEvent[] => {
     switch (d.kind) {
-        case 'kick': return m.kick(d.target, d.ability);
-        case 'tackle': return m.tackle();
-        case 'slide': return m.slide();
-        case 'foul': return m.foul();
-        case 'command': return m.command();
-        case 'mark': return m.mark(d.target);
-        case 'tempo': return m.tempo(d.target);
-        default: return m.endTurn();
+        case 'kick':
+            return m.kick(d.target, d.ability);
+        case 'tackle':
+            return m.tackle();
+        case 'slide':
+            return m.slide();
+        case 'foul':
+            return m.foul();
+        case 'command':
+            return m.command();
+        case 'mark':
+            return m.mark(d.target);
+        case 'tempo':
+            return m.tempo(d.target);
+        default:
+            return m.endTurn();
     }
 };
 
@@ -43,7 +55,8 @@ const hashId = (s: string) => {
     return h >>> 0;
 };
 /** A club's identity: its chosen style, or a stable pick from its id (balanced twice as common). */
-export const styleOf = (club: Club): TeamStyle => club.style ?? (['balanced', ...STYLES] as TeamStyle[])[hashId(club.id + club.name) % (STYLES.length + 1)]!;
+export const styleOf = (club: Club): TeamStyle =>
+    club.style ?? (['balanced', ...STYLES] as TeamStyle[])[hashId(club.id + club.name) % (STYLES.length + 1)]!;
 
 type Knobs = GameConfig['ai'];
 const addKnobs = (base: Knobs, d: Partial<Record<string, number>>): Knobs => {
@@ -65,12 +78,20 @@ const softmaxPick = <T>(rng: Rng, options: Scored<T>[], temperature: number, ban
 };
 
 export class Brain {
-    constructor(private m: Match, private rng: Rng, private difficulty: Difficulty) {
+    constructor(
+        private m: Match,
+        private rng: Rng,
+        private difficulty: Difficulty,
+    ) {
         this.k = m.cfg.ai;
     }
 
-    private get cfg() { return this.m.cfg; }
-    private get T() { return this.k.temperature[this.difficulty]; }
+    private get cfg() {
+        return this.m.cfg;
+    }
+    private get T() {
+        return this.k.temperature[this.difficulty];
+    }
     /** Knobs for the team deciding right now: base → club style → game state. */
     private k!: Knobs;
     /** Overrides the club's style (the human's game plan for auto-players). */
@@ -154,7 +175,8 @@ export class Brain {
         }
         // Loose ball: the two nearest of each team chase it.
         if (!carrier) {
-            const mates = m.state.pieces.filter((q) => q.team === p.team && q.player.cls !== 'keeper')
+            const mates = m.state.pieces
+                .filter((q) => q.team === p.team && q.player.cls !== 'keeper')
                 .sort((a, b) => dist(a.pos, ball) - dist(b.pos, ball));
             if (mates.indexOf(p) < 2) return { cell: ball, weight: 2.5 };
             return { cell: slotT, weight: rw };
@@ -168,7 +190,9 @@ export class Brain {
         // Defence: pressers close the carrier down, others mark goal-side.
         if (this.pressers(p.team, carrier).includes(p)) return { cell: carrier.pos, weight: this.k.pressWeight };
         const goalSide = p.team === 0 ? -1 : 1;
-        const threats = m.opponents(p.team).filter((o) => o.player.cls !== 'keeper' && o.id !== carrier.id)
+        const threats = m
+            .opponents(p.team)
+            .filter((o) => o.player.cls !== 'keeper' && o.id !== carrier.id)
             .sort((a, b) => dist(a.pos, slotT) - dist(b.pos, slotT));
         const mark = threats[0];
         if (mark && dist(mark.pos, slotT) < 9) return { cell: { x: mark.pos.x + goalSide, y: mark.pos.y }, weight: Math.max(rw, 0.8) };
@@ -190,7 +214,7 @@ export class Brain {
         const central = 1 - Math.abs(c.y - (cfg.pitch.rows - 1) / 2) / (cfg.pitch.rows / 2);
         const x = Math.max(0, (f - 0.35) / 0.65);
         const xT = 0.012 + f * this.k.xtLinear + this.k.xtPeak * Math.pow(x, 2.2) * (0.45 + 0.55 * central);
-        return this.k.goalValue * xT + this.k.openValue * Math.min(oppD, 3) / 3;
+        return this.k.goalValue * xT + (this.k.openValue * Math.min(oppD, 3)) / 3;
     }
 
     /**
@@ -217,7 +241,10 @@ export class Brain {
             threats.push(tackleChance(cfg, o, holder, true) * reachP * this.k.tackleIntent);
         }
         // only the closest couple actually press; the rest hold shape
-        const keep = threats.sort((a, b) => b - a).slice(0, this.k.pressersAssumed).reduce((k, t) => k * (1 - t), 1);
+        const keep = threats
+            .sort((a, b) => b - a)
+            .slice(0, this.k.pressersAssumed)
+            .reduce((k, t) => k * (1 - t), 1);
         const pLoss = 1 - keep;
         return pLoss * (this.value(holder.team, c) + this.lossCost(holder.team, c));
     }
@@ -293,7 +320,10 @@ export class Brain {
                 const c = fromKey(k);
                 const risk = this.loseRisk(p, r.path);
                 // After dribbling we can still kick; approximate by the cell's value minus exposure.
-                const v = (1 - risk) * (this.value(p.team, c) - this.exposure(p, c)) - risk * this.lossCost(p.team, c) - (ability ? this.k.abilityCost : 0);
+                const v =
+                    (1 - risk) * (this.value(p.team, c) - this.exposure(p, c)) -
+                    risk * this.lossCost(p.team, c) -
+                    (ability ? this.k.abilityCost : 0);
                 options.push({ v, a: { kind: 'move', to: c, ability } });
             }
         };
@@ -368,7 +398,9 @@ export class Brain {
             // contested reception: an opponent next to the receiver may win the drop
             if (this.oppWithin(p.team, q.pos, 1) > 0) pOk *= this.k.contestedReceive;
             const gain = Math.max(0, forward(cfg, p.team, q.pos) - forward(cfg, p.team, p.pos)) * cfg.pitch.cols;
-            const v = pOk * (this.value(p.team, q.pos) - this.exposure(q, q.pos) + this.k.directBonus * gain / 10) - (1 - pOk) * this.lossCost(p.team, p.pos);
+            const v =
+                pOk * (this.value(p.team, q.pos) - this.exposure(q, q.pos) + (this.k.directBonus * gain) / 10) -
+                (1 - pOk) * this.lossCost(p.team, p.pos);
             out.push({ v, a: { target: q.pos } });
         }
         if (m.abilityUsable(p, 'through')) {
@@ -376,14 +408,15 @@ export class Brain {
             const R = cfg.abilities.through.runRadius;
             for (const q of m.mates(p)) {
                 if (forward(cfg, p.team, q.pos) < 0.4) continue;
-                for (const ahead of [2, 3]) for (const dy of [-1, 0, 1]) {
-                    const t = { x: q.pos.x + dir * ahead, y: q.pos.y + dy };
-                    if (!inPitch(cfg, t) || m.pieceAt(t)) continue;
-                    if (m.opponents(p.team).some((o) => dist(o.pos, t) < dist(q.pos, t))) continue;
-                    const pOk = this.passSuccess(p, t, R * 0.8, dist(p.pos, t) > cfg.ball.loftThreshold);
-                    const v = pOk * (this.value(p.team, t) - this.exposure(q, t) + 0.05) - (1 - pOk) * this.lossCost(p.team, p.pos);
-                    out.push({ v, a: { target: t, ability: 'through' } });
-                }
+                for (const ahead of [2, 3])
+                    for (const dy of [-1, 0, 1]) {
+                        const t = { x: q.pos.x + dir * ahead, y: q.pos.y + dy };
+                        if (!inPitch(cfg, t) || m.pieceAt(t)) continue;
+                        if (m.opponents(p.team).some((o) => dist(o.pos, t) < dist(q.pos, t))) continue;
+                        const pOk = this.passSuccess(p, t, R * 0.8, dist(p.pos, t) > cfg.ball.loftThreshold);
+                        const v = pOk * (this.value(p.team, t) - this.exposure(q, t) + 0.05) - (1 - pOk) * this.lossCost(p.team, p.pos);
+                        out.push({ v, a: { target: t, ability: 'through' } });
+                    }
             }
         }
         if (m.abilityUsable(p, 'cross')) {
@@ -425,7 +458,12 @@ export class Brain {
             .sort((a, b) => a.stamina - b.stamina)[0];
         if (!tired) return null;
         const mood = this.mood(team);
-        const want: string[] = mood === 'chase' ? ['striker', 'winger', tired.player.cls] : mood === 'protect' ? ['defender', 'midfielder', tired.player.cls] : [tired.player.cls];
+        const want: string[] =
+            mood === 'chase'
+                ? ['striker', 'winger', tired.player.cls]
+                : mood === 'protect'
+                  ? ['defender', 'midfielder', tired.player.cls]
+                  : [tired.player.cls];
         const score = (p: (typeof bench)[number]) => (want.includes(p.cls) ? 10 - want.indexOf(p.cls) * 2 : 0) + p.level * 0.3;
         const on = [...bench].sort((a, b) => score(b) - score(a))[0]!;
         return m.subBlock(team, tired.id, on.id) ? null : { off: tired.id, on: on.id };
@@ -472,8 +510,10 @@ export class Brain {
         const threat = attackers.filter((o) => !marked(o)).sort((a, b) => dist(a.pos, gc) - dist(b.pos, gc))[0];
         if (!threat) return null;
         // anyone who isn't the only man on some attacker is free to go
-        const onlyMarker = (q: Piece) => attackers.some((o) => cheb(o.pos, q.pos) <= 1
-            && !m.state.pieces.some((x) => x.team === team && x.id !== q.id && cheb(x.pos, o.pos) <= 1));
+        const onlyMarker = (q: Piece) =>
+            attackers.some(
+                (o) => cheb(o.pos, q.pos) <= 1 && !m.state.pieces.some((x) => x.team === team && x.id !== q.id && cheb(x.pos, o.pos) <= 1),
+            );
         const spare = movable.filter((q) => !onlyMarker(q)).sort((a, b) => dist(a.pos, threat.pos) - dist(b.pos, threat.pos))[0];
         if (!spare) return null;
         const to = zone.filter((c) => cheb(c, threat.pos) === 1).sort((a, b) => dist(a, gc) - dist(b, gc))[0];
@@ -494,7 +534,10 @@ export class Brain {
             if (q.player.cls === 'keeper') continue;
             const tight = opp.filter((o) => cheb(o.pos, q.pos) <= 1).length;
             if (m.inOwnBox((1 - p.team) as TeamSide, q.pos)) {
-                options.push({ v: 0.62 - 0.22 * tight - 0.018 * dist(q.pos, gc) + (q.player.stats.composure - 50) * 0.004, a: { kind: 'kick', target: q.pos } });
+                options.push({
+                    v: 0.62 - 0.22 * tight - 0.018 * dist(q.pos, gc) + (q.player.stats.composure - 50) * 0.004,
+                    a: { kind: 'kick', target: q.pos },
+                });
             } else if (dist(q.pos, p.pos) <= 6 && !tight) {
                 options.push({ v: 0.22, a: { kind: 'kick', target: q.pos } }); // short
             }
@@ -546,7 +589,8 @@ export class Brain {
             options.push({ v: (threatened ? 0.25 : -0.1) + spent * 0.12, a: { kind: 'command' } });
         }
         if (m.abilityUsable(p, 'mark')) {
-            const threats = m.markTargets(p)
+            const threats = m
+                .markTargets(p)
                 .map((o) => ({ o, v: forward(cfg, o.team, o.pos) }))
                 .sort((a, b) => b.v - a.v);
             const t = threats[0];

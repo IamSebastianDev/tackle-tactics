@@ -11,7 +11,8 @@ export const profileOf = (cfg: GameConfig, p: Player): Stats => {
     const out = {} as Stats;
     for (const s of STATS) {
         let v = 0;
-        for (const [c, l] of Object.entries(p.levels) as Array<[ClassId, number]>) v += cfg.classes[c].statProfile[s] * (l / Math.max(1, p.level));
+        for (const [c, l] of Object.entries(p.levels) as Array<[ClassId, number]>)
+            v += cfg.classes[c].statProfile[s] * (l / Math.max(1, p.level));
         out[s] = v;
     }
     return out;
@@ -50,7 +51,8 @@ export const playerValue = (cfg: GameConfig, p: Player) => {
     return Math.round(raw / 1000) * 1000;
 };
 
-export const wage = (cfg: GameConfig, p: Player) => Math.max(500, Math.round((playerValue(cfg, p) * cfg.career.value.wageRate) / 100) * 100);
+export const wage = (cfg: GameConfig, p: Player) =>
+    Math.max(500, Math.round((playerValue(cfg, p) * cfg.career.value.wageRate) / 100) * 100);
 
 export const xpToNext = (cfg: GameConfig, p: Player, cls: ClassId) => cfg.career.xpBase + cfg.career.xpPerLevel * classLevel(p, cls);
 

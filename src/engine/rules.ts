@@ -26,7 +26,8 @@ export const scatterRadius = (cfg: GameConfig, kicker: Piece, distance: number, 
     const raw = kind === 'pass' ? b.passScatterBase + distance * b.passScatterPerCell : b.shotScatterBase + distance * b.shotScatterPerCell;
     const factor = 0.55 + (skill / 100) * b.skillScale;
     let mult = mods.scatterMult ?? 1;
-    if (kind === 'pass') mult *= Math.min(passiveValue(cfg, pl, 'distributor', 'passScatter', 1), passiveValue(cfg, pl, 'vision', 'passScatter', 1));
+    if (kind === 'pass')
+        mult *= Math.min(passiveValue(cfg, pl, 'distributor', 'passScatter', 1), passiveValue(cfg, pl, 'vision', 'passScatter', 1));
     else mult *= passiveValue(cfg, pl, 'clinical', 'shotScatter', 1);
     if (mods.header) mult *= passiveValue(cfg, pl, 'aerial', 'headerScatter', 1);
     if (kicker.status.pressured) mult *= cfg.abilities.press.pressureScatter;
@@ -36,7 +37,8 @@ export const scatterRadius = (cfg: GameConfig, kicker: Piece, distance: number, 
 };
 
 /** Exhausted players are a beat slow to react. */
-export const fatiguePenalty = (cfg: GameConfig, p: Piece) => ((p.stamina ?? 100) < cfg.fatigue.exhausted ? cfg.fatigue.exhaustedReaction : 0);
+export const fatiguePenalty = (cfg: GameConfig, p: Piece) =>
+    (p.stamina ?? 100) < cfg.fatigue.exhausted ? cfg.fatigue.exhaustedReaction : 0;
 
 export const tackleChance = (cfg: GameConfig, defender: Piece, carrier: Piece, active: boolean, bonus = 0) => {
     const r = cfg.reactions;

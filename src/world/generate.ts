@@ -2,11 +2,59 @@ import type { ClassId, GameConfig, Stats, StatId } from '../config';
 import type { Club, Player } from '../types';
 import type { Rng } from '../rng';
 
-const SYL_A = ['Bra', 'Kel', 'Mor', 'Tav', 'Ul', 'Fen', 'Dar', 'Ise', 'Rho', 'Sel', 'Vak', 'Or', 'Lio', 'Jas', 'Ner', 'Qua', 'Zel', 'Ash', 'Bel', 'Cor'];
+const SYL_A = [
+    'Bra',
+    'Kel',
+    'Mor',
+    'Tav',
+    'Ul',
+    'Fen',
+    'Dar',
+    'Ise',
+    'Rho',
+    'Sel',
+    'Vak',
+    'Or',
+    'Lio',
+    'Jas',
+    'Ner',
+    'Qua',
+    'Zel',
+    'Ash',
+    'Bel',
+    'Cor',
+];
 const SYL_B = ['an', 'ric', 'o', 'enn', 'is', 'ard', 'ion', 'el', 'us', 'wyn', 'ek', 'ara', 'im', 'oth', 'ay', 'en'];
-const SUR_A = ['Ash', 'Stone', 'Iron', 'Wyn', 'Hollow', 'Thorn', 'Brook', 'Gale', 'Mire', 'Frost', 'Oak', 'Ember', 'Raven', 'Silver', 'Marsh'];
+const SUR_A = [
+    'Ash',
+    'Stone',
+    'Iron',
+    'Wyn',
+    'Hollow',
+    'Thorn',
+    'Brook',
+    'Gale',
+    'Mire',
+    'Frost',
+    'Oak',
+    'Ember',
+    'Raven',
+    'Silver',
+    'Marsh',
+];
 const SUR_B = ['ford', 'vale', 'wick', 'hart', 'more', 'shaw', 'by', 'well', 'den', 'ley', 'ridge', 'crest'];
-const CLUB_PLACE = ['Mirewick', 'Thornvale', 'Galehaven', 'Emberfall', 'Ravenmoor', 'Oakshaw', 'Frostcrest', 'Silverbrook', 'Ironridge', 'Hollowden'];
+const CLUB_PLACE = [
+    'Mirewick',
+    'Thornvale',
+    'Galehaven',
+    'Emberfall',
+    'Ravenmoor',
+    'Oakshaw',
+    'Frostcrest',
+    'Silverbrook',
+    'Ironridge',
+    'Hollowden',
+];
 const CLUB_SUFFIX = ['Wanderers', 'Rovers', 'Athletic', 'Guild', 'Company', 'Vanguard', 'Wardens', 'Fellowship'];
 
 const STATS: StatId[] = ['speed', 'pace', 'passing', 'shooting', 'dribbling', 'tackling', 'reflexes', 'composure'];
@@ -34,7 +82,15 @@ const distributeLevels = (cfg: GameConfig, rng: Rng, cls: ClassId, total: number
 
 export type GenOpts = { levelRange?: [number, number]; talentShift?: number; age?: [number, number] };
 
-export const generatePlayer = (cfg: GameConfig, rng: Rng, cls: ClassId, sprite: string, number: number, id: string, opts: GenOpts = {}): Player => {
+export const generatePlayer = (
+    cfg: GameConfig,
+    rng: Rng,
+    cls: ClassId,
+    sprite: string,
+    number: number,
+    id: string,
+    opts: GenOpts = {},
+): Player => {
     const w = cfg.world;
     const lr = opts.levelRange ?? w.levelRange;
     const level = rng.int(lr[0], lr[1]);
@@ -64,12 +120,34 @@ export const generatePlayer = (cfg: GameConfig, rng: Rng, cls: ClassId, sprite: 
     const skin = rng.int(0, cfg.looks.skinTones - 1);
     const hair = pickHairIndex(cfg.looks.hairWeights, rng());
     return {
-        id, name: playerName(rng), cls, level, levels, age: rng.int(ageR[0], ageR[1]), talent: +talent.toFixed(2), stats, sprite, number,
-        look, skin, hair, growth: +growth.toFixed(2), peakAge, xp: {},
+        id,
+        name: playerName(rng),
+        cls,
+        level,
+        levels,
+        age: rng.int(ageR[0], ageR[1]),
+        talent: +talent.toFixed(2),
+        stats,
+        sprite,
+        number,
+        look,
+        skin,
+        hair,
+        growth: +growth.toFixed(2),
+        peakAge,
+        xp: {},
     };
 };
 
-export const generateClub = (cfg: GameConfig, rng: Rng, id: string, kit: string, keeperKit: string, formationId: string, nameTaken: Set<string>): Club => {
+export const generateClub = (
+    cfg: GameConfig,
+    rng: Rng,
+    id: string,
+    kit: string,
+    keeperKit: string,
+    formationId: string,
+    nameTaken: Set<string>,
+): Club => {
     let name = '';
     do name = `${rng.pick(CLUB_PLACE)} ${rng.pick(CLUB_SUFFIX)}`;
     while (nameTaken.has(name.split(' ')[0]!));
@@ -83,7 +161,9 @@ export const generateClub = (cfg: GameConfig, rng: Rng, id: string, kit: string,
     // substitutes: a keeper plus one of each outfield class
     const benchCls: ClassId[] = ['keeper', 'defender', 'midfielder', 'winger', 'striker'].slice(0, cfg.subs.bench) as ClassId[];
     const bench = benchCls.map((cls, i) => {
-        const p = generatePlayer(cfg, rng, cls, '', 12 + i, `${id}-b${i}`, { levelRange: [Math.max(1, cfg.world.levelRange[0]), Math.max(2, cfg.world.levelRange[1] - 3)] });
+        const p = generatePlayer(cfg, rng, cls, '', 12 + i, `${id}-b${i}`, {
+            levelRange: [Math.max(1, cfg.world.levelRange[0]), Math.max(2, cfg.world.levelRange[1] - 3)],
+        });
         p.sprite = cls === 'keeper' ? keeperKit : `${kit}_player_${p.look}`;
         return p;
     });

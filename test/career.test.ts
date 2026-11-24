@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config';
 import {
-    autoLineup, buy, careerRng, divisionOf, endSeason, fixtureClubs, newCareer, playMatchday, resolveLetter, sell, simulateScore, table, today,
-    trainingDay, userClub, wageBill,
+    autoLineup,
+    buy,
+    careerRng,
+    divisionOf,
+    endSeason,
+    fixtureClubs,
+    newCareer,
+    playMatchday,
+    resolveLetter,
+    sell,
+    simulateScore,
+    table,
+    today,
+    trainingDay,
+    userClub,
+    wageBill,
 } from '../src/meta/career';
 import { ovr, playerValue, wage } from '../src/meta/player';
 import { story } from '../src/meta/story';
@@ -45,11 +59,16 @@ describe('career', () => {
                     const u = userClub(c);
                     const pos = table(divisionOf(c, u.id)).findIndex((r) => r.club === u.id) + 1;
                     const s = endSeason(cfg, c);
-                    log.push(`S${season}: tier ${u.tier + 1} pos ${pos} budget ${Math.round(u.budget / 1000)}k wages/md ${Math.round(wageBill(cfg, u) / 1000)}k morale ${story(c).morale} ${s.lines.join(' | ')} | awards: ${s.awards.map((a) => `${a.title}=${a.who}`).join(', ')}`);
+                    log.push(
+                        `S${season}: tier ${u.tier + 1} pos ${pos} budget ${Math.round(u.budget / 1000)}k wages/md ${Math.round(wageBill(cfg, u) / 1000)}k morale ${story(c).morale} ${s.lines.join(' | ')} | awards: ${s.awards.map((a) => `${a.title}=${a.who}`).join(', ')}`,
+                    );
                     break;
                 }
                 // answer any letter with a random choice, like a player would
-                if (story(c).inbox) { letters++; resolveLetter(cfg, c, Math.floor(Math.random() * 2)); }
+                if (story(c).inbox) {
+                    letters++;
+                    resolveLetter(cfg, c, Math.floor(Math.random() * 2));
+                }
                 if (t.kind === 'match') {
                     const rng = careerRng(c);
                     const score = simulateScore(cfg, rng, c, t.fixture);
@@ -59,7 +78,12 @@ describe('career', () => {
             }
         }
         console.log(log.join('\n'));
-        console.log('letters answered', letters, 'quests', JSON.stringify(story(c).quests.map((q) => `${q.title} ${q.progress}/${q.target}`)));
+        console.log(
+            'letters answered',
+            letters,
+            'quests',
+            JSON.stringify(story(c).quests.map((q) => `${q.title} ${q.progress}/${q.target}`)),
+        );
         expect(letters).toBeGreaterThan(2);
         const u = userClub(c);
         const lvl1 = u.squad.reduce((a, p) => a + p.level, 0);
@@ -86,7 +110,13 @@ describe('career', () => {
         const before = u.budget;
         expect(sell(cfg, c, p.id)).toBeNull();
         expect(u.budget).toBeGreaterThan(before);
-        console.log('sample values (bottom tier):', u.squad.slice(0, 6).map((q) => `${q.name} ovr ${ovr(cfg, q)} age ${q.age} → ${Math.round(playerValue(cfg, q) / 1000)}k, wage ${wage(cfg, q)}`).join('\n'));
+        console.log(
+            'sample values (bottom tier):',
+            u.squad
+                .slice(0, 6)
+                .map((q) => `${q.name} ovr ${ovr(cfg, q)} age ${q.age} → ${Math.round(playerValue(cfg, q) / 1000)}k, wage ${wage(cfg, q)}`)
+                .join('\n'),
+        );
         expect(autoLineup(cfg, u).length).toBe(11);
     });
 });

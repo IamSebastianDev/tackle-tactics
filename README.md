@@ -45,28 +45,28 @@ On-pitch overlays keep their own colour-blind-safe palette (`--move`, `--scatter
 
 ## Layout
 
-| Path | What |
-| --- | --- |
-| `src/config.ts` | **Every tunable**: timer, rounds, pitch, camera constants, scatter, reaction odds, AI weights, class kits, formations (data), kit sprites. `withOverrides()` deep-merges mods. |
-| `src/types.ts` | Player, Club, Piece, MatchState, MatchEvent. |
-| `src/world/generate.ts` | Procedural players/clubs (fantasy names, class stat profiles, bell-curved talent). |
-| `src/engine/` | Pure turn engine. `Match` mutates state and returns `MatchEvent[]`; knows nothing about the DOM. `grid.ts` geometry, `rules.ts` all odds/radii formulas. |
-| `src/engine/abilities.ts` | Which abilities/passives a player has (class levels → unlocks), cooldown helpers. |
-| `src/sim.ts` | Headless AI-vs-AI runner with possession/turnover/ability stats (tests + tuning). |
-| `src/ai/brain.ts` | Heuristic AI: formation slot (ball-relative) + role job blended by per-slot `roleWeight`; carrier weighs shots / passes / dribbles by risk; softmax sampling whose band narrows when one option dominates. |
-| `src/meta/career.ts` | Career: pyramid generation, calendar (matchday → 2 training days), simulated fixtures, training & injuries, wages/income, market, season end (promotion/relegation, aging, retirement), save/load (localStorage). |
-| `src/meta/player.ts` | Overall rating, value, wage, XP & level-ups (stat growth), aging, potential stars. |
-| `src/ui/hub/Hub.ts` | Manager hub: Overview, Squad (+ player drawer), Tactics (formation board), Training plan, League, Market, Finances, Playbook. |
-| `src/ui/Playbook.ts` | Reference of every class kit, used in-match (H) and in the hub. |
-| `src/ui/controller.ts` | Match loop, action timer, AI pacing, human input, presentation of events (animations, popups, banners). |
-| `src/ui/MatchView.ts` | Nørd view: CSS-perspective camera, cosmetic pitch, flat grid (source of truth + hit testing), overlays, counter-rotated sprite tokens, HUD. |
+| Path                      | What                                                                                                                                                                                                              |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/config.ts`           | **Every tunable**: timer, rounds, pitch, camera constants, scatter, reaction odds, AI weights, class kits, formations (data), kit sprites. `withOverrides()` deep-merges mods.                                    |
+| `src/types.ts`            | Player, Club, Piece, MatchState, MatchEvent.                                                                                                                                                                      |
+| `src/world/generate.ts`   | Procedural players/clubs (fantasy names, class stat profiles, bell-curved talent).                                                                                                                                |
+| `src/engine/`             | Pure turn engine. `Match` mutates state and returns `MatchEvent[]`; knows nothing about the DOM. `grid.ts` geometry, `rules.ts` all odds/radii formulas.                                                          |
+| `src/engine/abilities.ts` | Which abilities/passives a player has (class levels → unlocks), cooldown helpers.                                                                                                                                 |
+| `src/sim.ts`              | Headless AI-vs-AI runner with possession/turnover/ability stats (tests + tuning).                                                                                                                                 |
+| `src/ai/brain.ts`         | Heuristic AI: formation slot (ball-relative) + role job blended by per-slot `roleWeight`; carrier weighs shots / passes / dribbles by risk; softmax sampling whose band narrows when one option dominates.        |
+| `src/meta/career.ts`      | Career: pyramid generation, calendar (matchday → 2 training days), simulated fixtures, training & injuries, wages/income, market, season end (promotion/relegation, aging, retirement), save/load (localStorage). |
+| `src/meta/player.ts`      | Overall rating, value, wage, XP & level-ups (stat growth), aging, potential stars.                                                                                                                                |
+| `src/ui/hub/Hub.ts`       | Manager hub: Overview, Squad (+ player drawer), Tactics (formation board), Training plan, League, Market, Finances, Playbook.                                                                                     |
+| `src/ui/Playbook.ts`      | Reference of every class kit, used in-match (H) and in the hub.                                                                                                                                                   |
+| `src/ui/controller.ts`    | Match loop, action timer, AI pacing, human input, presentation of events (animations, popups, banners).                                                                                                           |
+| `src/ui/MatchView.ts`     | Nørd view: CSS-perspective camera, cosmetic pitch, flat grid (source of truth + hit testing), overlays, counter-rotated sprite tokens, HUD.                                                                       |
 
 ## Rules as implemented
 
 - **Round** = all 22 act once, sorted by Speed, teams alternating. That is the concept's "turn counter" (default 30).
 - A player's turn: **move** (or hold), then, if relevant, **act**: carrier passes/shoots/keeps; a defender next to the carrier may tackle.
 - **Marking**: off-ball runs stop on entering an opponent's adjacent cell. The carrier may dribble through, but each one is a tackle reaction.
-- **Reactions**: one per player per round, refreshed at the start of their own turn. Tackle when the carrier moves next to you, intercept when the ball passes next to you, keeper save on shots. A failed reaction leaves you *staggered* (no reaction until your next turn).
+- **Reactions**: one per player per round, refreshed at the start of their own turn. Tackle when the carrier moves next to you, intercept when the ball passes next to you, keeper save on shots. A failed reaction leaves you _staggered_ (no reaction until your next turn).
 - **Kicks**: aim anywhere. The orange disc is where it may land; it grows with distance and shrinks with skill. Passes over `loftThreshold` cells are lofted and can only be cut out near take-off/landing. Aim at the goal mouth to shoot.
 - Timer expiry loses the action (or let the AI play it: setting).
 - **Winning a tackle earns an extra turn** right away (`match.tackleBonusTurn`): carry the ball clear and pass, but no shooting until your normal turn (`tackleBonusMode`: `'noShot'`; `'full'` and `'move'` also exist). It stops tackle-back chains in a crowd without inflating goals (AI-vs-AI: tackle-backs 0.3 → 0.1 per match, shots and goals unchanged). A foul cancels it.
@@ -95,23 +95,23 @@ On-pitch overlays keep their own colour-blind-safe palette (`--move`, `--scatter
 ## Abilities (DnD model)
 
 Players have **class levels**; multiclassing is just level distribution (e.g. `MF 6 / ST 3`). An ability unlocks
-when the level *in its class* reaches its `unlock`. All numbers live in `config.abilities` / `config.passives`.
+when the level _in its class_ reaches its `unlock`. All numbers live in `config.abilities` / `config.passives`.
 
-| Class | Ability (unlock) | Phase | What it does |
-| --- | --- | --- | --- |
-| Winger | Sprint (2) | move | +3 move, straight lines only |
-| | Trick (4) | pre-move | Adjacent opponents must beat your Dribbling or lose their reaction; then you still move |
-| | Cross (6) | act | From wide in the final third into the box; a teammate within 2 attacks it with a header |
-| Striker | Run in behind (2) | move | Off-ball, +1 move, ignores marking |
-| | Placed (3) / Power (5) / Chip (8) | act | Shot variants trading zone size vs. save chance; Chip punishes a keeper off his line |
-| Midfielder | Press (2) | move | +1 move, ignores marking; a carrier you end next to is *pressured* (wider kicks, easier to tackle) |
-| | Through ball (3) | act | Nearest teammate within 3 of the drop runs onto it |
-| | Set tempo (6) | act | A teammate who hasn't acted goes next |
-| Defender | Slide tackle (2) | act | Tackle from 2 cells; miss and you're grounded (half move next turn) |
-| | Man-mark (4) | act | Your marking reaches 2 cells for that opponent; step in when they receive |
-| | Tactical foul (6) | act | Carrier frozen next turn (free kick); card risk; in your own box it's a penalty. 2 yellows = sent off |
-| Keeper | Command (3) | act | Teammates within 5 regain reactions and react better until their next turn |
-| | Rush out (5) | move | +3 move, ignores marking, tackle bonus |
+| Class      | Ability (unlock)                  | Phase    | What it does                                                                                          |
+| ---------- | --------------------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| Winger     | Sprint (2)                        | move     | +3 move, straight lines only                                                                          |
+|            | Trick (4)                         | pre-move | Adjacent opponents must beat your Dribbling or lose their reaction; then you still move               |
+|            | Cross (6)                         | act      | From wide in the final third into the box; a teammate within 2 attacks it with a header               |
+| Striker    | Run in behind (2)                 | move     | Off-ball, +1 move, ignores marking                                                                    |
+|            | Placed (3) / Power (5) / Chip (8) | act      | Shot variants trading zone size vs. save chance; Chip punishes a keeper off his line                  |
+| Midfielder | Press (2)                         | move     | +1 move, ignores marking; a carrier you end next to is _pressured_ (wider kicks, easier to tackle)    |
+|            | Through ball (3)                  | act      | Nearest teammate within 3 of the drop runs onto it                                                    |
+|            | Set tempo (6)                     | act      | A teammate who hasn't acted goes next                                                                 |
+| Defender   | Slide tackle (2)                  | act      | Tackle from 2 cells; miss and you're grounded (half move next turn)                                   |
+|            | Man-mark (4)                      | act      | Your marking reaches 2 cells for that opponent; step in when they receive                             |
+|            | Tactical foul (6)                 | act      | Carrier frozen next turn (free kick); card risk; in your own box it's a penalty. 2 yellows = sent off |
+| Keeper     | Command (3)                       | act      | Teammates within 5 regain reactions and react better until their next turn                            |
+|            | Rush out (5)                      | move     | +3 move, ignores marking, tackle bonus                                                                |
 
 Passives: Distributor (GK 1), Vision (MF 5), Aerial threat (ST 6), Shot-stopper (GK 8), Stopper (DF 8),
 Elusive (WG 8), Reader (MF 9), Clinical (ST 10).
@@ -119,7 +119,7 @@ Elusive (WG 8), Reader (MF 9), Clinical (ST 10).
 ## AI tuning
 
 The AI values positions in **expected-threat units** (same scale as a shot's goal chance), and prices holding the
-ball by who can reach and tackle you *before your next turn* (turn-order aware). Tune with:
+ball by who can reach and tackle you _before your next turn_ (turn-order aware). Tune with:
 
 ```bash
 TT_VARIANTS='{"base":{},"bolder":{"ai":{"xtLinear":0.12}}}' npx vitest run test/tune.test.ts --silent=false
@@ -127,25 +127,25 @@ TT_VARIANTS='{"base":{},"bolder":{"ai":{"xtLinear":0.12}}}' npx vitest run test/
 
 ## Assets used
 
-Players, keepers, goals, ball and grass come from *Soccer Match – Top Down Football Tileset & Players* by bubbabba
-(its 64px set: per-kit, 4-direction strips). The *Goals in Pixels* layered sheet (`character1-Sheet.png`) is the
+Players, keepers, goals, ball and grass come from _Soccer Match – Top Down Football Tileset & Players_ by bubbabba
+(its 64px set: per-kit, 4-direction strips). The _Goals in Pixels_ layered sheet (`character1-Sheet.png`) is the
 better long-term fit for the layered body/skin/hair compositing in the concept, but needs a row map first; the
 bubbabba cast gives eight ready-made kits today.
 
 ## Match controls
 
-| Key | Action |
-| --- | --- |
-| Click | Move / aim / pick a target |
-| Space | Hold position, or end turn / keep the ball |
-| 1–9 | Abilities (hover a card to preview it on the pitch) |
-| T | Tackle |
-| A | Let the AI play this action |
-| F | Focus: which of your players ask for orders (all / near the ball / key duels) |
-| Z | Show/hide zones of control (pink = their reaction-ready cover, grey = spent, blue dots = yours) |
-| P | Pause (the clock freezes) |
-| Wheel, + / − / 0 | Zoom in / out / reset (the camera also leans in on crowded balls) |
-| H | Playbook · M mute · Esc cancel |
+| Key              | Action                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| Click            | Move / aim / pick a target                                                                      |
+| Space            | Hold position, or end turn / keep the ball                                                      |
+| 1–9              | Abilities (hover a card to preview it on the pitch)                                             |
+| T                | Tackle                                                                                          |
+| A                | Let the AI play this action                                                                     |
+| F                | Focus: which of your players ask for orders (all / near the ball / key duels)                   |
+| Z                | Show/hide zones of control (pink = their reaction-ready cover, grey = spent, blue dots = yours) |
+| P                | Pause (the clock freezes)                                                                       |
+| Wheel, + / − / 0 | Zoom in / out / reset (the camera also leans in on crowded balls)                               |
+| H                | Playbook · M mute · Esc cancel                                                                  |
 
 ## Camera & grounds
 

@@ -11,8 +11,25 @@ it.skipIf(!process.env.TT_VARIANTS)('tune', () => {
         const seeds = [21, 22, 23, 24, 25, 26, 27, 28];
         for (const s of seeds) {
             const { st } = simulate(cfg, s);
-            for (const k of ['passes', 'completed', 'shots', 'goals', 'tackles', 'tacklesWon', 'intercepts', 'turnovers', 'avgSpell', 'cards']) agg[k] = (agg[k] ?? 0) + (st as unknown as Record<string, number>)[k]! / seeds.length;
+            for (const k of [
+                'passes',
+                'completed',
+                'shots',
+                'goals',
+                'tackles',
+                'tacklesWon',
+                'intercepts',
+                'turnovers',
+                'avgSpell',
+                'cards',
+            ])
+                agg[k] = (agg[k] ?? 0) + (st as unknown as Record<string, number>)[k]! / seeds.length;
         }
-        console.log(name.padEnd(10), Object.entries(agg).map(([k, v]) => `${k}=${v.toFixed(1)}`).join(' '));
+        console.log(
+            name.padEnd(10),
+            Object.entries(agg)
+                .map(([k, v]) => `${k}=${v.toFixed(1)}`)
+                .join(' '),
+        );
     }
 });

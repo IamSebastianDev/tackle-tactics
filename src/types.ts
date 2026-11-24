@@ -92,9 +92,7 @@ export type PieceStatus = {
     tricked?: boolean;
 };
 
-export type BallState =
-    | { kind: 'held'; by: string }
-    | { kind: 'loose'; at: Cell; restrictedTo: TeamSide | null };
+export type BallState = { kind: 'held'; by: string } | { kind: 'loose'; at: Cell; restrictedTo: TeamSide | null };
 
 export type Phase = 'move' | 'act' | 'done';
 

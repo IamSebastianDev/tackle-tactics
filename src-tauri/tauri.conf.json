@@ -1,50 +1,41 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Tackle Tactics",
-  "version": "1.0.0",
-  "identifier": "com.tackletactics.game",
-  "build": {
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npm run dev -- --port 1420 --strictPort",
-    "beforeBuildCommand": "npm run build"
-  },
-  "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "Tackle Tactics",
-        "width": 1600,
-        "height": 900,
-        "minWidth": 960,
-        "minHeight": 540,
-        "resizable": true,
-        "fullscreen": false,
-        "center": false,
-        "backgroundColor": "#070808",
-        "dragDropEnabled": false,
-        "visible": false
-      }
-    ],
-    "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost"
+    "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+    "productName": "Tackle Tactics",
+    "version": "1.0.0",
+    "identifier": "com.tackletactics.game",
+    "build": {
+        "frontendDist": "../dist",
+        "devUrl": "http://localhost:1420",
+        "beforeDevCommand": "npm run dev -- --port 1420 --strictPort",
+        "beforeBuildCommand": "npm run build"
+    },
+    "app": {
+        "windows": [
+            {
+                "label": "main",
+                "title": "Tackle Tactics",
+                "width": 1600,
+                "height": 900,
+                "minWidth": 960,
+                "minHeight": 540,
+                "resizable": true,
+                "fullscreen": false,
+                "center": false,
+                "backgroundColor": "#070808",
+                "dragDropEnabled": false,
+                "visible": false
+            }
+        ],
+        "security": {
+            "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost"
+        }
+    },
+    "bundle": {
+        "active": true,
+        "targets": ["app", "dmg"],
+        "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+        "category": "Game",
+        "shortDescription": "Turn-based football tactics",
+        "copyright": "Art by bubbabba \u00b7 Goals in Pixels"
     }
-  },
-  "bundle": {
-    "active": true,
-    "targets": [
-      "app",
-      "dmg"
-    ],
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
-    "category": "Game",
-    "shortDescription": "Turn-based football tactics",
-    "copyright": "Art by bubbabba \u00b7 Goals in Pixels"
-  }
 }

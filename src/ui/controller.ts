@@ -23,9 +23,12 @@ import { castFor, type Lesson } from './tutorial';
 
 export type Controller = 'human' | 'ai';
 export type MatchOptions = {
-    controllers: [Controller, Controller]; difficulty: Difficulty; seed: number;
+    controllers: [Controller, Controller];
+    difficulty: Difficulty;
+    seed: number;
     /** The ground and the day's conditions (cosmetic + weather scatter, applied via cfg by the caller). */
-    stadium?: Stadium; conditions?: Conditions;
+    stadium?: Stadium;
+    conditions?: Conditions;
     /** Match prep: the official, and a game plan per side (drives that side's AI / auto-players). */
     referee?: Referee;
     plans?: [TeamStyle | null, TeamStyle | null];
@@ -83,7 +86,15 @@ export class MatchController {
     /** Set-piece setup: the player picked up for placing. */
     readonly setupSel = grain<string | null>(null);
     /** Tutorial: the lesson on screen (with a retry note or praise), and the end card. */
-    readonly lesson = grain<{ i: number; n: number; title: string; text: string; retry: string | null; praise: string | null; info: boolean } | null>(null);
+    readonly lesson = grain<{
+        i: number;
+        n: number;
+        title: string;
+        text: string;
+        retry: string | null;
+        praise: string | null;
+        info: boolean;
+    } | null>(null);
     readonly tutorialDone = grain(false);
     private resolveLesson: (() => void) | null = null;
     private tutEvents: MatchEvent[] = [];
@@ -111,7 +122,11 @@ export class MatchController {
     private reactionHitUs = false;
     private lastWasHuman = false;
 
-    constructor(cfg: GameConfig, clubs: [Club, Club], readonly opts: MatchOptions) {
+    constructor(
+        cfg: GameConfig,
+        clubs: [Club, Club],
+        readonly opts: MatchOptions,
+    ) {
         this.cfg = cfg;
         this.match = new Match(cfg, clubs, opts.seed, 0, opts.referee);
         this.stats = new MatchStats(this.match);
@@ -120,7 +135,9 @@ export class MatchController {
             new Brain(this.match, createRng(opts.seed ^ 0x9e3779b9), opts.difficulty),
             new Brain(this.match, createRng(opts.seed ^ 0x85ebca6b), opts.difficulty),
         ];
-        opts.plans?.forEach((pl, t) => { if (pl) this.brains[t]!.styleOverride = pl; });
+        opts.plans?.forEach((pl, t) => {
+            if (pl) this.brains[t]!.styleOverride = pl;
+        });
     }
 
     isHuman = (team: TeamSide) => this.opts.controllers[team] === 'human';
@@ -138,7 +155,10 @@ export class MatchController {
         if (cheb(p.pos, b) <= CONTROL_RADIUS[mode]) return true;
         // never leave the human just watching: the closest few always get a say
         const d = (q: Piece) => cheb(q.pos, b) * 100 + dist(q.pos, b);
-        const nearest = m.state.pieces.filter((q) => q.team === p.team).sort((a, c) => d(a) - d(c)).slice(0, CONTROL_MIN_NEAREST);
+        const nearest = m.state.pieces
+            .filter((q) => q.team === p.team)
+            .sort((a, c) => d(a) - d(c))
+            .slice(0, CONTROL_MIN_NEAREST);
         return nearest.some((q) => q.id === p.id);
     };
 
@@ -163,7 +183,9 @@ export class MatchController {
 
     flash(msg: string) {
         this.toast.set(msg);
-        setTimeout(() => { if (this.toast() === msg) this.toast.set(null); }, 2600);
+        setTimeout(() => {
+            if (this.toast() === msg) this.toast.set(null);
+        }, 2600);
     }
 
     stop() {
@@ -191,21 +213,36 @@ export class MatchController {
         const p = m.active();
         if (m.state.phase !== 'act') return false;
         switch (d.kind) {
-            case 'end': return true;
-            case 'kick': return m.carrier()?.id === p.id && !!m.kickKind(p, d.target, d.ability) && (!d.ability || m.abilityUsable(p, d.ability));
-            case 'tackle': return m.canTackle(p);
-            case 'mark': return m.abilityUsable(p, 'mark') && m.markTargets(p).some((o) => o.id === d.target);
-            case 'tempo': return m.abilityUsable(p, 'tempo') && m.tempoTargets(p).some((o) => o.id === d.target);
-            default: return m.abilityUsable(p, d.kind);
+            case 'end':
+                return true;
+            case 'kick':
+                return m.carrier()?.id === p.id && !!m.kickKind(p, d.target, d.ability) && (!d.ability || m.abilityUsable(p, d.ability));
+            case 'tackle':
+                return m.canTackle(p);
+            case 'mark':
+                return m.abilityUsable(p, 'mark') && m.markTargets(p).some((o) => o.id === d.target);
+            case 'tempo':
+                return m.abilityUsable(p, 'tempo') && m.tempoTargets(p).some((o) => o.id === d.target);
+            default:
+                return m.abilityUsable(p, d.kind);
         }
     }
 
     input(i: Input) {
         if (!this.resolveInput) return;
         // validate before resolving so stray clicks don't burn the turn
-        if (i.t === 'move' && !this.validMove(i.d)) { audio.play('error'); return; }
-        if (i.t === 'act' && !this.validAct(i.d)) { audio.play('error'); return; }
-        if (i.t === 'place' && !this.match.canPlace(i.id, i.to)) { audio.play('error'); return; }
+        if (i.t === 'move' && !this.validMove(i.d)) {
+            audio.play('error');
+            return;
+        }
+        if (i.t === 'act' && !this.validAct(i.d)) {
+            audio.play('error');
+            return;
+        }
+        if (i.t === 'place' && !this.match.canPlace(i.id, i.to)) {
+            audio.play('error');
+            return;
+        }
         const r = this.resolveInput;
         this.resolveInput = null;
         r(i);
@@ -221,7 +258,10 @@ export class MatchController {
     useAbility(id: AbilityId) {
         const m = this.match;
         const p = m.active();
-        if (!m.abilityUsable(p, id)) { audio.play('error'); return; }
+        if (!m.abilityUsable(p, id)) {
+            audio.play('error');
+            return;
+        }
         audio.play('click');
         if (MOVE_MODES.includes(id) || KICK_MODES.includes(id) || TARGET_MODES.includes(id)) {
             this.mode.set(this.mode() === id ? null : id);
@@ -242,7 +282,12 @@ export class MatchController {
         const m = this.match;
         if (this.inSetup()) {
             const q = m.pieceAt(c);
-            if (q && m.canPlacePiece(q)) { audio.play('click'); this.setupSel.set(this.setupSel() === q.id ? null : q.id); this.bump(); return; }
+            if (q && m.canPlacePiece(q)) {
+                audio.play('click');
+                this.setupSel.set(this.setupSel() === q.id ? null : q.id);
+                this.bump();
+                return;
+            }
             const sel = this.setupSel();
             if (sel) this.input({ t: 'place', id: sel, to: c });
             return;
@@ -287,8 +332,13 @@ export class MatchController {
         const m = this.match;
         const piece = m.active();
         const ctx: TipCtx = {
-            phase: m.state.phase, isCarrier: m.carrier()?.id === piece.id, canTackle: m.state.phase === 'act' && m.canTackle(piece),
-            hasUsableAbility: m.usableAbilities(piece).length > 0, humanTurns: this.humanTurns, reactionHitUs: this.reactionHitUs, name: piece.player.name,
+            phase: m.state.phase,
+            isCarrier: m.carrier()?.id === piece.id,
+            canTackle: m.state.phase === 'act' && m.canTackle(piece),
+            hasUsableAbility: m.usableAbilities(piece).length > 0,
+            humanTurns: this.humanTurns,
+            reactionHitUs: this.reactionHitUs,
+            name: piece.player.name,
         };
         const tip = TIPS.find((t) => !p.tipsSeen.includes(t.id) && t.when(ctx));
         if (!tip) return;
@@ -310,11 +360,18 @@ export class MatchController {
             // paused, or reading a coach tip: the clock stands still
             if (this.paused() || this.tip()) deadline += now - lastFrame;
             lastFrame = now;
-            if (total <= 0) { this.timer.set(1); this.timerRaf = requestAnimationFrame(frame); return; }
+            if (total <= 0) {
+                this.timer.set(1);
+                this.timerRaf = requestAnimationFrame(frame);
+                return;
+            }
             const left = deadline - now;
             this.timer.set(Math.max(0, left / total));
             const secs = Math.ceil(left / 1000);
-            if (secs < lastTick && secs <= 3 && secs > 0) { lastTick = secs; audio.play('tick'); }
+            if (secs < lastTick && secs <= 3 && secs > 0) {
+                lastTick = secs;
+                audio.play('tick');
+            }
             if (left <= 0) return this.input({ t: 'timeout' });
             this.timerRaf = requestAnimationFrame(frame);
         };
@@ -364,13 +421,24 @@ export class MatchController {
                 if (m.state.setPiece) {
                     await this.runSetup();
                     const sp = m.state.setPiece;
-                    if (sp) { sp.stage = 'take'; m.stageTurn(sp.taker); }
+                    if (sp) {
+                        sp.stage = 'take';
+                        m.stageTurn(sp.taker);
+                    }
                 } else m.stageTurn(actor.id);
                 await this.playTurn();
                 if (this.stopped) return;
                 const r = L.done ? L.done(this.tutEvents, m, k) : true;
                 if (r === true) {
-                    this.lesson.set({ i, n: lessons.length, title: L.title, text: L.text(k), retry: null, praise: L.praise ?? 'Nice.', info: false });
+                    this.lesson.set({
+                        i,
+                        n: lessons.length,
+                        title: L.title,
+                        text: L.text(k),
+                        retry: null,
+                        praise: L.praise ?? 'Nice.',
+                        info: false,
+                    });
                     audio.play('trap');
                     await sleep(2200);
                     break;
@@ -387,10 +455,16 @@ export class MatchController {
         const m = this.match;
         if (this.opts.tutorial) return this.runTutorial(this.opts.tutorial);
         audio.startCrowd();
-        const where = this.opts.stadium ? `${this.opts.stadium.name}${this.opts.conditions ? ` · ${conditionsLabel(this.opts.conditions)}` : ''}` : 'Kick off';
+        const where = this.opts.stadium
+            ? `${this.opts.stadium.name}${this.opts.conditions ? ` · ${conditionsLabel(this.opts.conditions)}` : ''}`
+            : 'Kick off';
         const ref = m.state.referee;
         const style = this.cfg.referee.styles[ref.style];
-        await this.showBanner(`${m.state.clubs[0].short} vs ${m.state.clubs[1].short}`, `${where} · Referee ${ref.name} (${style.label})`, 2000);
+        await this.showBanner(
+            `${m.state.clubs[0].short} vs ${m.state.clubs[1].short}`,
+            `${where} · Referee ${ref.name} (${style.label})`,
+            2000,
+        );
         audio.play('whistle');
         this.say(this.commentator.referee(style.note));
         for (const t of [0, 1] as TeamSide[]) {
@@ -452,7 +526,10 @@ export class MatchController {
         if (!this.awaitingHuman() || this.inSetup()) return 'Wait for your turn';
         const team = m.active().team;
         const why = m.subBlock(team, offId, onId);
-        if (why) { audio.play('error'); return why; }
+        if (why) {
+            audio.play('error');
+            return why;
+        }
         const ev = m.substitute(team, offId, onId);
         this.stats.observe(ev);
         this.say(this.commentator.call(ev));
@@ -469,7 +546,11 @@ export class MatchController {
 
     private async runSetup() {
         this.settingUp = true;
-        try { await this.setupLoop(); } finally { this.settingUp = false; }
+        try {
+            await this.setupLoop();
+        } finally {
+            this.settingUp = false;
+        }
     }
 
     private async setupLoop() {
@@ -528,7 +609,10 @@ export class MatchController {
                 const i = await this.waitHuman();
                 if (i.t === 'stop' || this.stopped) return;
                 if (i.t === 'timeout') return this.handle(this.handleTimeout());
-                if (i.t === 'act') { m.endTurn(); return; }
+                if (i.t === 'act') {
+                    m.endTurn();
+                    return;
+                }
                 d = i.t === 'move' ? i.d : brain.decideMove(p);
             } else {
                 await sleep(think);
@@ -597,7 +681,9 @@ export class MatchController {
         if (big) {
             this.caption.set({ title: big.caption!, text: big.text, team: big.team });
             const id = this.lineId;
-            setTimeout(() => { if (this.lineId === id || this.caption()?.text === big.text) this.caption.set(null); }, 3200);
+            setTimeout(() => {
+                if (this.lineId === id || this.caption()?.text === big.text) this.caption.set(null);
+            }, 3200);
         }
     }
 
@@ -686,8 +772,15 @@ export class MatchController {
                     // ball flight duration scales with distance; long balls arc through the air
                     const d = dist(e.from, end);
                     this.ballMs = Math.min(1100, 160 + d * 34);
-                    const lofted = d > this.cfg.ball.loftThreshold || events.some((x) => x.t === 'ability' && (x.ability === 'cross' || x.ability === 'chip'));
-                    this.ballArc.set({ ms: this.ballMs, height: lofted ? Math.min(70, 18 + d * 2.4) : 0, id: ++this.popupId, spin: e.kind === 'shot' ? 2 : 1 });
+                    const lofted =
+                        d > this.cfg.ball.loftThreshold ||
+                        events.some((x) => x.t === 'ability' && (x.ability === 'cross' || x.ability === 'chip'));
+                    this.ballArc.set({
+                        ms: this.ballMs,
+                        height: lofted ? Math.min(70, 18 + d * 2.4) : 0,
+                        id: ++this.popupId,
+                        spin: e.kind === 'shot' ? 2 : 1,
+                    });
                     this.ballAt = end;
                     this.bump();
                     break;
@@ -696,7 +789,13 @@ export class MatchController {
                     const o = m.piece(e.by);
                     this.popup(o.pos, e.success ? (e.block ? 'Blocked!' : 'Intercepted!') : 'Too slow', e.success ? 'bad' : 'good');
                     this.setAnim(e.by, e.success ? 'trap' : 'tired', 600);
-                    if (e.success) { audio.play('trap'); this.bump(); await sleep(this.ballMs); this.ballAt = null; this.ballMs = 200; }
+                    if (e.success) {
+                        audio.play('trap');
+                        this.bump();
+                        await sleep(this.ballMs);
+                        this.ballAt = null;
+                        this.ballMs = 200;
+                    }
                     break;
                 }
                 case 'receive':
@@ -707,8 +806,14 @@ export class MatchController {
                     await sleep(this.ballMs);
                     this.ballAt = null;
                     this.ballMs = 200;
-                    if (e.t === 'receive') { this.setAnim(e.by, 'trap', 500); audio.play('trap'); }
-                    if (e.t === 'out') { this.popup(e.at, 'Out', 'neutral'); audio.play('whistle'); }
+                    if (e.t === 'receive') {
+                        this.setAnim(e.by, 'trap', 500);
+                        audio.play('trap');
+                    }
+                    if (e.t === 'out') {
+                        this.popup(e.at, 'Out', 'neutral');
+                        audio.play('whistle');
+                    }
                     this.bump();
                     break;
                 }
@@ -748,7 +853,11 @@ export class MatchController {
                     this.flightZone.set(null);
                     this.bump();
                     const scorer = m.piece(e.scorer);
-                    await this.showBanner('GOAL!', `${scorer.player.name} · ${m.state.score[0]} – ${m.state.score[1]}`, this.cfg.match.goalPauseMs);
+                    await this.showBanner(
+                        'GOAL!',
+                        `${scorer.player.name} · ${m.state.score[0]} – ${m.state.score[1]}`,
+                        this.cfg.match.goalPauseMs,
+                    );
                     this.ballAt = null;
                     this.followBall = false;
                     this.say(this.commentator.call(m.restartAfterGoal(e.team)));
@@ -809,12 +918,19 @@ export class MatchController {
                     this.ballAt = null;
                     this.followBall = false;
                     audio.play('whistle');
-                    for (const p of m.state.pieces) { this.moveMs.set(p.id, 750); this.setAnim(p.id, 'run', 750); }
+                    for (const p of m.state.pieces) {
+                        this.moveMs.set(p.id, 750);
+                        this.setAnim(p.id, 'run', 750);
+                    }
                     this.ballMs = 750;
                     this.bump();
                     const human = this.isHuman(0) || this.isHuman(1);
                     const n = this.cfg.setPieces.placements;
-                    await this.showBanner(e.kind === 'corner' ? 'Corner' : 'Free kick', human ? `Both sides place up to ${n} players, attackers first` : this.clubName(e.team), 1300);
+                    await this.showBanner(
+                        e.kind === 'corner' ? 'Corner' : 'Free kick',
+                        human ? `Both sides place up to ${n} players, attackers first` : this.clubName(e.team),
+                        1300,
+                    );
                     this.moveMs.clear();
                     this.ballMs = 0;
                     break;
@@ -876,7 +992,10 @@ export class MatchController {
         this.bump();
         if (events.length) await sleep(pause);
         // let the camera hand back to the next player only after the pause, so the outcome stays in shot
-        if (this.followBall) { this.followBall = false; this.bump(); }
+        if (this.followBall) {
+            this.followBall = false;
+            this.bump();
+        }
     }
 
     // ---------------------------------------------------------------- helpers for the view

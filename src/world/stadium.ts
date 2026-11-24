@@ -51,7 +51,12 @@ const hash = (s: string) => {
 };
 
 /** Divisions 0 (top) .. 4 (bottom) lean towards bigger or smaller grounds; undefined = anything. */
-export const generateStadium = (seedKey: string, place: string, tier?: number, force: { size?: StadiumSize; condition?: PitchCondition } = {}): Stadium => {
+export const generateStadium = (
+    seedKey: string,
+    place: string,
+    tier?: number,
+    force: { size?: StadiumSize; condition?: PitchCondition } = {},
+): Stadium => {
     const rng = createRng(hash(seedKey));
     const sizes: StadiumSize[] = ['village', 'town', 'city', 'grand'];
     // bottom division: villages and towns · middle: towns and cities · top: cities and grand stadiums
@@ -59,7 +64,10 @@ export const generateStadium = (seedKey: string, place: string, tier?: number, f
     const size = force.size ?? sizes[Math.max(0, Math.min(3, lean))]!;
     const info = SIZE_INFO[size];
     const nameStyle = rng();
-    const name = nameStyle < 0.7 ? `${place} ${rng.pick(SUFFIX[size])}` : `The ${rng.pick(['Old', 'New', 'Royal', 'Lower', 'Upper'])} ${rng.pick(SUFFIX[size])}`;
+    const name =
+        nameStyle < 0.7
+            ? `${place} ${rng.pick(SUFFIX[size])}`
+            : `The ${rng.pick(['Old', 'New', 'Royal', 'Lower', 'Upper'])} ${rng.pick(SUFFIX[size])}`;
     return {
         name,
         size,
@@ -86,4 +94,5 @@ export const rollConditions = (rng: Rng, st: Stadium, force: Partial<Conditions>
 export const conditionsLabel = (c: Conditions) =>
     `${{ day: 'Afternoon', dusk: 'Dusk', night: 'Floodlit night' }[c.time]} · ${{ clear: 'clear skies', rain: 'rain', snow: 'snow', fog: 'fog' }[c.weather]}`;
 
-export const sizeLabel = (s: StadiumSize) => ({ village: 'Village ground', town: 'Town ground', city: 'City stadium', grand: 'Grand stadium' })[s];
+export const sizeLabel = (s: StadiumSize) =>
+    ({ village: 'Village ground', town: 'Town ground', city: 'City stadium', grand: 'Grand stadium' })[s];

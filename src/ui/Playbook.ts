@@ -19,25 +19,33 @@ export const Playbook = (cfg: GameConfig, player?: Player) => {
     return html`<div class="playbook">
         ${classes.map((cls) => {
             const lvl = player ? classLevel(player, cls) : undefined;
-            const abilities = allAbilities(cfg).filter((id) => abilityDef(cfg, id).cls === cls).sort((a, b) => abilityDef(cfg, a).unlock - abilityDef(cfg, b).unlock);
+            const abilities = allAbilities(cfg)
+                .filter((id) => abilityDef(cfg, id).cls === cls)
+                .sort((a, b) => abilityDef(cfg, a).unlock - abilityDef(cfg, b).unlock);
             const passives = (Object.keys(cfg.passives) as PassiveId[]).filter((id) => cfg.passives[id].cls === cls);
             const rows = [
-                ...abilities.map((id) => ({ unlock: abilityDef(cfg, id).unlock, row: () => {
-                    const a = abilityDef(cfg, id);
-                    const have = lvl !== undefined && lvl >= a.unlock;
-                    return html`<li class="${have ? 'have' : lvl !== undefined ? 'locked' : ''}">
+                ...abilities.map((id) => ({
+                    unlock: abilityDef(cfg, id).unlock,
+                    row: () => {
+                        const a = abilityDef(cfg, id);
+                        const have = lvl !== undefined && lvl >= a.unlock;
+                        return html`<li class="${have ? 'have' : lvl !== undefined ? 'locked' : ''}">
                         <span class="lv">${String(a.unlock)}</span><span class="ic">${a.icon}</span>
                         <div><b>${a.label}</b> <em>${PHASE_LABEL[a.phase]}${a.cooldown ? ` · ${a.cooldown} round cooldown` : ''}</em><p>${a.desc}</p><p class="how">${a.how}</p></div>
                     </li>`;
-                } })),
-                ...passives.map((id) => ({ unlock: cfg.passives[id].unlock, row: () => {
-                    const d = cfg.passives[id];
-                    const have = lvl !== undefined && lvl >= d.unlock;
-                    return html`<li class="passive ${have ? 'have' : lvl !== undefined ? 'locked' : ''}">
+                    },
+                })),
+                ...passives.map((id) => ({
+                    unlock: cfg.passives[id].unlock,
+                    row: () => {
+                        const d = cfg.passives[id];
+                        const have = lvl !== undefined && lvl >= d.unlock;
+                        return html`<li class="passive ${have ? 'have' : lvl !== undefined ? 'locked' : ''}">
                         <span class="lv">${String(d.unlock)}</span><span class="ic">◆</span>
                         <div><b>${d.label}</b> <em>Passive · always on</em><p>${d.desc}</p></div>
                     </li>`;
-                } })),
+                    },
+                })),
             ].sort((a, b) => a.unlock - b.unlock);
             return html`<section class="pb-class ${lvl ? 'mine' : ''}">
                 <h3>${cfg.classes[cls].label} <small>${cfg.classes[cls].short}${lvl ? ` · level ${lvl}` : ''}</small></h3>
