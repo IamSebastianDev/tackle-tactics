@@ -553,6 +553,11 @@ export class Brain {
         return softmaxPick(this.rng, options, this.T * 0.6) ?? options[0]!.a;
     }
 
+    /** A missed deliberate tackle hands the carrier a free turn: weigh that in. */
+    private missRisk(ch: number) {
+        return this.cfg.match.missedTackleBonus && this.cfg.match.tackleBonusTurn ? (1 - ch) * this.k.missRisk : 0;
+    }
+
     decideAct(p: Piece, plain = false): ActDecision {
         this.refresh(p.team);
         const m = this.m;
@@ -571,11 +576,11 @@ export class Brain {
             const urgency = danger > 0.7 ? 0.12 : 0;
             if (m.canTackle(p)) {
                 const ch = tackleChance(cfg, p, c, true);
-                options.push({ v: ch + urgency - this.k.tackleThreshold, a: { kind: 'tackle' } });
+                options.push({ v: ch + urgency - this.k.tackleThreshold - this.missRisk(ch), a: { kind: 'tackle' } });
             }
             if (m.abilityUsable(p, 'slide')) {
                 const ch = tackleChance(cfg, p, c, true, cfg.abilities.slide.bonus);
-                options.push({ v: ch + urgency - this.k.tackleThreshold - 0.08, a: { kind: 'slide' } });
+                options.push({ v: ch + urgency - this.k.tackleThreshold - 0.08 - this.missRisk(ch), a: { kind: 'slide' } });
             }
             if (m.abilityUsable(p, 'foul') && !m.inOwnBox(p.team, c.pos)) {
                 // a cynical foul is worth it to stop a dangerous carrier, less so on a booking

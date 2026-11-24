@@ -6,10 +6,10 @@ import type { Piece } from '../src/types';
 import { generateClub } from '../src/world/generate';
 
 const noFouls = { foulOnMiss: 0, foulOnWin: 0 };
-const make = (foulOnWin = 0) => {
+const make = (foulOnWin = 0, tackleBase = 2) => {
     const cfg = withOverrides(
         {
-            reactions: { tackleBase: 2 },
+            reactions: { tackleBase, minChance: 0, maxChance: 1 },
             referee: { styles: { lenient: { ...noFouls, foulOnWin }, fair: { ...noFouls, foulOnWin }, strict: { ...noFouls, foulOnWin } } },
         } as never,
         defaultConfig,
@@ -43,7 +43,7 @@ describe('tackle winner gets an extra turn', () => {
         const ev = m.tackle();
         expect(ev.some((e) => e.t === 'tackle' && e.success)).toBe(true);
         const bonus = m.nextTurn();
-        expect(bonus).toEqual([{ t: 'bonus', id: tackler.id }]);
+        expect(bonus).toEqual([{ t: 'bonus', id: tackler.id, reason: 'won' }]);
         expect(m.active().id).toBe(tackler.id);
         expect(m.state.phase).toBe('move');
         expect(m.carrier()?.id).toBe(tackler.id);
@@ -67,5 +67,17 @@ describe('tackle winner gets an extra turn', () => {
         m.tackle();
         expect(m.nextTurn().some((e) => e.t === 'bonus')).toBe(false);
         (m.cfg.match as { tackleBonusTurn: boolean }).tackleBonusTurn = true;
+    });
+
+    it('a missed deliberate tackle gives the carrier the extra turn to escape (no shot)', () => {
+        const m = make(0, -2);
+        const { tackler, carrier } = stage(m);
+        const ev = m.tackle();
+        expect(ev.some((e) => e.t === 'tackle' && !e.success)).toBe(true);
+        expect(m.carrier()?.id).toBe(carrier.id);
+        expect(m.nextTurn()).toEqual([{ t: 'bonus', id: carrier.id, reason: 'beat' }]);
+        expect(m.active().id).toBe(carrier.id);
+        expect(m.shotBlocked(carrier)).toBe(true);
+        expect(tackler.staggered).toBe(true);
     });
 });

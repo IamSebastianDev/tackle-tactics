@@ -128,7 +128,7 @@ export type MatchEvent =
     | { t: 'setpiece'; kind: SetPieceKind; team: TeamSide; taker: string; at: Cell }
     | { t: 'place'; id: string; from: Cell; to: Cell }
     | { t: 'sub'; team: TeamSide; off: string; on: string }
-    | { t: 'bonus'; id: string }
+    | { t: 'bonus'; id: string; reason: 'won' | 'beat' }
     | { t: 'card'; on: string; card: 'yellow' | 'red' }
     | { t: 'header'; by: string; at: Cell }
     | { t: 'runOnto'; by: string; path: Cell[] }
@@ -175,6 +175,8 @@ export type MatchState = {
     subbedOff: Piece[];
     /** A tackle winner owed an immediate extra turn (taken before the order moves on). */
     bonusNext?: string;
+    /** Why the extra turn is owed: the ball was won, or a deliberate tackle was beaten. */
+    bonusReason?: 'won' | 'beat';
     /** The extra turn running right now; `active()` returns this piece while it is set. */
     bonusTurn?: string;
 };

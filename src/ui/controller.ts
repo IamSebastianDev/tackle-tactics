@@ -491,7 +491,7 @@ export class MatchController {
             }
             for (const e of ev) {
                 if (e.t === 'bonus') {
-                    this.popup(m.piece(e.id).pos, '⚡ Extra turn', 'good');
+                    this.popup(m.piece(e.id).pos, e.reason === 'beat' ? '⚡ Beat the tackle' : '⚡ Extra turn', 'good');
                     audio.play('ability');
                     await sleep(450);
                 }

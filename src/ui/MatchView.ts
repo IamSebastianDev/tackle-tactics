@@ -512,7 +512,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             const p = m.active();
             if (m.state.bonusTurn === p.id && awaiting && !mode) {
                 return m.state.phase === 'move'
-                    ? 'Extra turn for winning the ball: carry it clear of the scrum (or Space to stay).'
+                    ? 'Extra turn: carry the ball clear of the scrum (or Space to stay).'
                     : 'Extra turn: pass it on, or Space to keep it. Shooting waits for your normal turn.';
             }
             if (sp?.stage === 'take' && sp.taker === p.id && awaiting) {
@@ -548,7 +548,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             }
             const c = m.carrier();
             if (c && c.team !== p.team && cheb(c.pos, p.pos) <= 2)
-                return 'Click the carrier to tackle, or use an ability. Space ends your turn.';
+                return 'Click the carrier to tackle: win it and you go again, miss and they get a free turn to escape. Space ends your turn.';
             return 'Use an ability, or Space to end your turn.';
         },
     );

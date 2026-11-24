@@ -336,8 +336,10 @@ export class Match {
     shotBlocked = (p: Piece) => this.state.bonusTurn === p.id && this.cfg.match.tackleBonusMode !== 'full';
 
     /** The winner of a tackle gets an extra turn straight after this one (config: match.tackleBonusTurn). */
-    private wonTackle(winner: Piece) {
-        if (this.cfg.match.tackleBonusTurn) this.state.bonusNext = winner.id;
+    private wonTackle(winner: Piece, reason: 'won' | 'beat' = 'won') {
+        if (!this.cfg.match.tackleBonusTurn) return;
+        this.state.bonusNext = winner.id;
+        this.state.bonusReason = reason;
     }
 
     private knock(id: string) {
@@ -430,7 +432,7 @@ export class Match {
         if (owed && !s.setPiece && s.pieces.some((p) => p.id === owed) && this.carrier()?.id === owed) {
             s.bonusTurn = owed;
             this.beginTurn();
-            return [{ t: 'bonus', id: owed }];
+            return [{ t: 'bonus', id: owed, reason: s.bonusReason ?? 'won' }];
         }
         s.turnIndex++;
         if (s.turnIndex >= s.order.length) {
@@ -632,6 +634,8 @@ export class Match {
             p.staggered = true;
             p.reactionReady = false;
             if (slide) p.status.groundedNext = true;
+            // a duel: the carrier who beats a deliberate challenge gets the extra turn to escape
+            if (this.cfg.match.missedTackleBonus) this.wonTackle(c, 'beat');
             this.log(slide ? `${p.player.name} slides in and ends up on the floor.` : `${p.player.name} lunges in and misses.`, p.team);
         }
         const ev: MatchEvent[] = [{ t: 'tackle', by: p.id, on: c.id, success, reaction: false, at: c.pos }];

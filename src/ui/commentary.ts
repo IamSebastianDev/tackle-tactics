@@ -87,6 +87,11 @@ const L = {
         'Free kick to {team} in a dangerous spot. The wall assembles.',
         "{team} have a free kick within range. Who's standing over it?",
     ],
+    escape: [
+        '{p} rides the challenge and is away!',
+        'Missed! {p} skips clear with the whole defence on the wrong foot.',
+        '{p} beats the tackle — and that is a lot of grass to run into.',
+    ],
     bonus: [
         '{p} wins it and goes again — away from the scrum!',
         'Won it, and {p} is off before anyone can blink.',
@@ -146,7 +151,7 @@ export class Commentator {
                     out.push(this.line('kickoff', { team: this.teamName(e.team) }, 'info', e.team));
                     break;
                 case 'bonus':
-                    out.push(this.line('bonus', { p: this.name(e.id) }, 'good', this.m.piece(e.id).team));
+                    out.push(this.line(e.reason === 'beat' ? 'escape' : 'bonus', { p: this.name(e.id) }, 'good', this.m.piece(e.id).team));
                     break;
                 case 'sub':
                     out.push(this.line('sub', { team: this.teamName(e.team), on: this.name(e.on), off: this.name(e.off) }, 'info', e.team));

@@ -124,7 +124,7 @@ On-pitch overlays keep their own colour-blind-safe palette (`--move`, `--scatter
 - **Reactions**: one per player per round, refreshed at the start of their own turn. Tackle when the carrier moves next to you, intercept when the ball passes next to you, keeper save on shots. A failed reaction leaves you _staggered_ (no reaction until your next turn).
 - **Kicks**: aim anywhere. The orange disc is where it may land; it grows with distance and shrinks with skill. Passes over `loftThreshold` cells are lofted and can only be cut out near take-off/landing. Aim at the goal mouth to shoot.
 - Timer expiry loses the action (or let the AI play it: setting).
-- **Winning a tackle earns an extra turn** right away (`match.tackleBonusTurn`): carry the ball clear and pass, but no shooting until your normal turn (`tackleBonusMode`: `'noShot'`; `'full'` and `'move'` also exist). It stops tackle-back chains in a crowd without inflating goals (AI-vs-AI: tackle-backs 0.3 → 0.1 per match, shots and goals unchanged). A foul cancels it.
+- **Tackles are duels; the winner gets an extra turn** right away (`match.tackleBonusTurn`). Take the ball and the tackler goes again; miss a deliberate tackle or slide and the _carrier_ gets it, to escape (`missedTackleBonus`; reaction tackles during a dribble only reward the winner of the ball). The extra turn is for getting clear: move and pass, no shot (`tackleBonusMode`). A foul cancels it. The AI weighs the risk of a miss (`ai.missRisk`).
 
 ## Team styles, fatigue & substitutions
 

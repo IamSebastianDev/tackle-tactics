@@ -46,6 +46,8 @@ export const defaultConfig = {
         tackleBonusTurn: true,
         /** What the extra turn allows: 'full', 'noShot' (move and pass, no shooting) or 'move' (a run only). */
         tackleBonusMode: 'noShot' as 'full' | 'noShot' | 'move',
+        /** A deliberate tackle is a duel: if it fails, the carrier gets the extra turn to escape. */
+        missedTackleBonus: true,
         /** Extra pause after an action resolves, so the animation reads. ms */
         resolvePauseMs: 260,
         goalPauseMs: 1900,
@@ -139,6 +141,8 @@ export const defaultConfig = {
         compress: 0.08,
         shootRange: 21,
         tackleThreshold: 0.33,
+        /** How much the AI fears a missed tackle (the carrier then escapes with an extra turn). */
+        missRisk: 0.2,
         /** Second presser joins once the carrier is this far (normalised) into our half. */
         doublePressFrom: 0.45,
         /** Job weight for pressers (overrides roleWeight) and the bonus for ending in contact. */
