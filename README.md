@@ -1,42 +1,66 @@
 # Tackle Tactics
 
-The match game (vs AI / hotseat / AI vs AI) plus a career mode: a 5 × 10 league pyramid with training,
-levelling, multiclassing, injuries, aging, money and transfers (build-sequence steps 1–5 of `../concept.md`).
+A turn-based positioning game in a football kit: 22 players act one at a time, fastest first, on a 50 × 30 grid.
+Make space, deny space, beat the clock. Play a match (vs AI, hotseat, AI vs AI) or a career up a 5 × 10 league
+pyramid with training, multiclassing, transfers, injuries, aging, stories and match prep. Design notes:
+[`concept.md`](concept.md).
 
-The whole UI renders onto a fixed **1600×900 stage** scaled to the window (`src/ui/stage.ts`), so screens are laid
-out once like a game; only long lists scroll inside their own panels.
+Web app (Vite, TypeScript, [Nørd](https://www.npmjs.com/package/@grainular/nord)) with a [Tauri 2](https://tauri.app)
+desktop shell. The whole UI renders onto a fixed **1600×900 stage** scaled to the window (`src/ui/stage.ts`), so
+screens are laid out once like a game; only long lists scroll inside their own panels.
+
+## Getting started
 
 ```bash
 npm install
-npm run assets   # copies the used subset of assets/ into public/assets (packs aren't redistributable on their own)
-npm run dev
-npm test         # engine tests incl. full headless AI-vs-AI matches
+npm run assets   # copy the used subset of the art packs (assets/) into public/assets
+npm run dev      # http://localhost:5173
 ```
 
-### Desktop app (Tauri)
+The art packs (bubbabba "Soccer Match", Goals in Pixels) are licensed and **not in the repository**: put them in
+`assets/` before `npm run assets`. Songs for the in-game radio go in `assets/music/` (see [Radio](#radio)).
 
-The same web build runs in a native window via [Tauri 2](https://tauri.app) (`src-tauri/`). Needs a Rust toolchain.
+## Development
 
 ```bash
-npm run desktop          # dev: native window on the Vite dev server (port 1420), hot reload
+npm run check        # typecheck + oxlint + oxfmt --check + vitest
+npm run check:all    # … plus cargo fmt --check, clippy -D warnings and the Rust tests
+npm run lint:fix     # oxlint autofixes
+npm run format       # oxfmt (TypeScript/CSS/JSON/Markdown; HTML inside templates is left alone)
+npm run frames       # regenerate the pixel 9-slice frames (src/ui/frames.css)
+```
+
+- Lint and format config: `.oxlintrc.json` (deliberate exceptions are commented), `.oxfmtrc.json`, `.editorconfig`.
+- CI (`.github/workflows/ci.yml`) runs the same checks on push and pull requests.
+- Tuning harnesses print stats from headless AI-vs-AI matches and are skipped unless enabled, e.g.
+  `TT_VARIANTS='{"base":{}}' npx vitest run test/tune.test.ts --silent=false` (also `TT_STYLES`, `TT_CHAIN`).
+- Dev builds expose `window.__tt` (the running match controller) and `window.__career` for debugging.
+
+## Desktop app (Tauri)
+
+```bash
+npm run desktop          # native window on the Vite dev server (port 1420), hot reload
 npm run desktop:build    # release: src-tauri/target/release/bundle/macos/Tackle Tactics.app (+ .dmg)
 ```
 
-- Window: 1600×900 by default, resizable (minimum 1180×680); **F11** or **⌘/Ctrl+Enter** toggles fullscreen, also in Settings → Display.
+- The window sizes itself to the screen it opens on (up to 1600×900, kept at 16:9, centred); **F11** or
+  **⌘/Ctrl+Enter** toggles fullscreen, also in Settings → Display.
+- **Saves**: the career is a JSON file in the app data folder (macOS:
+  `~/Library/Application Support/com.tackletactics.game/career.json`), written atomically with a `.bak` of the
+  previous save; a damaged file falls back to the backup, starting over keeps the old career as
+  `career.previous.json`. The browser build saves to localStorage. See `src/meta/storage.ts` and `src-tauri/src/lib.rs`.
 - Fonts are bundled (`src/ui/fonts.css`, from `@fontsource`), so the app needs no network.
-- Saves live in the app's own web storage, separate from any browser saves.
-- The app icon is `src-tauri/icon-source.svg`; regenerate the icon set with `npx tauri icon src-tauri/icon-source.svg`.
+- App icon: `src-tauri/icon-source.svg` (`npx tauri icon src-tauri/icon-source.svg` regenerates the set).
 
-### Radio
+## Radio
 
-Every audio file in `assets/music/` becomes a song on the in-game radio (`scripts/music-plugin.ts`, read at
-dev and build time; the folder is git-ignored like the art packs). Name files `Artist - Title.ext` (or just
-`Title.ext`); an optional leading number (`01 `) sets the order, and the first song opens the station, the rest
-shuffle. WAV/AIFF are converted to AAC once (cached in `node_modules/.cache/tt-music`); MP3/M4A/OGG are used as-is.
-In game: the chip on the title screen and in the hub, **N** next song, **R** radio on/off, Settings → Sound for
-volume and how loud it plays during matches.
+Every audio file in `assets/music/` becomes a song on the in-game radio (`scripts/music-plugin.ts`, read at dev and
+build time). Name files `Artist - Title.ext` (or just `Title.ext`); an optional leading number (`01 `) sets the
+order, and the first song opens the station while the rest shuffle. WAV/AIFF are converted to AAC once (cached in
+`node_modules/.cache/tt-music`); MP3/M4A/OGG are used as-is. In game: the chip on the title screen and in the hub,
+**N** next song, **R** radio on/off; Settings → Sound for volume, the in-match level and switching songs on or off.
 
-### Look
+## Look
 
 Matchday-broadcast style: warm graphite neutrals, one trophy-gold accent (`--accent`) for primary actions and
 highlights, paper-white for selections, condensed sports headings (Barlow Condensed) over Inter body text. Panels and
@@ -45,21 +69,23 @@ On-pitch overlays keep their own colour-blind-safe palette (`--move`, `--scatter
 
 ## Layout
 
-| Path                      | What                                                                                                                                                                                                              |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/config.ts`           | **Every tunable**: timer, rounds, pitch, camera constants, scatter, reaction odds, AI weights, class kits, formations (data), kit sprites. `withOverrides()` deep-merges mods.                                    |
-| `src/types.ts`            | Player, Club, Piece, MatchState, MatchEvent.                                                                                                                                                                      |
-| `src/world/generate.ts`   | Procedural players/clubs (fantasy names, class stat profiles, bell-curved talent).                                                                                                                                |
-| `src/engine/`             | Pure turn engine. `Match` mutates state and returns `MatchEvent[]`; knows nothing about the DOM. `grid.ts` geometry, `rules.ts` all odds/radii formulas.                                                          |
-| `src/engine/abilities.ts` | Which abilities/passives a player has (class levels → unlocks), cooldown helpers.                                                                                                                                 |
-| `src/sim.ts`              | Headless AI-vs-AI runner with possession/turnover/ability stats (tests + tuning).                                                                                                                                 |
-| `src/ai/brain.ts`         | Heuristic AI: formation slot (ball-relative) + role job blended by per-slot `roleWeight`; carrier weighs shots / passes / dribbles by risk; softmax sampling whose band narrows when one option dominates.        |
-| `src/meta/career.ts`      | Career: pyramid generation, calendar (matchday → 2 training days), simulated fixtures, training & injuries, wages/income, market, season end (promotion/relegation, aging, retirement), save/load (localStorage). |
-| `src/meta/player.ts`      | Overall rating, value, wage, XP & level-ups (stat growth), aging, potential stars.                                                                                                                                |
-| `src/ui/hub/Hub.ts`       | Manager hub: Overview, Squad (+ player drawer), Tactics (formation board), Training plan, League, Market, Finances, Playbook.                                                                                     |
-| `src/ui/Playbook.ts`      | Reference of every class kit, used in-match (H) and in the hub.                                                                                                                                                   |
-| `src/ui/controller.ts`    | Match loop, action timer, AI pacing, human input, presentation of events (animations, popups, banners).                                                                                                           |
-| `src/ui/MatchView.ts`     | Nørd view: CSS-perspective camera, cosmetic pitch, flat grid (source of truth + hit testing), overlays, counter-rotated sprite tokens, HUD.                                                                       |
+- `src/config.ts`: **every tunable** (match, pitch, camera, scatter, reaction odds, AI weights and team styles,
+  fatigue, subs, set pieces, referees, classes, formations, career, economy). `withOverrides()` deep-merges mods.
+- `src/types.ts`: Player, Club, Piece, MatchState, MatchEvent.
+- `src/engine/`: the pure turn engine. `Match` mutates state and returns `MatchEvent[]`, knowing nothing of the DOM;
+  `rules.ts` holds the odds and radii, `grid.ts` the geometry, `stats.ts` match statistics and ratings.
+- `src/ai/brain.ts`: the heuristic AI (formation slot + role job, risk-weighted kicks, team styles, game state,
+  set-piece placements, substitutions).
+- `src/sim.ts`: headless AI-vs-AI runner used by the tests and tuning harnesses.
+- `src/world/`: procedural players, clubs and stadiums.
+- `src/meta/`: the career (`career.ts`), player value and growth (`player.ts`), stories, letters and quests
+  (`story.ts`), match prep (`prep.ts`) and the save slot (`storage.ts`).
+- `src/ui/`: App routing, the match view and controller, the hub, settings, tutorial, radio, audio, commentary,
+  sprites (with runtime palette swaps) and stadium rendering; `styles.css`, `fonts.css`, generated `frames.css`.
+- `src-tauri/`: the desktop shell (window fitting, save-file commands).
+- `scripts/`: asset copy, frame generator, the music Vite plugin.
+- `test/`: engine, abilities, set pieces, bonus turns, career, and stories tests (the save-file tests are Rust, in
+  `src-tauri/src/lib.rs`).
 
 ## Rules as implemented
 
@@ -134,18 +160,21 @@ bubbabba cast gives eight ready-made kits today.
 
 ## Match controls
 
-| Key              | Action                                                                                          |
-| ---------------- | ----------------------------------------------------------------------------------------------- |
-| Click            | Move / aim / pick a target                                                                      |
-| Space            | Hold position, or end turn / keep the ball                                                      |
-| 1–9              | Abilities (hover a card to preview it on the pitch)                                             |
-| T                | Tackle                                                                                          |
-| A                | Let the AI play this action                                                                     |
-| F                | Focus: which of your players ask for orders (all / near the ball / key duels)                   |
-| Z                | Show/hide zones of control (pink = their reaction-ready cover, grey = spent, blue dots = yours) |
-| P                | Pause (the clock freezes)                                                                       |
-| Wheel, + / − / 0 | Zoom in / out / reset (the camera also leans in on crowded balls)                               |
-| H                | Playbook · M mute · Esc cancel                                                                  |
+| Key               | Action                                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| Click             | Move / aim / pick a target                                                                      |
+| Space             | Hold position, or end turn / keep the ball                                                      |
+| 1–9               | Abilities (hover a card to preview it on the pitch)                                             |
+| T                 | Tackle                                                                                          |
+| A                 | Let the AI play this action                                                                     |
+| F                 | Focus: which of your players ask for orders (all / near the ball / key duels)                   |
+| Z                 | Show/hide zones of control (pink = their reaction-ready cover, grey = spent, blue dots = yours) |
+| P                 | Pause (the clock freezes)                                                                       |
+| Wheel, + / − / 0  | Zoom in / out / reset (the camera also leans in on crowded balls)                               |
+| H                 | Playbook · M mute · Esc cancel                                                                  |
+| B                 | Bench and substitutions                                                                         |
+| N / R             | Radio: next song / radio on-off (anywhere)                                                      |
+| F11, ⌘/Ctrl+Enter | Fullscreen                                                                                      |
 
 ## Camera & grounds
 

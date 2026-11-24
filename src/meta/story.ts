@@ -829,10 +829,7 @@ export const afterTraining = (
 };
 
 /** Season awards + reset. Returns ceremony lines. */
-export const seasonAwards = (
-    cfg: GameConfig,
-    c: Career,
-): Array<{ title: string; who: string; detail: string; icon: 'cup' | 'medal' | 'boot' | 'star' }> => {
+export const seasonAwards = (c: Career): Array<{ title: string; who: string; detail: string; icon: 'cup' | 'medal' | 'boot' | 'star' }> => {
     const s = story(c);
     const u = c.clubs[c.userClubId]!;
     const out: Array<{ title: string; who: string; detail: string; icon: 'cup' | 'medal' | 'boot' | 'star' }> = [];
@@ -854,7 +851,6 @@ export const seasonAwards = (
         icon: 'medal',
     });
     for (const a of out.filter((x) => x.icon !== 'medal')) s.awards.push({ season: c.season, title: a.title, who: a.who });
-    void cfg;
     return out;
 };
 

@@ -132,8 +132,3 @@ export const recolored = (src: string, skin: number, hair: number): string => {
     if (!pending.has(k)) generate(src, skin, hair, k);
     return src;
 };
-
-/** Warm the cache for the strips a player will need first. */
-export const prewarm = (srcs: string[], skin: number, hair: number) => {
-    for (const s of srcs) recolored(s, skin, hair);
-};

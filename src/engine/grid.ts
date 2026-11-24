@@ -32,8 +32,6 @@ export const isGoalCell = (cfg: GameConfig, c: Cell, goalX?: number) => {
     return xOk && c.y >= top && c.y <= bottom;
 };
 
-export const goalCenter = (cfg: GameConfig, goalX: number): Cell => ({ x: goalX, y: (cfg.pitch.rows - 1) / 2 });
-
 /** Normalised "forwardness" of a cell for a team: 0 at own goal line, 1 at the opponent's. */
 export const forward = (cfg: GameConfig, team: TeamSide, c: Cell) => {
     const t = c.x / (cfg.pitch.cols - 1);

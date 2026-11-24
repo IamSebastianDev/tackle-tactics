@@ -138,7 +138,6 @@ export class Commentator {
 
     call(events: MatchEvent[], assist?: string): Line[] {
         const out: Line[] = [];
-        let kicker: string | null = null;
         let throughBy: string | null = null;
         let lastShooter: string | null = null;
         for (const e of events) {
@@ -165,7 +164,6 @@ export class Commentator {
                         out.push(this.line('tempo', { p: this.name(e.by), r: this.name(e.target) }, 'info', this.m.piece(e.by).team));
                     break;
                 case 'kick':
-                    kicker = e.by;
                     if (e.kind === 'shot') lastShooter = e.by;
                     break;
                 case 'runOnto':
@@ -257,7 +255,6 @@ export class Commentator {
                     break;
             }
         }
-        void kicker;
         return out;
     }
 }

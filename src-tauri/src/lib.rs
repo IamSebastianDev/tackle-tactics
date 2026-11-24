@@ -83,7 +83,11 @@ fn save_path(app: tauri::AppHandle) -> Result<String, String> {
 /// (menu bar and Dock excluded), kept at 16:9 and centred. The window starts hidden so it never
 /// flashes at the wrong size or half off-screen.
 fn fit_to_screen(window: &tauri::WebviewWindow) {
-    let monitor = window.current_monitor().ok().flatten().or_else(|| window.primary_monitor().ok().flatten());
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
     let Some(monitor) = monitor else { return };
     let scale = monitor.scale_factor();
     let area = monitor.work_area();
@@ -92,9 +96,16 @@ fn fit_to_screen(window: &tauri::WebviewWindow) {
     let mut w = (aw * 0.92).min(1600.0);
     let mut h = (ah * 0.92).min(900.0);
     // keep the game's 16:9 stage proportions
-    if w / h > 16.0 / 9.0 { w = h * 16.0 / 9.0 } else { h = w * 9.0 / 16.0 }
+    if w / h > 16.0 / 9.0 {
+        w = h * 16.0 / 9.0
+    } else {
+        h = w * 9.0 / 16.0
+    }
     let _ = window.set_size(tauri::LogicalSize::new(w.round(), h.round()));
-    let _ = window.set_position(tauri::LogicalPosition::new((ax + (aw - w) / 2.0).round(), (ay + (ah - h) / 2.0).round()));
+    let _ = window.set_position(tauri::LogicalPosition::new(
+        (ax + (aw - w) / 2.0).round(),
+        (ay + (ah - h) / 2.0).round(),
+    ));
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -157,6 +168,9 @@ mod tests {
         write_at(&p, r#"{"day":5}"#).unwrap();
         delete_at(&p).unwrap();
         assert_eq!(read_at(&p), None);
-        assert_eq!(fs::read_to_string(p.with_extension("previous.json")).unwrap(), r#"{"day":5}"#);
+        assert_eq!(
+            fs::read_to_string(p.with_extension("previous.json")).unwrap(),
+            r#"{"day":5}"#
+        );
     }
 }

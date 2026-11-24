@@ -14,7 +14,6 @@ import { interceptChance, movePoints, saveChance, scatterRadius, tackleChance, t
 export type Reach = { cost: number; path: Cell[]; danger: number };
 export type MoveAbility = 'sprint' | 'run' | 'press' | 'rush';
 export type KickAbility = 'placed' | 'power' | 'chip' | 'through' | 'cross';
-export type TargetAbility = 'mark' | 'tempo';
 
 const MOVE_ABILITIES: MoveAbility[] = ['sprint', 'run', 'press', 'rush'];
 export const MOVE_ABILITY_IDS: readonly MoveAbility[] = MOVE_ABILITIES;

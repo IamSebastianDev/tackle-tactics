@@ -599,7 +599,7 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
         promoted: false,
         relegated: false,
         lines: summary,
-        awards: seasonAwards(cfg, c),
+        awards: seasonAwards(c),
     };
     const fee = cfg.career.matchFee[u.tier]!;
     c.history.push({ season: c.season, tier: u.tier, position: pos });
