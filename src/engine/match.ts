@@ -1217,6 +1217,7 @@ export class Match {
         const n = cfg.setPieces.placements;
         const sp: SetPiece = { kind, team, taker: t.id, spot, stage: 'setup', next: team, left: [n, n] };
         this.state.setPiece = sp;
+        const from = Object.fromEntries(this.state.pieces.map((p) => [p.id, { ...p.pos }]));
         this.arrangeSetPiece(sp);
         this.state.ball = { kind: 'held', by: t.id };
         this.state.phase = 'done';
@@ -1226,7 +1227,7 @@ export class Match {
                 : `Free kick to ${this.state.clubs[team].name} in a dangerous area.`,
             team,
         );
-        return [{ t: 'setpiece', kind, team, taker: t.id, at: spot }];
+        return [{ t: 'setpiece', kind, team, taker: t.id, at: spot, from }];
     }
 
     /** The default shapes: runners into the box, markers goal-side of them, a wall for free kicks. */

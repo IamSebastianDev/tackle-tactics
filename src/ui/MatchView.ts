@@ -3,7 +3,7 @@ import { $each, $if, $render, attr, createDirective, html, mounted, on } from '@
 import { isLightKit, kitColor } from './kits';
 import { Playbook } from './Playbook';
 import { atmosphere, pitchSurface, stadiumProps } from './StadiumView';
-import { generateStadium } from '../world/stadium';
+import { conditionsLabel, generateStadium } from '../world/stadium';
 import { MatchReport } from './Report';
 import { MatchRadioButton, MatchRadioControls } from './RadioUI';
 import { audio } from './audio';
@@ -26,6 +26,7 @@ import type { Cell, Piece, TeamSide } from '../types';
 import { KICK_MODES, MOVE_MODES, TARGET_MODES, type MatchController } from './controller';
 import { prewarmPlayer, resolveAnim, spriteStyle } from './sprites';
 import { recolorVersion } from './recolor';
+import { COMMENTATORS, dangerMan, introText } from './intro';
 
 type OverlayKind = 'move' | 'path' | 'danger' | 'scatter' | 'target' | 'active' | 'tackle' | 'pick' | 'run' | 'zone';
 type Overlay = { k: string; x: number; y: number; kind: OverlayKind; label?: string };
@@ -216,9 +217,9 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     let framedFor = '';
     ctl.tick.subscribe(() => {
         // a new player on the ball or a kick in the air: give the camera back to the game
-        const key = m.state.over ? '' : `${m.active().id}${ctl.followBall ? ':ball' : ''}`;
-        if (key !== framedFor) {
-            framedFor = key;
+        const frame = m.state.over ? '' : `${m.active().id}${ctl.followBall ? ':ball' : ''}`;
+        if (frame !== framedFor) {
+            framedFor = frame;
             const o = pan();
             if (o.x || o.y) pan.set({ x: 0, y: 0 });
         }
@@ -384,7 +385,8 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         const feet = (cfg.sprites.feetY / cfg.sprites.framePx) * R;
         const wrap = derived(ctl.tick, () => {
             const ms = ctl.moveMs.get(p.id) ?? 0;
-            return `left:${cx(p.pos.x)}px;top:${px(p.pos.y) + C / 2}px;z-index:${Math.round(px(p.pos.y) + C / 2) + 1};transition:left ${ms}ms linear, top ${ms}ms linear`;
+            const at = ctl.shownPos(p);
+            return `left:${cx(at.x)}px;top:${px(at.y) + C / 2}px;z-index:${Math.round(px(at.y) + C / 2) + 1};transition:left ${ms}ms linear, top ${ms}ms linear`;
         });
         const cls = derived(ctl.tick, () => {
             const active = !m.state.over && m.active().id === p.id;
@@ -434,8 +436,9 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             const h = m.piece(b.by);
             const off = h.facing === 'right' ? 0.38 : h.facing === 'left' ? -0.38 : 0;
             const offY = h.facing === 'down' ? 0.3 : h.facing === 'up' ? -0.2 : 0.12;
-            x = cx(h.pos.x) + off * C;
-            y = px(h.pos.y) + C / 2 + offY * C;
+            const at = ctl.shownPos(h);
+            x = cx(at.x) + off * C;
+            y = px(at.y) + C / 2 + offY * C;
         } else {
             x = cx(b.at.x);
             y = px(b.at.y) + C / 2;
@@ -785,6 +788,74 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             <div class="tip-actions"><button class="ghost" ${on('click', onExit)}>Leave training</button>${l.info ? html`<button class="primary" ${on('click', () => ctl.nextLesson())}>Continue <kbd>Enter</kbd></button>` : html``}</div></div></div>`;
     });
 
+    // ------------------------------------------------------------ pre-match intro
+    const introCopy = introText(
+        cfg,
+        m,
+        [ctl.teamStyle(0), ctl.teamStyle(1)],
+        ctl.opts.stadium,
+        ctl.opts.conditions,
+        ctl.opts.seed,
+        ctl.opts.story,
+    );
+    const avatar = (sprite: string) =>
+        html`<div class="portrait intro-face"><div class="sprite still" style="${spriteStyle(cfg, sprite, 'idle', 'down')}"></div></div>`;
+    const lineup = (t: TeamSide) => {
+        const c = club(t);
+        const danger = dangerMan(m, t);
+        const st = cfg.ai.styles[ctl.teamStyle(t)];
+        return html`<section class="intro-team" style="--kit:${kitColor(c.kit)}">
+            <h3><i class="kit-dot"></i>${c.name}</h3>
+            <p class="muted">${c.formationId} · ${st.label}${ctl.isHuman(t) ? ' · You' : ''}</p>
+            <ol>${m.state.pieces
+                .filter((p) => p.team === t)
+                .toSorted((x, y) => x.slot - y.slot)
+                .map(
+                    (p) =>
+                        html`<li class="${p === danger ? 'danger' : ''}"><span class="num">${String(p.player.number)}</span><span class="nm">${p.player.name}</span><span class="cl">${cfg.classes[p.player.cls].short}${p === danger ? ' ★' : ''}</span></li>`,
+                )}</ol>
+        </section>`;
+    };
+    const introOverlay = derived(ctl.intro, (step) => {
+        if (step === null) return html``;
+        const [h, a] = m.state.clubs;
+        const st = ctl.opts.stadium;
+        const panel =
+            step === 0
+                ? html`<div class="intro-body">
+                      <div class="intro-voice">${avatar('coach')}<div><small>${COMMENTATORS.lead.name} · ${COMMENTATORS.lead.role}</small><p>${introCopy.welcome}</p></div></div>
+                      <div class="intro-voice">${avatar('coach_2')}<div><small>${COMMENTATORS.colour.name} · ${COMMENTATORS.colour.role}</small><p>${introCopy.colour}</p></div></div>
+                      ${
+                          st
+                              ? html`<div class="intro-facts">
+                                <div><span>Ground</span><b>${st.name}</b></div>
+                                <div><span>Capacity</span><b>${st.capacity.toLocaleString('en')}</b></div>
+                                <div><span>Conditions</span><b>${ctl.opts.conditions ? conditionsLabel(ctl.opts.conditions) : 'Fair'}</b></div>
+                                <div><span>Referee</span><b>${m.state.referee.name}</b></div>
+                            </div>`
+                              : html``
+                      }
+                  </div>`
+                : step === 1
+                  ? html`<div class="intro-body intro-lineups">${lineup(0)}${lineup(1)}</div>`
+                  : html`<div class="intro-body intro-story"><h3>The story</h3><ul>${introCopy.story.map((l) => html`<li>${l}</li>`)}</ul></div>`;
+        const last = step + 1 >= ctl.introSteps;
+        return html`<div class="intro" ${on('click', (e) => {
+            if (!(e.target as HTMLElement).closest('button')) ctl.introNext();
+        })}>
+            <div class="intro-card">
+                <div class="intro-strip"><span class="live">● Live</span><span>${['The ground', 'Line-ups', 'The story'][step]}</span></div>
+                <h2 class="intro-title"><span style="--kit:${kitColor(h.kit)}">${h.name}</span><em>vs</em><span style="--kit:${kitColor(a.kit)}">${a.name}</span></h2>
+                ${panel}
+                <footer class="intro-foot">
+                    <div class="dots">${[0, 1, 2].map((i) => html`<i class="${i === step ? 'on' : ''}"></i>`)}</div>
+                    <button class="ghost" ${on('click', () => ctl.introSkip())}>Skip <kbd>Esc</kbd></button>
+                    <button class="primary" ${on('click', () => ctl.introNext())}>${last ? 'Kick off' : 'Next'} <kbd>Enter</kbd></button>
+                </footer>
+            </div>
+        </div>`;
+    });
+
     const toast = derived(ctl.toast, (t) => (t ? html`<div class="toast">${t}</div>` : html``));
     const focusChip = derived(
         combined([prefs, ctl.tick]),
@@ -926,6 +997,13 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 ctl.dismissTip();
                 return;
             }
+            if (ctl.intro() !== null) {
+                if (e.key === 'Enter' || e.code === 'Space') {
+                    e.preventDefault();
+                    ctl.introNext();
+                } else if (e.key === 'Escape') ctl.introSkip();
+                return;
+            }
             if (ctl.lesson()?.info && e.key === 'Enter') {
                 e.preventDefault();
                 ctl.nextLesson();
@@ -1060,7 +1138,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                         .$withKey((p) => p.id)
                         .$as(
                             (p) =>
-                                html`<div class="reactor" ${attr({ style: derived(ctl.tick, () => `left:${cx(p.pos.x)}px;top:${px(p.pos.y) + C / 2}px`) })}></div>`,
+                                html`<div class="reactor" ${attr({ style: derived(ctl.tick, () => `left:${cx(ctl.shownPos(p).x)}px;top:${px(ctl.shownPos(p).y) + C / 2}px`) })}></div>`,
                         )}
                 </div>
                 <div class="tokens">
@@ -1141,6 +1219,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 })}>${$render(benchPanel)}</div>`,
         )}
         ${$render(tipPanel)}
+        ${$render(introOverlay)}
         ${$render(lessonPanel)}
         ${$if(ctl.paused).$then(() => html`<div class="pause-veil"><div class="banner"><div class="banner-text">Paused</div><div class="banner-sub">Read the commentary, plan your move. P to resume.</div><button class="primary" ${on('click', () => ctl.togglePause())}>Resume</button></div></div>`)}
         ${$render(toast)}

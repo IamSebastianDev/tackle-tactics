@@ -12,7 +12,7 @@ import { cheb, dist, eq, forward, key } from '../engine/grid';
 import { Match, type KickAbility, type MoveAbility } from '../engine/match';
 import { MatchStats } from '../engine/stats';
 import { createRng } from '../rng';
-import { conditionsLabel, type Conditions, type Stadium } from '../world/stadium';
+import type { Conditions, Stadium } from '../world/stadium';
 import type { Cell, Club, MatchEvent, Piece, Referee, TeamSide } from '../types';
 import { audio } from './audio';
 import { Commentator, type Line } from './commentary';
@@ -34,6 +34,8 @@ export type MatchOptions = {
     plans?: [TeamStyle | null, TeamStyle | null];
     /** Run the training-ground lessons instead of a match. */
     tutorial?: Lesson[];
+    /** Career: the narrative lines for the pre-match intro (table, form, derby, mood, plan). */
+    story?: string[];
 };
 
 export type Popup = { id: number; at: Cell; text: string; tone: 'good' | 'bad' | 'neutral' | 'card' | 'red' };
@@ -48,6 +50,20 @@ type Input =
     | { t: 'setupDone' }
     | { t: 'timeout' }
     | { t: 'stop' };
+
+/** What led to a corner or free kick, from the events just before it. */
+const setPieceReason = (events: MatchEvent[], i: number, m: Match): string => {
+    for (let k = i - 1; k >= 0; k--) {
+        const e = events[k]!;
+        if (e.t === 'save') return 'Tipped round the post';
+        if (e.t === 'intercept' && e.success) return e.block ? 'Blocked behind' : 'Deflected behind';
+        if (e.t === 'header') return 'Headed behind';
+        if (e.t === 'wide') return 'Off a defender';
+        if (e.t === 'foul') return `Foul by ${m.piece(e.by).player.name}`;
+        if (e.t === 'kick') return 'Deflected behind';
+    }
+    return '';
+};
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 export const MOVE_MODES: AbilityId[] = ['sprint', 'run', 'press', 'rush'];
@@ -98,6 +114,22 @@ export class MatchController {
     readonly tutorialDone = grain(false);
     private resolveLesson: (() => void) | null = null;
     private tutEvents: MatchEvent[] = [];
+    /** Pre-match intro step (0 ground, 1 line-ups, 2 the story), or null when not showing. */
+    readonly intro = grain<number | null>(null);
+    private resolveIntro: (() => void) | null = null;
+    readonly introSteps = 3;
+    introNext() {
+        const i = this.intro();
+        if (i === null) return;
+        audio.play('click');
+        if (i + 1 < this.introSteps) this.intro.set(i + 1);
+        else this.introSkip();
+    }
+    introSkip() {
+        const r = this.resolveIntro;
+        this.resolveIntro = null;
+        r?.();
+    }
     /** Player pause (P): freezes the clock and the AI between actions. */
     readonly paused = grain(false);
 
@@ -107,6 +139,13 @@ export class MatchController {
     ballMs = 0;
     /** Where the ball is drawn while a kick plays out (the match state already holds the outcome). */
     ballAt: Cell | null = null;
+    /**
+     * The engine settles a whole action at once, so a corner's shape is already arranged while the
+     * shot and the save are still being shown. Until the set-piece moment the view draws these
+     * positions (and the ball stays where the play left it).
+     */
+    posOverride: Map<string, Cell> | null = null;
+    shownPos = (p: Piece): Cell => this.posOverride?.get(p.id) ?? p.pos;
     /** The camera rides with the ball for the length of a kick. */
     followBall = false;
 
@@ -140,6 +179,8 @@ export class MatchController {
         });
     }
 
+    /** The playing style a side uses this match (club identity or the human's game plan). */
+    teamStyle = (team: TeamSide) => this.brains[team].styleFor(team);
     isHuman = (team: TeamSide) => this.opts.controllers[team] === 'human';
     bump = () => this.tick.update((n) => n + 1);
 
@@ -190,6 +231,7 @@ export class MatchController {
 
     stop() {
         this.stopped = true;
+        this.introSkip();
         cancelAnimationFrame(this.timerRaf);
         this.resolveInput?.({ t: 'stop' });
         this.resolveTip?.();
@@ -455,16 +497,16 @@ export class MatchController {
         const m = this.match;
         if (this.opts.tutorial) return this.runTutorial(this.opts.tutorial);
         audio.startCrowd();
-        const where = this.opts.stadium
-            ? `${this.opts.stadium.name}${this.opts.conditions ? ` · ${conditionsLabel(this.opts.conditions)}` : ''}`
-            : 'Kick off';
         const ref = m.state.referee;
         const style = this.cfg.referee.styles[ref.style];
-        await this.showBanner(
-            `${m.state.clubs[0].short} vs ${m.state.clubs[1].short}`,
-            `${where} · Referee ${ref.name} (${style.label})`,
-            2000,
-        );
+        if (prefs().matchIntro) {
+            // the pre-match intro: the view shows it while `intro` holds a step; Enter/click advance, Esc skips
+            this.intro.set(0);
+            await new Promise<void>((r) => (this.resolveIntro = r));
+            this.intro.set(null);
+            if (this.stopped) return;
+        }
+        await this.showBanner(`${m.state.clubs[0].short} vs ${m.state.clubs[1].short}`, 'Kick off', 1100);
         audio.play('whistle');
         this.say(this.commentator.referee(style.note));
         for (const t of [0, 1] as TeamSide[]) {
@@ -666,6 +708,8 @@ export class MatchController {
     /** Every batch of engine events: stats, commentary, then animate. */
     private async handle(events: MatchEvent[]) {
         this.tutEvents.push(...events);
+        const sp = events.find((e) => e.t === 'setpiece');
+        if (sp && sp.t === 'setpiece') this.posOverride = new Map(Object.entries(sp.from));
         const goalsBefore = this.stats.goals.length;
         this.stats.observe(events);
         const assist = this.stats.goals.length > goalsBefore ? this.stats.goals.at(-1)!.assist : undefined;
@@ -801,7 +845,7 @@ export class MatchController {
                         audio.play('trap');
                         this.bump();
                         await sleep(this.ballMs);
-                        this.ballAt = null;
+                        if (!this.posOverride) this.ballAt = null;
                         this.ballMs = 200;
                     }
                     break;
@@ -812,7 +856,7 @@ export class MatchController {
                 case 'pickup': {
                     this.bump();
                     await sleep(this.ballMs);
-                    this.ballAt = null;
+                    if (!this.posOverride) this.ballAt = null;
                     this.ballMs = 200;
                     if (e.t === 'receive') {
                         this.setAnim(e.by, 'trap', 500);
@@ -828,7 +872,7 @@ export class MatchController {
                 case 'save': {
                     this.bump();
                     await sleep(this.ballMs);
-                    this.ballAt = null;
+                    if (!this.posOverride) this.ballAt = null;
                     this.ballMs = 200;
                     const k = m.piece(e.by);
                     this.setAnim(e.by, e.held ? 'gk_catch' : 'gk_punch', 700);
@@ -919,8 +963,9 @@ export class MatchController {
                     }
                     break;
                 case 'setpiece': {
-                    // everyone jogs into the set-piece shape
-                    await sleep(this.ballMs);
+                    // let the save / block / foul land first, then announce why, then jog into shape
+                    await sleep(this.ballMs + 650);
+                    this.posOverride = null;
                     this.flightZone.set(null);
                     this.ballArc.set(null);
                     this.ballAt = null;
@@ -934,10 +979,11 @@ export class MatchController {
                     this.bump();
                     const human = this.isHuman(0) || this.isHuman(1);
                     const n = this.cfg.setPieces.placements;
+                    const why = setPieceReason(events, events.indexOf(e), m);
                     await this.showBanner(
                         e.kind === 'corner' ? 'Corner' : 'Free kick',
-                        human ? `Both sides place up to ${n} players, attackers first` : this.clubName(e.team),
-                        1300,
+                        `${why ? `${why} · ` : ''}${human ? `both sides place up to ${n} players, attackers first` : this.clubName(e.team)}`,
+                        1600,
                     );
                     this.moveMs.clear();
                     this.ballMs = 0;
@@ -996,6 +1042,7 @@ export class MatchController {
         this.flightZone.set(null);
         this.ballArc.set(null);
         this.ballAt = null;
+        this.posOverride = null;
         this.ballMs = 0;
         this.bump();
         if (events.length) await sleep(pause);

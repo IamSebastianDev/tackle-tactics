@@ -214,7 +214,16 @@ export const SettingsModal = (props: SettingsProps) => {
         }
         if (t === 'gameplay') {
             return html`<div>
-                <div class="set-rows"><div class="set-row"><span>AI speed<small>How quickly AI players act and results resolve.</small></span>
+                <div class="set-rows"><div class="set-row"><span>Match intro<small>Commentators, the ground, both line-ups and the story before kick-off. Esc skips it.</small></span>
+                    ${seg(
+                        p.matchIntro ? 'on' : 'off',
+                        [
+                            ['on', 'Show'],
+                            ['off', 'Skip'],
+                        ],
+                        (v) => setPref('matchIntro', v === 'on'),
+                    )}</div>
+                <div class="set-row"><span>AI speed<small>How quickly AI players act and results resolve.</small></span>
                     ${seg(
                         p.aiSpeed,
                         [

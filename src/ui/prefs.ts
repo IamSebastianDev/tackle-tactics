@@ -22,6 +22,8 @@ export type Prefs = {
     autoZoom: boolean;
     /** Draw zones of control during your turns. */
     showZoc: boolean;
+    /** Show the pre-match intro (commentators, ground, line-ups, the story). */
+    matchIntro: boolean;
     /** The in-game radio (src/ui/radio.ts). */
     radioOn: boolean;
     radioVolume: number;
@@ -71,6 +73,7 @@ const DEFAULTS: Prefs = {
     tipsSeen: [],
     autoZoom: true,
     showZoc: true,
+    matchIntro: true,
     radioOn: true,
     radioVolume: 0.6,
     radioInMatch: 'quiet',

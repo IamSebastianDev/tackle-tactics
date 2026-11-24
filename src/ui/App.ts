@@ -39,7 +39,7 @@ import { SettingsModal } from './Settings';
 import { LESSONS } from './tutorial';
 import { RadioPlayer } from './RadioUI';
 import { radio } from './radio';
-import { applyTalk, matchEdge, prepFor } from '../meta/prep';
+import { applyTalk, matchEdge, prepFor, storyLines } from '../meta/prep';
 import { audio } from './audio';
 import { AI_SPEED, prefs } from './prefs';
 import { MatchController, type Controller } from './controller';
@@ -237,6 +237,7 @@ export const App = () => {
             conditions,
             referee: prep.referee,
             plans,
+            story: storyLines(cfg, c, t.fixture, prep),
         });
         if (import.meta.env.DEV) (window as unknown as { __tt: MatchController }).__tt = ctl;
         const remainingFraction = () => Math.max(0, 1 - (ctl!.match.state.round - 1) / cfg.match.rounds);
@@ -586,6 +587,40 @@ export const App = () => {
     const NewCareer = () => {
         const name = grain('');
         const kit = grain('blue');
+        const keeperKit = grain(defaultConfig.kits.keepers[0]!);
+        /** The short name follows the club name until you type your own. */
+        const short = grain('');
+        const shortEdited = grain(false);
+        const autoShort = (n: string) =>
+            n
+                .replace(/[^A-Za-z]/g, '')
+                .slice(0, 3)
+                .toUpperCase();
+        const shownShort = derived(combined([name, short, shortEdited]), ([n, sh, edited]) => (edited ? sh : autoShort(n)) || 'YOU');
+        const kitName = (k: string) => {
+            const n = k.replace('keeper_', '');
+            return n[0]!.toUpperCase() + n.slice(1);
+        };
+        const swatch = (k: string, keeper: boolean) =>
+            derived(
+                keeper ? keeperKit : kit,
+                (
+                    cur,
+                ) => html`<button class="kit-swatch ${cur === k ? 'on' : ''}" title="${kitName(k)}" ${on('click', () => (keeper ? keeperKit : kit).set(k))}>
+                <span class="portrait kit-portrait"><span class="sprite still" style="${spriteStyle(defaultConfig, keeper ? k : `${k}_player_1`, 'idle', 'down')}"></span></span>
+                <small>${kitName(k)}</small>
+            </button>`,
+            );
+        const preview = derived(
+            combined([kit, keeperKit, shownShort, name]),
+            ([k, gk, sh, n]) => html`<div class="kit-preview">
+            <div class="kit-crest" style="--kit:${kitColor(k)}"><span>${sh}</span></div>
+            <b>${n.trim() || 'Your club'}</b>
+            <div class="kit-pitch">
+                ${[`${k}_player_1`, `${k}_player_2`, gk].map((sp, i) => html`<span class="kit-model"><span class="sprite" style="${spriteStyle(defaultConfig, sp, i === 2 ? 'gk_ready' : 'idle', 'down')}"></span></span>`)}
+            </div>
+        </div>`,
+        );
         const s = settings();
         const create = () => {
             if (career && !confirm('Start a new career? Your current save will be replaced.')) return;
@@ -599,7 +634,12 @@ export const App = () => {
                     difficulty: settings().difficulty,
                     timeoutPolicy: settings().timeoutPolicy,
                 },
-                { name: name().trim() || undefined, kit: kit() },
+                {
+                    name: name().trim() || undefined,
+                    short: shortEdited() ? short() : undefined,
+                    kit: kit(),
+                    keeperKit: keeperKit(),
+                },
             );
             saveCareer(career);
             hubNotice = {
@@ -613,11 +653,26 @@ export const App = () => {
             };
             screen.set('hub');
         };
-        return html`<div class="setup"><div class="setup-inner narrow">
+        return html`<div class="setup"><div class="setup-inner new-career">
             <h1>New <span>career</span></h1>
+            <div class="nc-grid">
+            <section class="opts kit-editor">
+                <h4>Your club</h4>
+                <div class="nc-names">
+                    <label>Club name <input type="text" maxlength="28" placeholder="Leave empty for a random club" ${on('input', (e) => name.set((e.target as HTMLInputElement).value))} /></label>
+                    <label>Short <input type="text" class="short-input" maxlength="3" ${attr({ value: shownShort })} ${on('input', (e) => {
+                        shortEdited.set(true);
+                        short.set((e.target as HTMLInputElement).value.toUpperCase());
+                    })} /></label>
+                </div>
+                ${$render(preview)}
+                <h4>Home kit</h4>
+                <div class="kit-grid">${kits.map(([k]) => $render(swatch(k, false)))}</div>
+                <h4>Goalkeeper</h4>
+                <div class="kit-grid keepers">${defaultConfig.kits.keepers.map((k) => $render(swatch(k, true)))}</div>
+            </section>
             <section class="opts">
-                <label>Club name <input type="text" placeholder="Leave empty for a random club" ${on('input', (e) => name.set((e.target as HTMLInputElement).value))} /></label>
-                <label>Kit <select ${on('change', (e) => kit.set((e.target as HTMLSelectElement).value))}>${kits.map(([v, l]) => html`<option value="${v}">${l}</option>`)}</select></label>
+                <h4>Match settings</h4>
                 <label>Action timer ${range('timerSeconds', 0, 45, 1, 's')}</label>
                 <label>Match length (rounds) ${range('rounds', 6, 40, 2, '')}</label>
                 <label>AI difficulty ${select(
@@ -640,6 +695,7 @@ export const App = () => {
                 <p class="muted">Match settings apply to every match you play in this career. Default ${String(s.rounds)} rounds; 12–16 is a brisk match.</p>
                 <div class="buttons"><button class="ghost" ${on('click', () => screen.set('title'))}>Back</button><button class="primary" ${on('click', create)}>Start career</button></div>
             </section>
+            </div>
         </div></div>`;
     };
 

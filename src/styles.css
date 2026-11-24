@@ -4807,3 +4807,309 @@ a {
 .ab-info p.odds b {
     color: var(--accent);
 }
+
+/* ---- pre-match intro: a short broadcast-style sequence */
+.intro {
+    position: absolute;
+    inset: 0;
+    z-index: 70;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(ellipse at 50% 40%, #0a0b0cb0, #060707f2);
+    animation: np-in 0.3s ease both;
+}
+.intro-card {
+    width: min(960px, 92%);
+    padding: 6px 20px 12px;
+    border: 8px solid transparent;
+    border-image: var(--f-panel-raised) 4 fill / 8px / 0 stretch;
+    filter: drop-shadow(6px 6px 0 #000b);
+}
+.intro-strip {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 4px 0 8px;
+    border-bottom: 1px solid var(--line);
+}
+.intro-strip .live {
+    color: var(--bad);
+    animation: blink 1.2s steps(2) infinite;
+}
+.intro-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    margin: 14px 0 12px;
+    font-size: 34px;
+}
+.intro-title span {
+    padding: 2px 12px;
+    border-left: 6px solid var(--kit);
+}
+.intro-title em {
+    font-style: normal;
+    color: var(--muted);
+    font-size: 20px;
+}
+.intro-body {
+    min-height: 300px;
+}
+.intro-voice {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    margin: 12px 0;
+}
+.intro-face {
+    width: 64px;
+    height: 64px;
+    flex: none;
+}
+.intro-face .sprite.still {
+    position: absolute;
+    left: 6px;
+    top: 2px;
+}
+.intro-voice small {
+    font-family: var(--display);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+.intro-voice p {
+    margin: 2px 0 0;
+    font-size: 17px;
+    line-height: 1.45;
+}
+.intro-facts {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 18px;
+}
+.intro-facts div {
+    padding: 6px 10px;
+    background: var(--well);
+    border: 1px solid var(--line);
+}
+.intro-facts span {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.intro-facts b {
+    font-family: var(--display);
+    font-size: 16px;
+}
+.intro-lineups {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+.intro-team h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 0;
+    font-size: 20px;
+}
+.intro-team .kit-dot {
+    width: 14px;
+    height: 14px;
+    background: var(--kit);
+    box-shadow: 0 0 0 2px var(--ink);
+}
+.intro-team p {
+    margin: 2px 0 8px;
+}
+.intro-team ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 2px;
+}
+.intro-team li {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    gap: 8px;
+    padding: 2px 6px;
+    font-size: 14px;
+}
+.intro-team li:nth-child(odd) {
+    background: #ffffff06;
+}
+.intro-team li.danger {
+    color: var(--accent);
+}
+.intro-team .num {
+    color: var(--muted);
+    text-align: right;
+}
+.intro-team .cl {
+    color: var(--muted);
+    font-size: 12px;
+}
+.intro-story h3 {
+    margin: 10px 0;
+    font-size: 22px;
+    color: var(--accent);
+}
+.intro-story ul {
+    margin: 0;
+    padding-left: 22px;
+    display: grid;
+    gap: 10px;
+    font-size: 18px;
+    line-height: 1.45;
+}
+.intro-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+}
+.intro-foot .dots {
+    flex: 1;
+    display: flex;
+    gap: 6px;
+}
+.intro-foot .dots i {
+    width: 10px;
+    height: 10px;
+    background: var(--dim);
+}
+.intro-foot .dots i.on {
+    background: var(--accent);
+}
+
+/* ---- new career: kit editor */
+.setup-inner.new-career {
+    max-width: 1060px;
+    margin: 0 auto;
+}
+.nc-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 16px;
+    align-items: start;
+}
+.kit-editor h4,
+.nc-grid .opts h4 {
+    margin: 6px 0 2px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+}
+.nc-names {
+    display: grid;
+    grid-template-columns: 1fr 90px;
+    gap: 10px;
+}
+.short-input {
+    text-transform: uppercase;
+    text-align: center;
+    letter-spacing: 0.12em;
+}
+.kit-preview {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    gap: 4px 14px;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--well);
+    border: 1px solid var(--line);
+}
+.kit-preview > b {
+    font-family: var(--display);
+    font-size: 22px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.kit-crest {
+    grid-row: 1 / span 2;
+    width: 64px;
+    height: 72px;
+    display: grid;
+    place-items: center;
+    background: var(--kit);
+    clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+    box-shadow: inset 0 0 0 3px #0005;
+}
+.kit-crest span {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 18px;
+    color: #fff;
+    text-shadow: 2px 2px 0 #000a;
+    margin-top: -8px;
+}
+.kit-pitch {
+    display: flex;
+    gap: 18px;
+    height: 70px;
+    padding-left: 6px;
+    background: url(/assets/tiles/grass_001.png) 0 0 / 32px 32px;
+    box-shadow: inset 0 0 0 2px #0006;
+}
+.kit-model {
+    position: relative;
+    width: 52px;
+    height: 70px;
+}
+.kit-model .sprite {
+    left: 0;
+    top: 10px;
+    width: 52px;
+    height: 52px;
+}
+.kit-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 6px;
+}
+.kit-grid.keepers {
+    grid-template-columns: repeat(4, 1fr);
+    max-width: 50%;
+}
+.kit-swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 2px 2px;
+    border-image-source: var(--f-chip);
+    text-transform: none;
+    letter-spacing: 0;
+}
+.kit-swatch small {
+    font-family: var(--body);
+    font-size: 11px;
+    color: var(--muted);
+}
+.kit-swatch.on {
+    border-image-source: var(--f-gold);
+}
+.kit-swatch.on small {
+    color: var(--on-accent);
+}
+.kit-portrait {
+    width: 52px;
+    height: 52px;
+}
+.kit-portrait .sprite.still {
+    display: block;
+}

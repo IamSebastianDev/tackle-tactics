@@ -125,7 +125,15 @@ export type MatchEvent =
     | { t: 'trick'; by: string; on: string; success: boolean }
     | { t: 'pressure'; by: string; on: string }
     | { t: 'foul'; by: string; on: string; penalty: boolean; advantage?: boolean; tackle?: boolean }
-    | { t: 'setpiece'; kind: SetPieceKind; team: TeamSide; taker: string; at: Cell }
+    | {
+          t: 'setpiece';
+          kind: SetPieceKind;
+          team: TeamSide;
+          taker: string;
+          at: Cell;
+          /** Where everyone stood before the set-piece shape was arranged (for the presenter). */
+          from: Record<string, Cell>;
+      }
     | { t: 'place'; id: string; from: Cell; to: Cell }
     | { t: 'sub'; team: TeamSide; off: string; on: string }
     | { t: 'bonus'; id: string; reason: 'won' | 'beat' }

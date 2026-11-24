@@ -180,7 +180,12 @@ const roundRobin = (clubs: string[], rng: Rng, prefix: string): Fixture[] => {
 export const roundsPerSeason = (cfg: GameConfig) => cfg.career.clubsPerDivision - 1;
 export const seasonDays = (cfg: GameConfig) => roundsPerSeason(cfg) * cfg.career.daysPerMatchday;
 
-export const newCareer = (cfg: GameConfig, seed: number, settings: CareerSettings, opts: { name?: string; kit?: string } = {}): Career => {
+export const newCareer = (
+    cfg: GameConfig,
+    seed: number,
+    settings: CareerSettings,
+    opts: { name?: string; short?: string; kit?: string; keeperKit?: string } = {},
+): Career => {
     const rng = createRng(seed);
     const c: Career = {
         version: 1,
@@ -235,7 +240,9 @@ export const newCareer = (cfg: GameConfig, seed: number, settings: CareerSetting
                 .slice(0, 3)
                 .toUpperCase() || user.short;
     }
+    if (opts.short?.trim()) user.short = opts.short.trim().slice(0, 3).toUpperCase();
     if (opts.kit) user.kit = opts.kit;
+    if (opts.keeperKit) user.keeperKit = opts.keeperKit;
     c.userClubId = user.id;
     for (const d of c.divisions) d.fixtures = roundRobin(d.clubs, rng, `s1-t${d.tier}`);
     c.market = buildMarket(cfg, rng, c);

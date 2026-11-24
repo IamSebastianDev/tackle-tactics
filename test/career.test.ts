@@ -155,4 +155,16 @@ describe('career', () => {
         );
         expect(autoLineup(cfg, u).length).toBe(11);
     });
+
+    it('a new career takes the club name, short name and both kits from the kit editor', () => {
+        const c = newCareer(cfg, 9, settings, { name: 'Mudbury Rovers', short: 'mbr', kit: 'red', keeperKit: 'keeper_lime' });
+        const u = userClub(c);
+        expect(u.name).toBe('Mudbury Rovers');
+        expect(u.short).toBe('MBR');
+        expect(u.kit).toBe('red');
+        expect(u.keeperKit).toBe('keeper_lime');
+        const f = c.divisions.at(-1)!.fixtures.find((x) => x.home === u.id || x.away === u.id)!;
+        const mine = fixtureClubs(cfg, c, f).find((x) => x.id === u.id)!;
+        expect(mine.squad.some((p) => p.sprite === 'keeper_lime')).toBe(true);
+    });
 });
