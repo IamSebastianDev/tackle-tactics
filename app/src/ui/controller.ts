@@ -508,6 +508,11 @@ export class MatchController {
             if (!this.lastWasHuman) audio.play('yourTurn');
         }
         this.lastWasHuman = human;
+        // a free kick is about to be taken: make it an occasion
+        if (p.status.fouled && m.carrier()?.id === p.id && !m.state.setPiece) {
+            audio.play('whistle');
+            await this.showBanner('Free kick', `${p.player.name} · ${m.state.clubs[p.team].short}`, 900);
+        }
         const think = autoHuman ? this.cfg.match.aiThinkMs * 0.35 : this.cfg.match.aiThinkMs;
         await this.whilePaused();
 
@@ -786,6 +791,10 @@ export class MatchController {
                     this.jolt();
                     this.bump();
                     await sleep(e.penalty ? 1100 : 700);
+                    if (!e.penalty && m.piece(e.on).status.fouled) {
+                        this.popup(m.piece(e.on).pos, '✋ Free kick', 'good');
+                        await sleep(500);
+                    }
                     break;
                 case 'setpiece': {
                     // everyone jogs into the set-piece shape

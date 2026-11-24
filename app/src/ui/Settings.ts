@@ -4,6 +4,7 @@ import { fullscreen, isDesktop, setFullscreen } from './desktop';
 import { $render, attr, html, on } from '@grainular/nord';
 import type { Difficulty, TimeoutPolicy } from '../config';
 import type { CareerSettings } from '../meta/career';
+import { saveLocation } from '../meta/storage';
 import { audio } from './audio';
 import { CONTROL_MODES, FONTS, prefs, setPref, UI_SCALES, type AiSpeed } from './prefs';
 
@@ -41,6 +42,8 @@ const matchOptions = (get: () => MatchOpts, set: (o: MatchOpts) => void, bump: W
 };
 
 export const SettingsModal = (props: SettingsProps) => {
+    const savePath = grain('…');
+    void saveLocation().then((p) => savePath.set(p)).catch(() => savePath.set('Unknown'));
     const tab = grain<'display' | 'sound' | 'gameplay' | 'career'>('display');
     const bump = grain(0);
     const body = derived(combined([tab, prefs, bump]), ([t, p]) => {
@@ -88,6 +91,8 @@ export const SettingsModal = (props: SettingsProps) => {
         return html`<div>
             <h4>${c.name} <small>applies from the next match</small></h4>
             ${matchOptions(() => c.settings, (o) => { Object.assign(c.settings, o); c.save(); }, bump)}
+            <h4>Save file <small>saved automatically after every change</small></h4>
+            <p class="save-path">${savePath}</p>
             ${props.onDeleteCareer ? html`<div class="danger-zone"><span>Delete this career save. This can't be undone.</span>
                 <button class="warn" ${on('click', () => { if (confirm(`Delete the career "${c.name}"? This cannot be undone.`)) props.onDeleteCareer!(); })}>Delete career</button></div>` : html``}
         </div>`;

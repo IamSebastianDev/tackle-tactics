@@ -4,6 +4,7 @@
  * and persists the `Career` object.
  */
 import type { ClassId, Difficulty, GameConfig, TimeoutPolicy } from '../config';
+import { deleteSave, readSave, writeSave } from './storage';
 import { classLevel } from '../engine/abilities';
 import { createRng, type Rng } from '../rng';
 import type { Club, Player, TeamSide } from '../types';
@@ -538,13 +539,10 @@ export const defaultPlan = (cfg: GameConfig, club: CareerClub): Record<string, S
 
 // ------------------------------------------------------------------ persistence
 
-const KEY = 'tackle-tactics:career';
-export const saveCareer = (c: Career) => {
-    try { localStorage.setItem(KEY, JSON.stringify(c)); return true; } catch { return false; }
-};
+export const saveCareer = (c: Career) => writeSave(JSON.stringify(c));
 export const loadCareer = (): Career | null => {
     try {
-        const raw = localStorage.getItem(KEY);
+        const raw = readSave();
         if (!raw) return null;
         const c = JSON.parse(raw) as Career;
         return c.version === 1 ? c : null;
@@ -552,7 +550,7 @@ export const loadCareer = (): Career | null => {
         return null;
     }
 };
-export const deleteCareer = () => { try { localStorage.removeItem(KEY); } catch { /* ignore */ } };
+export const deleteCareer = () => deleteSave();
 
 export const userSide = (c: Career, f: Fixture): TeamSide => (f.home === c.userClubId ? 0 : 1);
 

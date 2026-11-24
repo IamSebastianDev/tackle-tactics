@@ -22,6 +22,7 @@ import { kitColor } from '../MatchView';
 import { Playbook } from '../Playbook';
 import { recolorVersion } from '../recolor';
 import { spriteStyle } from '../sprites';
+import { prefs, setPref } from '../prefs';
 
 type Tab = 'overview' | 'squad' | 'tactics' | 'training' | 'league' | 'market' | 'finances' | 'playbook';
 const TABS: Array<[Tab, string, string]> = [
@@ -592,10 +593,36 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, notice: { t
         </nav>`;
     });
 
+    // ------------------------------------------------------------ coach tips: each screen explained once
+    const HUB_TIPS: Record<string, { title: string; text: string }> = {
+        overview: { title: 'Welcome to the club', text: `This is your hub. A season is ${String(seasonDays(cfg))} days: a matchday, then training days, round and round. The gold button top-right moves the calendar on, or opens match prep on a matchday. Letters land in your inbox now and then; every choice has consequences. Finish in the top two to go up a division.` },
+        squad: { title: 'Your squad', text: 'Players have levels in one or more classes (GK, DF, MF, WG, ST). Class levels unlock abilities; stats grow with talent and age. Peak age differs per player, so a 25-year-old may still be rising or already fading. Better players are worth more and cost more in wages.' },
+        tactics: { title: 'Pick your XI', text: 'Choose a formation, then click a slot to pick who plays there. Out of position a player is weaker: the number is their fit for that slot. Auto-pick fills every slot with the best fit. Good players left on the bench will come and ask why.' },
+        training: { title: 'Training days', text: `Each training day you can run ${String(cfg.training.slots)} sessions. Pick a player and a class: the XP goes into that class, and training a new class makes a multi-class player. Full sessions give more XP; light ones are kinder to injured players. You can't train everyone, so choose.` },
+        league: { title: 'The league', text: 'Ten clubs, everyone plays everyone once: 3 points for a win, 1 for a draw. The top two go up, the bottom two go down. Your rival is named in the top bar, and derbies swing morale twice as hard.' },
+        market: { title: 'Transfers', text: 'A fresh crop of players arrives every season. Buy young, train them up, and sell at a profit, or keep them. Mind the wages: the fee is paid once, wages every matchday.' },
+        finances: { title: 'Money', text: 'Income comes from match fees, win bonuses, season goals (survival, top four, the title) and player sales. Wages go out every matchday. Run dry and the market closes to you.' },
+        playbook: { title: 'The playbook', text: 'Every class and ability in one place. Abilities unlock at class levels; passives are always on.' },
+        prep: { title: 'Match prep', text: 'Read the opponent first: their style, form and danger men. Pick a game plan; your auto-managed players follow it, and countering their style lifts your side on the day. Then a team talk, and play it on the board or quick-sim it.' },
+    };
+    const hubTip = derived(combined([tab, preview, prefs, version]), ([t, open, p]) => {
+        const id = open ? 'prep' : t;
+        const tip = HUB_TIPS[id];
+        if (!p.tips || !tip || p.tipsSeen.includes(`hub-${id}`)) return html``;
+        const done = (forever: boolean) => { setPref('tipsSeen', [...prefs().tipsSeen, `hub-${id}`]); if (forever) setPref('tips', false); };
+        const size = 96;
+        const frames = cfg.animFrames.shout ?? 12;
+        return html`<div class="tip hub-tip ${open ? 'over-modal' : ''}">
+            <div class="coach"><div class="sprite" style="${spriteStyle(cfg, 'coach', 'shout', 'down')};width:${String(size)}px;height:${String(size)}px;background-size:${String(frames * size)}px ${String(size)}px;--strip:${String(frames * size)}px"></div></div>
+            <div class="tip-body"><small>Coach Marlow</small><h3>${tip.title}</h3><p>${tip.text}</p>
+                <div class="tip-actions"><button class="ghost" ${on('click', () => done(true))}>No more tips</button><button class="primary" ${on('click', () => done(false))}>Got it</button></div></div>
+        </div>`;
+    });
+
     return html`<div class="hub">
         ${$render(sidebar)}
         <main class="hub-main">${$render(topbar)}<section class="hub-content">${$render(screen)}</section></main>
-        ${$render(drawer)}${$render(previewModal)}${$render(noticeModal)}${$render(letterModal)}${$render(ceremonyModal)}
+        ${$render(drawer)}${$render(previewModal)}${$render(noticeModal)}${$render(letterModal)}${$render(ceremonyModal)}${$render(hubTip)}
         ${$if(derived(flash, (f) => !!f)).$then(() => html`<div class="toast">${derived(flash, (f) => f ?? '')}</div>`)}
     </div>`;
 };

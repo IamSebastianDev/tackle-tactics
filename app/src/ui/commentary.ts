@@ -190,7 +190,9 @@ export class Commentator {
                 case 'foul': {
                     const v = { o: this.name(e.by), p: this.name(e.on), r: this.m.state.referee.name };
                     const k = e.penalty ? 'penalty' : e.advantage ? 'advantage' : e.tackle ? 'tackleFoul' : 'foul';
-                    out.push(this.line(k, v, e.penalty ? 'big' : 'info', this.m.piece(e.on).team, e.penalty ? 'PENALTY' : undefined));
+                    // a plain free kick (the set-piece ones announce themselves with their own event)
+                    const fk = !e.penalty && !e.advantage && !events.some((x) => x.t === 'setpiece');
+                    out.push(this.line(k, v, e.penalty ? 'big' : 'info', this.m.piece(e.on).team, e.penalty ? 'PENALTY' : fk ? 'FREE KICK' : undefined));
                     break;
                 }
                 case 'card':
