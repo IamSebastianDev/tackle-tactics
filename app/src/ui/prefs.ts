@@ -28,6 +28,8 @@ export type Prefs = {
     radioVolume: number;
     /** During matches: full volume, quieter under the crowd, or silent. */
     radioInMatch: 'on' | 'quiet' | 'off';
+    /** Songs switched off in Settings (keyed "Artist - Title", so adding songs doesn't shift them). */
+    radioDisabled: string[];
 };
 
 export const UI_SCALES = [0.85, 1, 1.15, 1.3, 1.5];
@@ -52,7 +54,7 @@ const KEY = 'tackle-tactics:prefs';
 const DEFAULTS: Prefs = {
     uiScale: 1, font: 'broadcast', reduceMotion: false, aiSpeed: 'normal', controlMode: 'near',
     sfxVolume: 0.7, crowdVolume: 0.5, muted: false, tips: true, tipsSeen: [], autoZoom: true, showZoc: true, camera: '2d',
-    radioOn: true, radioVolume: 0.6, radioInMatch: 'quiet',
+    radioOn: true, radioVolume: 0.6, radioInMatch: 'quiet', radioDisabled: [],
 };
 
 const load = (): Prefs => {

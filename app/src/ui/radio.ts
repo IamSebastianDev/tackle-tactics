@@ -10,6 +10,11 @@ import { prefs, setPref } from './prefs';
 
 export type Track = { url: string; title: string; artist: string | null };
 export const STATION = 'Tackle Tactics Radio';
+/** Stable identity for a song, used for the per-song on/off setting. */
+export const trackKey = (t: Track) => `${t.artist ?? STATION} - ${t.title}`;
+const enabled = (t: Track) => !prefs().radioDisabled.includes(trackKey(t));
+/** Every song in the folder, in station order (for the settings list). */
+export const allTracks = (): Track[] => [...playlist];
 
 export const nowPlaying = grain<Track | null>(null);
 /** Shown for a few seconds when a song starts. */
@@ -30,13 +35,13 @@ class Radio {
     }
 
     private refill() {
-        const rest = this.tracks.slice(this.history.length ? 0 : 1);
+        const rest = this.tracks.slice(this.history.length ? 0 : 1).filter(enabled);
         for (let i = rest.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [rest[i], rest[j]] = [rest[j]!, rest[i]!];
         }
         // the station opens with the first track; afterwards avoid repeating the song just played
-        if (!this.history.length && this.tracks[0]) rest.unshift(this.tracks[0]);
+        if (!this.history.length && this.tracks[0] && enabled(this.tracks[0])) rest.unshift(this.tracks[0]);
         const last = this.history.at(-1);
         if (last && rest[0] === last && rest.length > 1) rest.push(rest.shift()!);
         this.queue.push(...rest);
@@ -85,18 +90,44 @@ class Radio {
     }
 
     next() {
-        if (!this.tracks.length) return;
+        // skip anything switched off since it was queued; stop if nothing is left on
+        this.queue = this.queue.filter(enabled);
         if (!this.queue.length) this.refill();
-        const t = this.queue.shift()!;
+        const t = this.queue.shift();
+        if (!t) { this.stop(); return; }
         const cur = nowPlaying();
         if (cur) this.history.push(cur);
         this.play(t);
     }
 
+    /** Play a specific song now (from the settings list). */
+    playNow(t: Track) {
+        if (!this.started) { this.started = true; void this.load(); }
+        radioPlaying.set(true);
+        if (!prefs().radioOn) setPref('radioOn', true);
+        const cur = nowPlaying();
+        if (cur && cur !== t) this.history.push(cur);
+        this.queue = this.queue.filter((q) => q !== t);
+        this.play(t);
+    }
+
+    private stop() {
+        this.el?.pause();
+        nowPlaying.set(null);
+        radioPlaying.set(false);
+    }
+
+    /** A song was switched off: if it's the one playing, move on. */
+    checkCurrent() {
+        const cur = nowPlaying();
+        if (cur && !enabled(cur) && radioPlaying()) this.next();
+    }
+
     prev() {
         // restart the song if we're into it; otherwise go back one
         if (this.el && this.el.currentTime > 4) { this.el.currentTime = 0; return; }
-        const t = this.history.pop();
+        let t = this.history.pop();
+        while (t && !enabled(t)) t = this.history.pop();
         if (!t) { if (this.el) this.el.currentTime = 0; return; }
         const cur = nowPlaying();
         if (cur) this.queue.unshift(cur);

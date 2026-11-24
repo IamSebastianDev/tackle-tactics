@@ -1018,3 +1018,15 @@ a { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
 .hub-radio { margin: 0 0 8px; }
 .hub-radio .rc-btn:first-of-type { display: none; }
 .set-btn.dim { opacity: .45; }
+.songs { margin-top: 12px; }
+.songs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-family: var(--display); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; font-size: 13px; color: var(--accent); }
+.songs-head small { font-family: var(--body); font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 8px; }
+.songs ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.songs li { display: flex; align-items: center; gap: 10px; padding: 2px 4px 2px 0; }
+.songs li.off .song-play { opacity: .45; }
+.song-play { flex: 1; min-width: 0; display: grid; grid-template-columns: 22px 1fr; gap: 0 8px; text-align: left; text-transform: none; letter-spacing: 0; padding: 2px 8px; }
+.song-play i { grid-row: 1 / span 2; font-style: normal; align-self: center; color: var(--accent); }
+.song-play b { font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-play span { font-family: var(--body); font-size: 12px; color: var(--muted); }
+.songs li.now .song-play { border-image-source: var(--f-panel-raised); }
+.songs li.now .song-play b { color: var(--accent); }

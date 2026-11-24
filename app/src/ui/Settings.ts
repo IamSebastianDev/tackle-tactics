@@ -2,10 +2,11 @@
 import { combined, derived, grain, type WritableGrain } from '@grainular/grains';
 import { fullscreen, isDesktop, setFullscreen } from './desktop';
 import { $render, attr, html, on } from '@grainular/nord';
+const onClick = (f: () => void) => on('click', f);
 import type { Difficulty, TimeoutPolicy } from '../config';
 import type { CareerSettings } from '../meta/career';
 import { saveLocation } from '../meta/storage';
-import { radio } from './radio';
+import { allTracks, nowPlaying, radio, STATION, trackKey } from './radio';
 import { audio } from './audio';
 import { CONTROL_MODES, FONTS, prefs, setPref, UI_SCALES, type AiSpeed } from './prefs';
 
@@ -42,6 +43,31 @@ const matchOptions = (get: () => MatchOpts, set: (o: MatchOpts) => void, bump: W
     </div>`;
 };
 
+/** Every song on the station with an on/off switch; clicking a title plays it now. */
+const songList = derived(combined([prefs, nowPlaying]), ([p, playing]) => {
+    const tracks = allTracks();
+    if (!tracks.length) return html`<p class="muted">No songs yet: drop audio files into assets/music (named "Artist - Title").</p>`;
+    const off = new Set(p.radioDisabled);
+    const toggle = (k: string) => {
+        setPref('radioDisabled', off.has(k) ? p.radioDisabled.filter((x) => x !== k) : [...p.radioDisabled, k]);
+        radio.checkCurrent();
+    };
+    const on = tracks.filter((t) => !off.has(trackKey(t))).length;
+    return html`<div class="songs">
+        <div class="songs-head"><span>Songs <small>${String(on)} of ${String(tracks.length)} on · click a title to play it</small></span>
+            <button class="ghost" ${onClick(() => { setPref('radioDisabled', []); })}>All on</button></div>
+        <ul>${tracks.map((t) => {
+            const k = trackKey(t);
+            const enabled = !off.has(k);
+            const now = playing?.url === t.url;
+            return html`<li class="${enabled ? '' : 'off'} ${now ? 'now' : ''}">
+                <button class="song-play" title="Play now" ${onClick(() => radio.playNow(t))}><i>${now ? '♫' : '▶'}</i><b>${t.title}</b><span>${t.artist ?? STATION}</span></button>
+                ${seg(enabled ? 'on' : 'off', [['on', 'On'], ['off', 'Off']], (v) => { if ((v === 'on') !== enabled) toggle(k); })}
+            </li>`;
+        })}</ul>
+    </div>`;
+});
+
 export const SettingsModal = (props: SettingsProps) => {
     const savePath = grain('…');
     void saveLocation().then((p) => savePath.set(p)).catch(() => savePath.set('Unknown'));
@@ -76,6 +102,7 @@ export const SettingsModal = (props: SettingsProps) => {
                 <div class="set-row"><span>Radio</span>${seg(p.radioOn ? 'on' : 'off', [['on', 'On'], ['off', 'Off']], (v) => radio.setOn(v === 'on'))}</div>
                 <label class="set-row"><span>Radio volume</span>${slider(Math.round(p.radioVolume * 100), 0, 100, 5, '%', (v) => setPref('radioVolume', v / 100))}</label>
                 <div class="set-row"><span>During matches<small>Quieter keeps it under the crowd and the commentary.</small></span>${seg(p.radioInMatch, [['on', 'Full'], ['quiet', 'Quieter'], ['off', 'Off']] as Array<['on' | 'quiet' | 'off', string]>, (v) => setPref('radioInMatch', v))}</div>
+                ${$render(songList)}
             </div>`;
         }
         if (t === 'gameplay') {
