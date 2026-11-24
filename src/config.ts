@@ -682,6 +682,24 @@ export const defaultConfig = {
         drawBonus: 0.2,
         /** Cup winner prize as a multiple of the club's match fee. */
         cupWinnerBonus: 4,
+        /** AI transfer activity (training days) and offers for the manager's players. */
+        transfers: {
+            /** Clubs (random, any nation) that look at the market each training day. */
+            clubsPerDay: 24,
+            /** A signing has to lift the weakest XI slot by at least this much fit. */
+            minGain: 4,
+            /** Share of its budget a club will spend on one player. */
+            spendShare: 0.7,
+            /** New players reaching the market per training day (until it's full). */
+            marketRefill: 2,
+            /** Chance per training day of an offer for one of the manager's players. */
+            bidChance: 0.11,
+            /** Offer = player value × this range. */
+            bidPremium: [1.15, 1.65] as [number, number],
+            /** AI clubs' yearly income (× their division's starting budget), and the cap on their budget. */
+            aiIncome: 0.4,
+            aiBudgetCap: 2.5,
+        },
         /** International cup: how many clubs of each top flight qualify, and the winners' bonus (× match fee). */
         intlPerNation: 2,
         intlWinnerBonus: 8,

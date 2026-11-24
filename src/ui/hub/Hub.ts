@@ -931,15 +931,31 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         },
         training: {
             title: 'Training days',
-            text: 'Pick one focus for the squad. Players gain more XP when the drill fits their class and attributes. Outfield players can develop a new class through training. Goalkeepers and outfield players do lighter drills in their own class when the focus is for the other group. Injured players recover automatically.',
+            text: [
+                'Pick one focus for the squad. Players suited to the drill (class and attributes) earn more XP. Injured players sit it out and recover.',
+                'When a player has enough XP, you choose the class his level goes into: one he has, or a new outfield class. At class levels 2, 5 and 8 he also picks one of two perks. The other is gone for good.',
+            ],
         },
         league: {
             title: 'The league',
-            text: 'Ten clubs, everyone plays everyone once: 3 points for a win, 1 for a draw. The top two go up, the bottom two go down. Derbies are marked in the season calendar and swing morale twice as hard.',
+            text: [
+                'Ten clubs, everyone plays everyone home and away: 3 points for a win, 1 for a draw. The top two go up, the bottom two go down. Derbies swing morale twice as hard.',
+                "Every other nation plays its own five divisions alongside yours: the flags switch between them. The top two of each top flight qualify for next season's Champions Cup.",
+            ],
+        },
+        cup: {
+            title: 'Cups',
+            text: [
+                'The Pyramid Cup is open to every club in your five divisions: single matches, penalties on a draw, so a minnow can go a long way.',
+                "The Champions Cup is for the best: the top two of every nation's top flight, 32 clubs. Win your league's top division places to get in.",
+            ],
         },
         market: {
             title: 'Transfers',
-            text: 'A fresh crop of players arrives every season. Buy young, train them up, and sell at a profit, or keep them. Mind the wages: the fee is paid once, wages every matchday.',
+            text: [
+                'New players reach the market all season, from every nation. Buy young, train them up, and sell at a profit, or keep them. Mind the wages: the fee is paid once, wages every matchday.',
+                'Other clubs shop too, and they may bid for your best players. An offer arrives like a letter: take the money or keep him.',
+            ],
         },
         finances: {
             title: 'Money',
@@ -947,12 +963,26 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         },
         playbook: {
             title: 'The playbook',
-            text: 'Every class and ability in one place. Abilities unlock at class levels; passives are always on.',
+            text: 'Every class, ability and passive in one place. At class levels 2, 5 and 8 a player picks one of two (marked "or"); the other is gone for good. Passives are always on.',
         },
         prep: {
             title: 'Match prep',
             text: 'Read the opponent first: their style, form and danger men. Pick a game plan; your auto-managed players follow it, and countering their style lifts your side on the day. Then a team talk, and play it on the board or quick-sim it.',
         },
+    };
+    /** A one-time note from the coach inside a dialog (level-up prompt, first offer); "Got it" hides it for good. */
+    const NOTES: Record<string, string> = {
+        levelup:
+            'Your call, boss: pick the class this level goes into. Stick with what he knows, or teach him something new. At class levels 2, 5 and 8 you also choose a perk; the other option is gone, so think about what the team needs.',
+        bid: 'A club wants one of ours. Their money is real, and so is the gap he leaves. Sell, and you can rebuild from the market; say no, and the squad sees you back them.',
+    };
+    const coachNote = (id: keyof typeof NOTES) => {
+        const key = `hub-${id}`;
+        const show = derived(prefs, (p) => p.tips && !p.tipsSeen.includes(key));
+        return $if(show).$then(
+            () =>
+                html`<div class="coach-note"><small>Coach Marlow</small><p>${NOTES[id]!}</p><button class="ghost" ${on('click', () => setPref('tipsSeen', [...prefs().tipsSeen, key]))}>Got it</button></div>`,
+        );
     };
     const coachTip = (id: Tab | 'prep', p: ReturnType<typeof prefs>) => {
         const tip = HUB_TIPS[id];
@@ -1090,6 +1120,18 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
             <small>From: ${l.from}</small>
             <h2>${l.title}</h2>
             <p>${l.body.replace(/\*/g, '')}</p>
+            ${
+                l.kind === 'transferBid'
+                    ? (() => {
+                          const p = u().squad.find((q) => q.id === l.subject);
+                          return html`${coachNote('bid')}${
+                              p
+                                  ? html`<p class="bid-facts">${flag(p.nation)} <b>${p.name}</b> · ${classLabel(cfg, p)} · OVR ${String(ovr(cfg, p))} · age ${String(p.age)} · value ${money(playerValue(cfg, p))}${u().lineup.includes(p.id) ? ' · in your XI' : ''}</p>`
+                                  : html``
+                          }`;
+                      })()
+                    : html``
+            }
             <div class="letter-choices">${l.choices.map((ch, i) => html`<button class="${i === 0 ? 'primary' : ''}" ${on('click', () => answer(i))}><b>${ch.label}</b><small>${ch.hint}</small></button>`)}</div>
         </div>`,
         });
@@ -1184,7 +1226,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
             label: 'Level up',
             dismiss: () => levelUp.set(null),
             className: 'modal levelup-modal',
-            children: html`<div class="modal-body levelup"><header><h2>▲ Level up</h2></header><div class="modal-scroll">${$render(view)}</div></div>`,
+            children: html`<div class="modal-body levelup"><header><h2>▲ Level up</h2></header><div class="modal-scroll">${coachNote('levelup')}${$render(view)}</div></div>`,
         });
     };
 

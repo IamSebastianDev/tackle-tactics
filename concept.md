@@ -114,12 +114,14 @@ Token rendering: a 128×64 viewport with `overflow:hidden` shows one frame; the 
 
 ### Season loop
 
-- **72-day season:** a league or cup matchday followed by two training days. There are 18 league matchdays and six Pyramid Cup dates. Clubs with a bye or a cup exit train on cup dates.
+- **87-day season:** a league or cup matchday followed by two training days. There are 18 league matchdays, six Pyramid Cup dates and five Champions Cup dates. Clubs not playing on a cup date train.
 - Choose one training focus per day for the whole squad. Fit players earn XP; players suited to the drill (class and its attributes) earn more. XP belongs to no class.
 - **Level-ups are explicit.** When a player has enough XP, the manager chooses which class the level goes into: one they have, or a new outfield class (keepers stay keepers). AI clubs level in their main class.
 - **Perk choices.** At certain class levels (2, 5, 8) the player picks one of two perks, an active ability or a passive, and the other is gone for good, so players of the same class differ. AI and generated players pick at random. See `config.perkTiers`.
 - **Injured players** sit out training and recover automatically.
-- New players enter the market at season start — no scouting or youth academy; a fresh randomly-generated pool appears each season.
+- The market is refreshed at season start and topped up through the season, with players from every nation; released players wait there as free agents.
+- **AI transfers:** on training days AI clubs (any nation) sign the market player who most improves their weakest XI slot, if they can afford him, releasing a surplus player when the squad is full. AI clubs earn a yearly income by division (capped).
+- **Offers for your players:** now and then a club at your level or above, anywhere, that can pay and would start him, bids for one of your best players (a premium on his value). It arrives as a letter: sell (he joins them, the fee is yours) or keep him.
 
 ### Aging
 
@@ -139,6 +141,8 @@ Applied as a single end-of-season stat delta:
 - **5 divisions × 10 clubs** (all defaults, all config-driven). Player starts in the bottom division.
 - Double round robin: everyone plays everyone home and away (18 matches). Simple points — 3 win / 1 draw / 0 loss.
 - **Pyramid Cup:** a single-match knockout spanning all 50 clubs. The opening draw gives 14 clubs a bye. Subsequent rounds are drawn as teams advance. Ties go directly to simulated penalties, and the final follows the last league matchday.
+- **The world:** every one of the 16 nations plays its own full 5×10 pyramid alongside the manager's (800 clubs), simulated each matchday with promotion and relegation.
+- **Champions Cup:** the top two of every nation's top flight (32 clubs, from last season's tables; by squad strength in season one) in a single-match knockout through the season, with a large winners' bonus.
 - **Top 2 promote, bottom 2 relegate.** Promotion is the goal; consolidation seasons are valid strategy.
 - Division tier is the master difficulty constraint — it scales AI squad level, talent frequency, budgets, wages, transfer fees, and match income. The opponent roster quality _is_ the difficulty curve; no explicit tuning needed.
 - All-fantasy clubs and players — no licensing constraints, freeing the RPG-flavored presentation (clubs feel more like adventuring parties than football clubs).

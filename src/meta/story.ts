@@ -10,7 +10,7 @@ import { generatePlayer } from '../world/generate';
 import { NATION_IDS, nationOf } from '../world/nations';
 import type { Career, CareerClub, Fixture } from './career';
 import { CUP_NAME, INTL_CUP_NAME, cupWinner, isCupFixture } from './cup';
-import { gainXp, money, ovr, playerValue } from './player';
+import { gainXp, money, ovr } from './player';
 
 // ------------------------------------------------------------------ types
 
@@ -27,6 +27,8 @@ export type Letter = {
     amount?: number;
     trainingDay?: number;
     trainingClass?: ClassId;
+    /** Transfer bids: the club making the offer. */
+    buyer?: string;
 };
 export type Quest = { id: string; title: string; desc: string; target: number; progress: number; reward: number; done: boolean };
 export type Award = { season: number; title: string; who: string };
@@ -215,7 +217,7 @@ type LetterDef = {
     /** Returns a one-line outcome for the news feed. */
     resolve: (choice: number, v: Vars, ctx: Ctx) => string;
 };
-type Vars = { p: Player | null; club: string; amount: number; fee: number; rival: string; trainingClass?: ClassId };
+type Vars = { p: Player | null; club: string; amount: number; fee: number; rival: string; trainingClass?: ClassId; buyer?: string };
 type Ctx = { cfg: GameConfig; c: Career; u: CareerClub; rng: Rng; pay: (label: string, amount: number) => void };
 export type Trainee = { player: Player; cls: ClassId };
 
@@ -431,26 +433,32 @@ const LETTERS: LetterDef[] = [
         },
     },
     {
-        id: 'bid',
-        from: 'A rival club',
+        // a real club wants one of your players: delivered by the transfer market, never drawn at random
+        id: 'transferBid',
+        from: 'A transfer offer',
         title: 'An offer for your player',
-        when: (_c, u) => u.squad.length > 14,
+        when: () => false,
         body: (v) =>
-            `${v.rival} would like to buy ${v.p!.name}, and they're offering ${money(v.amount)} — well above what we'd get on the open market. Their agent is waiting in the corridor, smelling faintly of turnips.`,
+            `${v.rival} want to sign ${v.p!.name} and are offering ${money(v.amount)}, more than the market would pay. Their scout has been in the stands for weeks, and their chairman is not a patient man.`,
         choices: (v) => [
-            { label: `Sell (${money(v.amount)})`, hint: 'Lose the player, gain the money' },
+            { label: `Sell (${money(v.amount)})`, hint: `${v.p!.name} joins ${v.rival}` },
             { label: 'Not for sale', hint: 'The squad notices your loyalty' },
         ],
         resolve: (ch, v, x) => {
             const p = v.p!;
-            if (ch === 1) {
-                shiftMorale(x.c, 4);
-                return `You send the agent packing. ${p.name} buys the squad a round.`;
+            const buyer = v.buyer ? x.c.clubs[v.buyer] : undefined;
+            if (ch === 1 || !buyer || !x.u.squad.includes(p)) {
+                shiftMorale(x.c, 3);
+                return `You turn ${v.rival} down. ${p.name} stays, and the dressing room approves.`;
             }
             x.u.squad = x.u.squad.filter((q) => q.id !== p.id);
             x.u.lineup = x.u.lineup.filter((id) => id !== p.id);
-            x.pay(`Sold ${p.name} to ${v.rival}`, v.amount);
-            return `${p.name} leaves for ${v.rival}. The fee is in the bank.`;
+            p.number = Math.max(0, ...buyer.squad.map((q) => q.number)) + 1;
+            buyer.squad.push(p);
+            buyer.budget -= v.amount;
+            buyer.lineup = []; // rebuilt before their next match
+            x.pay(`Sold ${p.name} to ${buyer.name}`, v.amount);
+            return `${p.name} joins ${v.rival} for ${money(v.amount)}.`;
         },
     },
     {
@@ -640,6 +648,28 @@ const followUp = (c: Career, kind: string, inDays: number, extra: { subject?: st
     (story(c).followUps ??= []).push({ kind, day: c.day + inDays, ...extra });
 };
 
+/** A club's offer for one of the manager's players, delivered to the inbox (career.ts decides when). */
+export const deliverBid = (c: Career, bid: { buyer: string; buyerName: string; player: Player; amount: number }) => {
+    const s = story(c);
+    if (s.inbox) return null;
+    const def = LETTERS.find((l) => l.id === 'transferBid')!;
+    const u = c.clubs[c.userClubId]!;
+    const v: Vars = { p: bid.player, club: u.name, amount: bid.amount, fee: 0, rival: bid.buyerName, buyer: bid.buyer };
+    s.inbox = {
+        id: `bid-${c.season}-${c.day}`,
+        kind: def.id,
+        from: bid.buyerName,
+        title: def.title,
+        body: def.body(v),
+        choices: def.choices(v),
+        subject: bid.player.id,
+        amount: bid.amount,
+        buyer: bid.buyer,
+    };
+    (s.inbox as Letter & { rival?: string }).rival = bid.buyerName;
+    return s.inbox;
+};
+
 /** Maybe deliver a new letter (one at a time, no repeats in a season). */
 export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng, trainees: readonly Trainee[] = []) => {
     const s = story(c);
@@ -690,12 +720,6 @@ export const maybeLetter = (cfg: GameConfig, c: Career, rng: Rng, trainees: read
         case 'homesick':
             p = rng.pick(u.squad);
             break;
-        case 'bid': {
-            const young = [...u.squad].sort((a, b) => playerValue(cfg, b) - playerValue(cfg, a)).slice(0, 4);
-            p = rng.pick(young);
-            amount = Math.round((playerValue(cfg, p) * 1.6) / 1000) * 1000;
-            break;
-        }
         case 'ballad':
         case 'goose':
             amount = due?.amount ?? Math.round((fee * 0.4) / 1000) * 1000;
@@ -771,6 +795,7 @@ export const answerLetter = (
         fee: cfg.career.matchFee[u.tier]!,
         rival: letter.rival ?? 'a rival',
         trainingClass: letter.trainingClass,
+        buyer: letter.buyer,
     };
     s.inbox = null;
     return def.resolve(choice, v, { cfg, c, u, rng, pay });
