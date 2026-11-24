@@ -58,7 +58,10 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     const showBench = grain(false);
     const showMusic = grain(false);
     const exitPrompt = grain<{ chance: number; wasPaused: boolean } | null>(null);
-    const benchPick = grain<{ off: string | null; on: string | null; msg: string | null }>({ off: null, on: null, msg: null });
+    /** The bench panel: the pair being picked, the changes planned so far, and the last problem. */
+    type Pair = { off: string; on: string };
+    const noPick = () => ({ off: null, on: null, plan: [] as Pair[], msg: null });
+    const benchPick = grain<{ off: string | null; on: string | null; plan: Pair[]; msg: string | null }>(noPick());
     /** The bench stops the clock: the game pauses while it's open (and resumes unless you had paused it yourself). */
     const benchPause = grain(false);
     showBench.subscribe((open) => {
@@ -69,7 +72,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             benchPause.set(false);
             ctl.paused.set(false);
         }
-        if (!open) benchPick.set({ off: null, on: null, msg: null });
+        if (!open) benchPick.set(noPick());
     });
 
     // ------------------------------------------------------------ cached reach per tick
@@ -1054,39 +1057,84 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         );
         const bench = derived(combined([team, ctl.tick]), ([side]) => m.bench(side));
         const left = derived(combined([team, ctl.tick]), ([side]) => String(m.subsLeft(side)));
+        const playerName = (side: TeamSide, id: string) =>
+            m.state.pieces.find((p) => p.id === id)?.player.name ?? m.bench(side).find((p) => p.id === id)?.name ?? '';
+        /** Why this pair can't join the plan: the usual rules, plus what's already planned. */
+        const pairProblem = (side: TeamSide, pair: Pair, plan: Pair[]) => {
+            if (plan.length && m.subsLeft(side) - ctl.pendingSubs().filter((x) => x.team === side).length - plan.length <= 0)
+                return 'No substitutions left';
+            return ctl.subProblem(side, pair.off, pair.on);
+        };
         const availability = derived(
             combined([team, ctl.tick, benchPick, ctl.awaitingHuman, ctl.pendingSubs, ctl.halftime]),
             ([side, , pick]) => {
                 const mine = ctl.isHuman(side);
-                const why = pick.off && pick.on ? ctl.subProblem(side, pick.off, pick.on) : null;
-                // straight away on your own turn (if that player isn't busy), otherwise at the next break
-                const now = !!pick.off && !!pick.on && ctl.canSubNow(side, pick.off, pick.on);
+                const n = pick.plan.length;
+                // straight away at half time or on your own turn (if that player isn't busy), otherwise at the next break
+                const later = pick.plan.filter((x) => !ctl.canSubNow(side, x.off, x.on)).length;
+                const what = `Make ${n === 1 ? 'the change' : `${n} changes`}`;
                 return {
-                    disabled: !mine || !pick.off || !pick.on || !!why,
-                    label: now || !pick.off || !pick.on ? 'Make the change' : 'Make it at the next break',
+                    disabled: !mine || n === 0,
+                    label:
+                        n === 0
+                            ? 'Make the changes'
+                            : later === 0
+                              ? what
+                              : later === n
+                                ? `${what} at the next break`
+                                : `${what} (${later} at the next break)`,
                     hint:
                         pick.msg ??
-                        why ??
                         (!mine
                             ? 'Watching: the AI manages its own bench.'
-                            : 'Tired players move less (under 50) and react worse (under 25). Pick one off, one on.'),
+                            : pick.off || pick.on
+                              ? `Now pick who ${pick.off ? 'comes on' : 'goes off'}.`
+                              : n
+                                ? 'Add another change, or make them. Click a planned player to drop that change.'
+                                : 'Pick one off, one on; repeat for more changes. Tired players move less (under 50) and react worse (under 25).'),
                 };
             },
         );
         const queued = derived(combined([team, ctl.pendingSubs]), ([side, list]) =>
-            list
-                .filter((x) => x.team === side)
-                .map((x) => `${m.piece(x.off).player.name} ⇄ ${m.bench(side).find((p) => p.id === x.on)?.name ?? ''}`),
+            list.filter((x) => x.team === side).map((x) => `${playerName(side, x.off)} ⇄ ${playerName(side, x.on)}`),
         );
+        const plan = derived(benchPick, (pick) => pick.plan);
         const choose = (slot: 'off' | 'on', id: string) =>
-            on('click', () => benchPick.update((pick) => ({ ...pick, [slot]: id, msg: null })));
-        const selectedClass = (slot: 'off' | 'on', id: string) => derived(benchPick, (pick) => (pick[slot] === id ? 'on' : ''));
+            on('click', () => {
+                const pick = benchPick();
+                // clicking a planned player drops that change
+                if (pick.plan.some((x) => x[slot] === id)) {
+                    benchPick.set({ ...pick, plan: pick.plan.filter((x) => x[slot] !== id), msg: null });
+                    return;
+                }
+                const next = { ...pick, [slot]: pick[slot] === id ? null : id, msg: null };
+                if (next.off && next.on) {
+                    const pair = { off: next.off, on: next.on };
+                    const why = pairProblem(team(), pair, pick.plan);
+                    if (why) {
+                        audio.play('error');
+                        benchPick.set({ ...next, [slot]: null, msg: why });
+                    } else benchPick.set({ off: null, on: null, plan: [...pick.plan, pair], msg: null });
+                } else benchPick.set(next);
+            });
+        const rowClass = (slot: 'off' | 'on', id: string) =>
+            derived(benchPick, (pick) => (pick[slot] === id ? 'on' : pick.plan.some((x) => x[slot] === id) ? 'planned' : ''));
+        const unplan = (pair: Pair) => benchPick.update((pick) => ({ ...pick, plan: pick.plan.filter((x) => x !== pair), msg: null }));
         const go = () => {
-            const { off, on: replacement } = benchPick();
-            if (!off || !replacement || availability().disabled) return;
-            const err = ctl.substitute(team(), off, replacement);
-            benchPick.set({ off: null, on: null, msg: err });
-            if (!err) showBench.set(false);
+            const side = team();
+            const { plan: changes } = benchPick();
+            if (!changes.length || availability().disabled) return;
+            const failed: Pair[] = [];
+            let msg: string | null = null;
+            for (const x of changes) {
+                const err = ctl.substitute(side, x.off, x.on);
+                if (err) {
+                    failed.push(x);
+                    msg = `${playerName(side, x.off)}: ${err}`;
+                }
+            }
+            benchPick.set({ off: null, on: null, plan: failed, msg });
+            if (!failed.length) showBench.set(false);
         };
         return html`<div class="modal-body bench-panel">
             <header><h2>Bench · ${derived(team, (side) => club(side).short)}</h2><span class="subs-left">${left} of ${String(cfg.subs.max)} substitutions left</span><button class="ghost" ${on('click', () => showBench.set(false))}>Close <kbd>Esc</kbd></button></header>
@@ -1097,7 +1145,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                         .$as((p) => {
                             const sprite = derived(recolorVersion, () => spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player));
                             const stamina = derived(ctl.tick, () => Math.round(p.stamina));
-                            return html`<li ${attr({ class: selectedClass('off', p.id) })} ${choose('off', p.id)}>
+                            return html`<li ${attr({ class: rowClass('off', p.id) })} ${choose('off', p.id)}>
                             <div class="sprite still" ${attr({ style: sprite })}></div>
                             <b>#${String(p.player.number)} ${p.player.name}</b><span class="cl">${cfg.classes[p.player.cls].short}</span>
                             <span ${attr({ class: derived(stamina, (n) => `stam-bar ${n < cfg.fatigue.exhausted ? 'low' : n < cfg.fatigue.tired ? 'mid' : ''}`) })}><i ${attr({ style: derived(stamina, (n) => `width:${n}%`) })}></i></span><span class="num">${derived(stamina, String)}</span>
@@ -1110,7 +1158,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                             .$withKey((p) => p.id)
                             .$as((p) => {
                                 const sprite = derived(recolorVersion, () => spriteStyle(cfg, p.sprite, 'idle', 'down', p));
-                                return html`<li ${attr({ class: selectedClass('on', p.id) })} ${choose('on', p.id)}>
+                                return html`<li ${attr({ class: rowClass('on', p.id) })} ${choose('on', p.id)}>
                                 <div class="sprite still" ${attr({ style: sprite })}></div>
                                 <b>#${String(p.number)} ${p.name}</b><span class="cl">${classLabel(cfg, p)}</span><span class="num">Lv ${String(p.level)}</span>
                             </li>`;
@@ -1120,6 +1168,10 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                         .$else(() => html`<p class="muted">Nobody left on the bench.</p>`)}</section>
                 </div>
             </div>
+            <div class="bench-plan">${$each(plan).$as(
+                (x) =>
+                    html`<span class="plan-chip"><b>${playerName(team(), x.off)}</b> off · <b>${playerName(team(), x.on)}</b> on<button type="button" class="ghost" title="Drop this change" ${on('click', () => unplan(x))}>×</button></span>`,
+            )}</div>
             <footer class="bench-foot">
                 ${$if(derived(queued, (list) => list.length > 0)).$then(() => html`<span class="bench-queued">Next break: ${derived(queued, (list) => list.join(' · '))}</span>`)}
                 <span class="muted">${derived(availability, (a) => a.hint)}</span>
