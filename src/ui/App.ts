@@ -761,10 +761,13 @@ export const App = () => {
                     (v) => v as TimeoutPolicy,
                 )}</label>
                 <p class="muted">Match settings apply to every match you play in this career. Default ${String(s.rounds)} rounds; 12–16 is a brisk match.</p>
-                <p class="neg" role="status" ${attr({ hidden: derived(startError, (message) => !message) })}>${startError}</p>
-                <div class="buttons"><button class="ghost" ${on('click', () => screen.set('title'))}>Back</button><button class="primary" ${on('click', create)}>Start career</button></div>
             </section>
             </div>
+            <footer class="nc-actions">
+                <button class="ghost" ${on('click', () => screen.set('title'))}>Back</button>
+                <p class="neg" role="status" ${attr({ hidden: derived(startError, (message) => !message) })}>${startError}</p>
+                <button class="primary" ${on('click', create)}>Start career</button>
+            </footer>
         </div></div>`;
     };
 

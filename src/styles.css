@@ -2597,7 +2597,8 @@ dialog.drawer-wrap:not([open]) {
     grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 12px;
     width: min(100%, 1280px);
-    height: min(100%, 626px);
+    /* tall enough for eleven 30px roster rows without a scrollbar; shorter windows scroll the roster */
+    height: min(100%, 640px);
 }
 .quick-match-header,
 .quick-match-actions {
@@ -5159,15 +5160,47 @@ dialog.drawer-wrap:not([open]) {
 }
 
 /* ---- new career: kit editor */
+/* fixed to the window like quick match: the two columns scroll inside, the actions stay pinned */
 .setup-inner.new-career {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 12px;
     max-width: 1060px;
+    height: 100%;
     margin: 0 auto;
+    padding-bottom: 20px;
+    box-sizing: border-box;
 }
 .nc-grid {
     display: grid;
-    grid-template-columns: 1.4fr 1fr;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
     gap: 16px;
-    align-items: start;
+    min-height: 0;
+}
+.nc-grid > .opts {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: none;
+}
+.nc-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+}
+.nc-actions p {
+    flex: 1;
+    margin: 0;
+    text-align: right;
+}
+.nc-actions p[hidden] {
+    display: block;
+    visibility: hidden;
+}
+.nc-actions .primary {
+    min-width: 150px;
 }
 .kit-editor h4,
 .nc-grid .opts h4 {
@@ -5241,12 +5274,24 @@ dialog.drawer-wrap:not([open]) {
 }
 .kit-grid {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
+    grid-template-columns: repeat(8, minmax(0, 1fr));
     gap: 6px;
 }
 .kit-grid.keepers {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     max-width: 50%;
+}
+/* eight swatches need ~540px; below that the rows split evenly into two rows of four */
+.kit-editor {
+    container-type: inline-size;
+}
+@container (max-width: 540px) {
+    .kit-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .kit-grid.keepers {
+        max-width: none;
+    }
 }
 .kit-swatch {
     display: flex;
