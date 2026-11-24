@@ -4704,25 +4704,23 @@ a {
 .title-menu {
     display: flex;
     flex-direction: column;
-    width: 440px;
-    margin: 34px auto 0;
-    padding: 10px 0;
-    border: 8px solid transparent;
-    border-image: var(--f-panel) 4 fill / 8px / 0 stretch;
-    filter: drop-shadow(var(--shadow));
+    align-items: center;
+    gap: 2px;
+    margin: 40px auto 0;
 }
 .title-item {
     position: relative;
     display: block;
-    width: 100%;
-    text-align: left;
-    padding: 9px 20px 9px 52px;
+    padding: 6px 28px;
     font-family: var(--display);
     font-weight: 700;
-    font-size: 26px;
+    font-size: 30px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text);
+    text-shadow:
+        2px 2px 0 var(--ink),
+        0 0 12px #000c;
     background: none;
     border: 0;
     border-image: none;
@@ -4736,12 +4734,11 @@ a {
 }
 .title-item.on {
     color: var(--accent);
-    background: #d9b45a16;
 }
 .title-item.on::before {
     content: '▶';
     position: absolute;
-    left: 22px;
+    left: 2px;
     top: 50%;
     transform: translateY(-50%);
     font-size: 15px;
@@ -4761,7 +4758,6 @@ a {
 }
 .title-item.exit.on {
     color: var(--bad);
-    background: #ff5a5f12;
 }
 .title-item.exit.on::before {
     color: var(--bad);
