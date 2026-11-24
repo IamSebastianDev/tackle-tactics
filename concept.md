@@ -114,9 +114,9 @@ Token rendering: a 128×64 viewport with `overflow:hidden` shows one frame; the 
 
 ### Season loop
 
-- **30-day season:** matchday → off-day (training) → off-day (training) → repeat. 10 matches, 20 training days.
-- Each training day, a player is assigned a session for XP toward a class level. You can't optimally train everyone — prioritization under limited slots is a core recurring decision.
-- **Injuries** create a per-day choice for affected players: rest (faster recovery, no XP), light training (reduced XP, slower recovery), or full training (normal XP, risk of worsening).
+- **72-day season:** a league or cup matchday followed by two training days. There are 18 league matchdays and six Pyramid Cup dates. Clubs with a bye or a cup exit train on cup dates.
+- Choose one training focus per day for the whole squad. Fit players earn class XP based on their attributes and experience in that class. Outfielders can learn another outfield class. Keepers and outfielders do lighter position drills when the focus is for the other group.
+- **Injured players** sit out training and recover automatically.
 - New players enter the market at season start — no scouting or youth academy; a fresh randomly-generated pool appears each season.
 
 ### Aging
@@ -135,7 +135,8 @@ Applied as a single end-of-season stat delta:
 ### League & competition
 
 - **5 divisions × 10 clubs** (all defaults, all config-driven). Player starts in the bottom division.
-- Round robin: everyone plays everyone once (~9 matches). Simple points — 3 win / 1 draw / 0 loss.
+- Double round robin: everyone plays everyone home and away (18 matches). Simple points — 3 win / 1 draw / 0 loss.
+- **Pyramid Cup:** a single-match knockout spanning all 50 clubs. The opening draw gives 14 clubs a bye. Subsequent rounds are drawn as teams advance. Ties go directly to simulated penalties, and the final follows the last league matchday.
 - **Top 2 promote, bottom 2 relegate.** Promotion is the goal; consolidation seasons are valid strategy.
 - Division tier is the master difficulty constraint — it scales AI squad level, talent frequency, budgets, wages, transfer fees, and match income. The opponent roster quality _is_ the difficulty curve; no explicit tuning needed.
 - All-fantasy clubs and players — no licensing constraints, freeing the RPG-flavored presentation (clubs feel more like adventuring parties than football clubs).
@@ -183,7 +184,7 @@ Difficulty falls out of the same system: weaker AI = wider random band, worse we
 
 ### Simulated matches (AI vs AI)
 
-Matches the human isn't in (the other ~450 division fixtures a season) are **not** played through the turn engine — they resolve instantly via a lightweight weighted model on aggregate squad quality, producing believable scorelines that respect squad strength. Headless and fast. The full turn engine runs only for human matches.
+AI-only league and cup matches resolve instantly through a lightweight model based on squad quality. The full turn engine runs for matches the manager chooses to play.
 
 ## Technical Stack
 

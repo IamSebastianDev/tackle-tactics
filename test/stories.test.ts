@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultConfig } from '../src/config';
+import { defaultConfig, type ClassId } from '../src/config';
 import {
     careerRng,
     endSeason,
@@ -13,6 +13,7 @@ import {
 } from '../src/meta/career';
 import { applyTalk, isDerby, matchEdge, prepFor } from '../src/meta/prep';
 import { rivalOf, story } from '../src/meta/story';
+import { trainingGain } from '../src/meta/training';
 
 const cfg = defaultConfig;
 const settings = { timerSeconds: 10, rounds: 30, difficulty: 'normal' as const, timeoutPolicy: 'lose' as const };
@@ -24,6 +25,7 @@ describe('stories and match prep', () => {
         let derbies = 0;
         for (const seed of [3, 11, 19]) {
             const c = newCareer(cfg, seed, settings);
+            let trainingClasses = new Map<string, ClassId | undefined>();
             for (let season = 1; season <= 2; season++) {
                 for (let guard = 0; guard < 200; guard++) {
                     const t = today(cfg, c);
@@ -38,7 +40,7 @@ describe('stories and match prep', () => {
                         resolved.push({
                             letter: l,
                             day: c.day,
-                            plannedClass: l.subject ? c.plan[l.subject]?.cls : undefined,
+                            plannedClass: l.subject ? trainingClasses.get(l.subject) : undefined,
                             entry: c.news[0],
                             outcome,
                         });
@@ -53,7 +55,10 @@ describe('stories and match prep', () => {
                         const score = simulateScore(cfg, rng, c, t.fixture, 1, matchEdge(cfg, c, t.fixture, p));
                         c.rngState = rng.state();
                         playMatchday(cfg, c, { score, knocks: {}, played: userClub(c).lineup });
-                    } else trainingDay(cfg, c);
+                    } else {
+                        trainingClasses = new Map(userClub(c).squad.map((p) => [p.id, trainingGain(cfg, p, c.trainingFocus)?.cls]));
+                        trainingDay(cfg, c);
+                    }
                     const m = story(c).morale;
                     expect(m).toBeGreaterThanOrEqual(10);
                     expect(m).toBeLessThanOrEqual(100);

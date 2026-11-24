@@ -1320,6 +1320,25 @@ a {
 
 /* ================================================================== MODALS & DRAWER */
 /* Keep dialog controls outside the scroll area. WebKit can misplace sticky rows in the scaled stage. */
+dialog.modal,
+dialog.drawer-wrap {
+    width: var(--stage-width, 100vw);
+    height: var(--stage-height, 100dvh);
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    color: var(--text);
+    zoom: var(--stage-scale, 1);
+}
+dialog.modal::backdrop,
+dialog.drawer-wrap::backdrop {
+    background: transparent;
+}
+dialog.modal:not([open]),
+dialog.drawer-wrap:not([open]) {
+    display: none;
+}
 .modal {
     overscroll-behavior: none;
     position: fixed;
@@ -1771,6 +1790,17 @@ a {
     letter-spacing: 0;
     text-shadow: none;
 }
+.squad-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    column-gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.squad-heading h3 {
+    margin: 0;
+}
 .card h4 {
     margin: 10px 0 6px;
     font-size: 12px;
@@ -1911,13 +1941,34 @@ a {
     color: var(--on-accent);
     text-shadow: none;
 }
-.seg.small {
-    margin: 0;
-    gap: 4px;
+.training-focus {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
 }
-.seg.small button {
-    font-size: 10px;
-    padding: 0 5px;
+.training-focus button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 4px 9px;
+}
+.training-focus button small {
+    font: 12px var(--body);
+    text-shadow: none;
+    text-transform: none;
+}
+.training-focus button.on {
+    border-image-source: var(--f-gold);
+    color: var(--on-accent);
+    text-shadow: none;
+}
+.training-note {
+    margin: 8px 0 10px;
+}
+.training-xp {
+    color: var(--gold-hi);
+    white-space: nowrap;
 }
 
 .tbl {
@@ -1955,8 +2006,7 @@ a {
     font-family: var(--display);
     font-size: 12px;
 }
-.tbl.players tbody tr,
-.tbl.training tbody tr {
+.tbl.players tbody tr {
     cursor: pointer;
 }
 .tbl tr.injured td {
@@ -1975,15 +2025,6 @@ a {
 .tbl.league .club {
     display: flex;
     align-items: center;
-}
-.tbl.training tr.on td {
-    background: #56b4e914;
-}
-.tbl select {
-    font-size: 13px;
-    padding: 0 4px;
-    border-width: 6px;
-    border-image-width: 6px;
 }
 .legend-line {
     display: flex;
@@ -2083,11 +2124,6 @@ a {
     font-family: var(--display);
     font-size: 10px;
 }
-.prog small {
-    font-family: var(--body);
-    color: var(--muted);
-    font-size: 12px;
-}
 
 .fixtures h4 {
     margin: 10px 0 4px;
@@ -2113,6 +2149,28 @@ a {
     color: var(--gold-hi);
 }
 
+.cup-fixtures th:first-child,
+.cup-fixtures th:last-child {
+    width: 42%;
+}
+.cup-fixtures td:nth-child(2),
+.cup-fixtures th:nth-child(2) {
+    text-align: center;
+}
+.cup-fixtures small {
+    color: var(--muted);
+    margin-inline-start: 4px;
+}
+.cup-fixtures .cup-winner {
+    font-weight: 700;
+}
+.calendar-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+    gap: 10px;
+    flex: 1;
+    min-height: 0;
+}
 .season-calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -2146,6 +2204,9 @@ a {
 .season-day[data-kind='match'] {
     box-shadow: inset 0 2px 0 var(--good);
 }
+.season-day[data-kind='cup'] {
+    box-shadow: inset 0 2px 0 var(--accent);
+}
 .season-day[data-kind='review'] {
     box-shadow: inset 0 2px 0 var(--gold);
 }
@@ -2174,7 +2235,7 @@ a {
 }
 .season-day-details {
     padding: 8px;
-    border-top: 1px solid var(--line);
+    border-left: 1px solid var(--line);
 }
 .season-calendar .season-day-details h4,
 .season-day-details p {
@@ -2293,6 +2354,7 @@ a {
     z-index: 40;
     display: flex;
     justify-content: flex-end;
+    padding: 0;
 }
 .drawer {
     width: 480px;
@@ -3240,6 +3302,9 @@ a {
     font-size: 14px;
     line-height: 1.4;
     color: #dedcd5;
+}
+.tip-body p + p {
+    margin-top: 6px;
 }
 .tip-actions {
     display: flex;
@@ -4451,7 +4516,7 @@ a {
     border-image: var(--f-panel-raised) 4 fill / 8px / 0 stretch;
     filter: drop-shadow(4px 4px 0 #000b);
 }
-.app-root:has(.modal, .drawer-wrap) :is(.hub-overlays, .radio-window, .hub-top .radio-dock) {
+.app-root:has(dialog[open]) :is(.hub-overlays, .radio-window, .hub-top .radio-dock) {
     visibility: hidden;
 }
 .radio-controls {
@@ -4816,7 +4881,7 @@ a {
     color: var(--accent);
 }
 
-/* ---- pre-match intro: a short broadcast-style sequence */
+/* ---- pre-match overview: squads on a pitch, the commentary booth, the ground */
 .intro {
     position: absolute;
     inset: 0;
@@ -4827,7 +4892,10 @@ a {
     animation: np-in 0.3s ease both;
 }
 .intro-card {
-    width: min(960px, 92%);
+    display: flex;
+    flex-direction: column;
+    width: min(1240px, 95%);
+    max-height: 94%;
     padding: 6px 20px 12px;
     border: 8px solid transparent;
     border-image: var(--f-panel-raised) 4 fill / 8px / 0 stretch;
@@ -4854,8 +4922,8 @@ a {
     align-items: center;
     justify-content: center;
     gap: 18px;
-    margin: 14px 0 12px;
-    font-size: 34px;
+    margin: 12px 0;
+    font-size: 32px;
 }
 .intro-title span {
     padding: 2px 12px;
@@ -4866,45 +4934,203 @@ a {
     color: var(--muted);
     font-size: 20px;
 }
-.intro-body {
-    min-height: 300px;
+.intro-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr);
+    gap: 20px;
+    min-height: 0;
+}
+
+/* the pitch: turf with run-off, painted lines, players at their kick-off spots */
+.ip-turf {
+    padding: 18px 22px;
+    background: repeating-linear-gradient(90deg, #2f6b33 0 10%, #2a6230 10% 20%), #2c6631;
+    box-shadow:
+        inset 0 0 0 2px #0006,
+        4px 4px 0 #000a;
+}
+.ip-field {
+    position: relative;
+    border: 2px solid #ffffffb0;
+}
+.ip-field::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    border-left: 2px solid #ffffffb0;
+    transform: translateX(-1px);
+}
+.ip-field > i {
+    position: absolute;
+    border: 2px solid #ffffffb0;
+}
+.ip-field > .ip-box[style*='left'] {
+    border-left: none;
+}
+.ip-field > .ip-box[style*='right'] {
+    border-right: none;
+}
+.ip-circle {
+    left: 50%;
+    top: 50%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+.ip-man {
+    position: absolute;
+    width: 0;
+    height: 0;
+    transform: scale(0.66);
+    transform-origin: 0 0;
+}
+.ip-man .sprite {
+    filter: drop-shadow(0 3px 0 #0007);
+}
+.ip-num {
+    position: absolute;
+    left: 0;
+    top: 6px;
+    transform: translateX(-50%);
+    min-width: 22px;
+    padding: 0 4px;
+    font-family: var(--display);
+    font-size: 15px;
+    line-height: 18px;
+    text-align: center;
+    color: #fff;
+    background: var(--kit);
+    box-shadow:
+        0 0 0 2px #000c,
+        2px 2px 0 2px #0008;
+    white-space: nowrap;
+}
+.ip-num.light {
+    color: #111;
+}
+.ip-man.danger .ip-num {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.intro-sides {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 10px;
+}
+.intro-side:last-child {
+    text-align: right;
+}
+.intro-side h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 20px;
+}
+.intro-side:last-child h3 {
+    flex-direction: row-reverse;
+}
+.intro-side .kit-dot {
+    width: 14px;
+    height: 14px;
+    background: var(--kit);
+    box-shadow: 0 0 0 2px var(--ink);
+}
+.intro-side .you {
+    font-style: normal;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+.intro-side p {
+    margin: 2px 0 0;
+    color: var(--muted);
+}
+.intro-side p.danger {
+    color: var(--accent);
+}
+.intro-side p.danger span {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* the commentary booth */
+.intro-booth {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+.intro-voices {
+    display: grid;
+    gap: 8px;
 }
 .intro-voice {
     display: flex;
-    gap: 14px;
-    align-items: flex-start;
-    margin: 12px 0;
+    gap: 12px;
+    align-items: center;
 }
 .intro-face {
-    width: 64px;
-    height: 64px;
+    width: 56px;
+    height: 56px;
     flex: none;
 }
 .intro-face .sprite.still {
     position: absolute;
-    left: 6px;
-    top: 2px;
+    left: 2px;
+    top: 0;
+}
+.intro-voice b {
+    display: block;
+    font-family: var(--display);
+    font-size: 17px;
 }
 .intro-voice small {
+    display: block;
+    font-size: 12px;
+    line-height: 1.3;
+    color: var(--muted);
+}
+.intro-talk {
+    flex: 1;
+    min-height: 120px;
+    max-height: 360px;
+    overflow-y: auto;
+    overscroll-behavior: none;
+    padding: 10px 12px;
+    background: var(--well);
+    border: 1px solid var(--line);
+}
+.intro-talk p {
+    margin: 0 0 10px;
+    font-size: 16px;
+    line-height: 1.45;
+}
+.intro-talk p:last-child {
+    margin-bottom: 0;
+}
+.intro-talk p b {
+    margin-right: 8px;
     font-family: var(--display);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--accent);
 }
-.intro-voice p {
-    margin: 2px 0 0;
-    font-size: 17px;
-    line-height: 1.45;
+.intro-talk p.colour b {
+    color: var(--muted);
 }
 .intro-facts {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    margin-top: 18px;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
 }
 .intro-facts div {
-    padding: 6px 10px;
+    padding: 5px 10px;
     background: var(--well);
     border: 1px solid var(--line);
 }
@@ -4917,90 +5143,19 @@ a {
 }
 .intro-facts b {
     font-family: var(--display);
-    font-size: 16px;
-}
-.intro-lineups {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-}
-.intro-team h3 {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 4px 0 0;
-    font-size: 20px;
-}
-.intro-team .kit-dot {
-    width: 14px;
-    height: 14px;
-    background: var(--kit);
-    box-shadow: 0 0 0 2px var(--ink);
-}
-.intro-team p {
-    margin: 2px 0 8px;
-}
-.intro-team ol {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 2px;
-}
-.intro-team li {
-    display: grid;
-    grid-template-columns: 28px 1fr auto;
-    gap: 8px;
-    padding: 2px 6px;
-    font-size: 14px;
-}
-.intro-team li:nth-child(odd) {
-    background: #ffffff06;
-}
-.intro-team li.danger {
-    color: var(--accent);
-}
-.intro-team .num {
-    color: var(--muted);
-    text-align: right;
-}
-.intro-team .cl {
-    color: var(--muted);
-    font-size: 12px;
-}
-.intro-story h3 {
-    margin: 10px 0;
-    font-size: 22px;
-    color: var(--accent);
-}
-.intro-story ul {
-    margin: 0;
-    padding-left: 22px;
-    display: grid;
-    gap: 10px;
-    font-size: 18px;
-    line-height: 1.45;
+    font-size: 15px;
 }
 .intro-foot {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 14px;
+    justify-content: flex-end;
+    margin-top: 12px;
     padding-top: 10px;
     border-top: 1px solid var(--line);
 }
-.intro-foot .dots {
-    flex: 1;
-    display: flex;
-    gap: 6px;
-}
-.intro-foot .dots i {
-    width: 10px;
-    height: 10px;
-    background: var(--dim);
-}
-.intro-foot .dots i.on {
-    background: var(--accent);
+@media (max-width: 900px) {
+    .intro-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* ---- new career: kit editor */
@@ -5149,4 +5304,26 @@ a {
 .nc-names input {
     width: 100%;
     min-width: 0;
+}
+.confirm-modal {
+    width: min(460px, calc(var(--stage-width, 100vw) - 32px));
+    max-height: calc(var(--stage-height, 100dvh) - 32px);
+    padding: 0;
+    border: 0;
+    color: var(--text);
+    background: none;
+    overflow: visible;
+    zoom: var(--stage-scale, 1);
+}
+.confirm-modal::backdrop {
+    background: #060707d8;
+}
+.modal-body.confirm-body {
+    width: 100%;
+    max-height: calc(var(--stage-height, 100dvh) - 32px);
+}
+.confirm-body p {
+    margin: 4px 0;
+    font-size: 15px;
+    line-height: 1.45;
 }

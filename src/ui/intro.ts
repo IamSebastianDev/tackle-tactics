@@ -1,6 +1,6 @@
 /**
- * The pre-match intro: the commentary team, the ground, both line-ups and the story of the day.
- * Pure text built from the match setup; MatchView renders it as a short, skippable sequence.
+ * The pre-match overview copy: the commentators open the broadcast and talk through the story of the day.
+ * Pure text built from the match setup; MatchView renders it beside the squads on a pitch.
  */
 import type { GameConfig, TeamStyle } from '../config';
 import type { Match } from '../engine/match';
@@ -14,9 +14,11 @@ export const COMMENTATORS = {
 
 const pick = <T>(arr: T[], seed: number) => arr[Math.abs(seed) % arr.length]!;
 
-export type IntroText = { welcome: string; colour: string; story: string[] };
+export type Voice = keyof typeof COMMENTATORS;
+/** The opening exchange, as alternating lines from the two commentators. */
+export type IntroLine = { who: Voice; text: string };
 
-/** The commentators' opening and the day's narrative (career lines come from the caller). */
+/** The commentators' opening exchange, with the day's narrative rolled in (career lines come from the caller). */
 export const introText = (
     cfg: GameConfig,
     m: Match,
@@ -25,7 +27,7 @@ export const introText = (
     conditions: Conditions | undefined,
     seed: number,
     careerStory: string[] = [],
-): IntroText => {
+): IntroLine[] => {
     const [h, a] = m.state.clubs;
     const ground = stadium ? `${stadium.name}, ${sizeLabel(stadium.size).toLowerCase()}` : 'a neutral ground';
     const crowd = stadium ? `${Math.round(stadium.capacity * stadium.fill).toLocaleString('en')} in` : 'a few faithful in';
@@ -80,7 +82,12 @@ export const introText = (
                   seed + 2,
               ),
           ].filter(Boolean);
-    return { welcome, colour, story };
+    // the lead opens, the co-commentator answers with conditions and referee, then they trade the story lines
+    return [
+        { who: 'lead', text: welcome },
+        { who: 'colour', text: colour },
+        ...story.map((text, i): IntroLine => ({ who: i % 2 ? 'colour' : 'lead', text })),
+    ];
 };
 
 /** The danger man: the best finisher on the pitch for a side. */

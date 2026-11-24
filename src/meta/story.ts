@@ -9,6 +9,7 @@ import type { Rng } from '../rng';
 import type { Player } from '../types';
 import { generatePlayer } from '../world/generate';
 import type { Career, CareerClub, Fixture } from './career';
+import { CUP_NAME, cupWinner, isCupFixture } from './cup';
 import { gainXp, money, ovr, playerValue } from './player';
 
 // ------------------------------------------------------------------ types
@@ -159,11 +160,11 @@ type QuestDef = { id: string; title: string; desc: (t: number) => string; target
 const QUESTS: QuestDef[] = [
     { id: 'streak', title: 'Hot Streak', desc: (t) => `Win ${t} league matches in a row.`, target: 3, reward: 3 },
     { id: 'goals', title: 'Goal Rush', desc: (t) => `Score ${t} league goals this season.`, target: 12, reward: 2 },
-    { id: 'cleans', title: 'The Wall', desc: (t) => `Keep ${t} clean sheets.`, target: 3, reward: 2.5 },
-    { id: 'bigwin', title: 'Statement Win', desc: () => 'Win a match by three goals or more.', target: 1, reward: 2 },
+    { id: 'cleans', title: 'The Wall', desc: (t) => `Keep ${t} league clean sheets.`, target: 3, reward: 2.5 },
+    { id: 'bigwin', title: 'Statement Win', desc: () => 'Win a league match by three goals or more.', target: 1, reward: 2 },
     { id: 'scorer', title: 'Talisman', desc: (t) => `Have one player score ${t} league goals.`, target: 5, reward: 2 },
     { id: 'newclass', title: 'Jack of All Trades', desc: () => 'Train a player into a brand-new class.', target: 1, reward: 1.5 },
-    { id: 'motm', title: 'Star Turn', desc: (t) => `Win ${t} Man of the Match awards in matches you play.`, target: 3, reward: 2 },
+    { id: 'motm', title: 'Star Turn', desc: (t) => `Win ${t} Man of the Match awards in league matches you play.`, target: 3, reward: 2 },
     { id: 'unbeaten', title: 'Iron Will', desc: (t) => `Go ${t} league matches unbeaten.`, target: 5, reward: 3 },
 ];
 
@@ -445,7 +446,6 @@ const LETTERS: LetterDef[] = [
             }
             x.u.squad = x.u.squad.filter((q) => q.id !== p.id);
             x.u.lineup = x.u.lineup.filter((id) => id !== p.id);
-            delete x.c.plan[p.id];
             x.pay(`Sold ${p.name} to ${v.rival}`, v.amount);
             return `${p.name} leaves for ${v.rival}. The fee is in the bank.`;
         },
@@ -794,17 +794,19 @@ export const afterMatchday = (
 ) => {
     const s = story(c);
     rivalOf(c);
-    shiftMorale(c, gf > ga ? MORALE.win : gf === ga ? MORALE.draw : MORALE.loss);
-    s.lossRun = gf < ga ? (s.lossRun ?? 0) + 1 : 0;
+    const cup = isCupFixture(f);
+    const outcome = cup ? (cupWinner(f) === c.userClubId ? 1 : -1) : Math.sign(gf - ga);
+    shiftMorale(c, outcome > 0 ? MORALE.win : outcome === 0 ? MORALE.draw : MORALE.loss);
+    s.lossRun = outcome < 0 ? (s.lossRun ?? 0) + 1 : 0;
     const u0 = c.clubs[c.userClubId]!;
     // the derby swings the mood harder, both ways
     if (s.rival && (f.home === s.rival || f.away === s.rival)) {
         const rival = c.clubs[s.rival]!;
         const sw = cfg.career.prep.derbySwing;
-        if (gf > ga) {
+        if (outcome > 0) {
             shiftMorale(c, sw);
             news(`Derby win over ${rival.name}! The town will be talking about it for weeks.`, 'good');
-        } else if (gf < ga) {
+        } else if (outcome < 0) {
             shiftMorale(c, -sw);
             news(`Derby defeat to ${rival.name}. Nobody in town will let you forget it.`, 'bad');
         } else news(`Honours even in the derby with ${rival.name}.`, 'info');
@@ -830,6 +832,10 @@ export const afterMatchday = (
     for (const p of u0.squad) {
         const eligible = !p.injury && p.age >= 19 && p.cls !== 'keeper' && ovr(cfg, p) >= bar;
         benched[p.id] = eligible && !u0.lineup.includes(p.id) ? (benched[p.id] ?? 0) + 1 : 0;
+    }
+    if (cup) {
+        maybeLetter(cfg, c, rng);
+        return;
     }
     s.streak = gf > ga ? Math.max(1, s.streak + 1) : gf === ga ? (s.streak > 0 ? 0 : s.streak - 1) : 0;
     const unbeaten = c as Career & { unbeatenRun?: number };
@@ -878,6 +884,7 @@ export const seasonAwards = (c: Career): Array<{ title: string; who: string; det
     const s = story(c);
     const u = c.clubs[c.userClubId]!;
     const out: Array<{ title: string; who: string; detail: string; icon: 'cup' | 'medal' | 'boot' | 'star' }> = [];
+    if (c.cup?.champion) out.push({ title: CUP_NAME, who: c.clubs[c.cup.champion]!.name, detail: 'Cup winners', icon: 'cup' });
     const div = c.divisions.find((d) => d.clubs.includes(u.id))!;
     // golden boot across the user's division
     const everyone = div.clubs.flatMap((id) => c.clubs[id]!.squad.map((p) => ({ p, club: c.clubs[id]!, l: s.seasonStats[p.id] })));

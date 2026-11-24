@@ -10,6 +10,18 @@ import { createRng, type Rng } from '../rng';
 import type { Club, Player, TeamSide } from '../types';
 import { generatePlayer } from '../world/generate';
 import { generateStadium, type Stadium } from '../world/stadium';
+import {
+    CUP_NAME,
+    advanceCup,
+    createCup,
+    cupWinner,
+    fixtureForClub,
+    isCupFixture,
+    penaltyScore,
+    recordCupScore,
+    type Cup,
+    type CupRound,
+} from './cup';
 import { ageOneSeason, fitFor, gainXp, money, ovr, playerValue, wage } from './player';
 import {
     afterMatchday,
@@ -23,12 +35,11 @@ import {
     type PlayerMatchLine,
     type Trainee,
 } from './story';
+import { DEFAULT_TRAINING_FOCUS, TRAINING_FOCUS_IDS, TRAINING_FOCUSES, trainingGain, type TrainingFocus } from './training';
 
 export type Fixture = { id: string; round: number; home: string; away: string; result?: [number, number] };
 export type Division = { tier: number; clubs: string[]; fixtures: Fixture[] };
 export type TableRow = { club: string; p: number; w: number; d: number; l: number; gf: number; ga: number; pts: number };
-export type Intensity = 'light' | 'full';
-export type Session = { cls: ClassId; intensity: Intensity };
 export type News = { season: number; day: number; text: string; tone: 'good' | 'bad' | 'info' };
 export type Ledger = { season: number; day: number; label: string; amount: number };
 export type CareerSettings = { timerSeconds: number; rounds: number; difficulty: Difficulty; timeoutPolicy: TimeoutPolicy };
@@ -50,17 +61,23 @@ export type Career = {
     userClubId: string;
     clubs: Record<string, CareerClub>;
     divisions: Division[];
+    /** Absent in saves that are still playing a season from before the cup. */
+    cup?: Cup;
     market: Player[];
     news: News[];
     ledger: Ledger[];
-    /** Training plan for the user's squad: player id → session. */
-    plan: Record<string, Session>;
+    /** Squad drill to run each training day until the manager changes it. */
+    trainingFocus: TrainingFocus;
     settings: CareerSettings;
     history: Array<{ season: number; tier: number; position: number }>;
     nextId: number;
 };
 
-export type Today = { kind: 'match'; round: number; fixture: Fixture; division: Division } | { kind: 'training' } | { kind: 'seasonEnd' };
+type ScheduledRound = { day: number; round: number; cup?: CupRound };
+export type Today =
+    | { kind: 'match'; fixture: Fixture; round: number; cup?: CupRound }
+    | { kind: 'training'; cup?: CupRound }
+    | { kind: 'seasonEnd' };
 
 // ------------------------------------------------------------------ names & kits
 
@@ -187,11 +204,28 @@ const roundRobin = (clubs: string[], rng: Rng, prefix: string): Fixture[] => {
         }
         ids.splice(1, 0, ids.pop()!);
     }
-    return out;
+    return [...out, ...out.map(({ id, round, home, away }) => ({ id: `${id}-return`, round: round + n - 1, home: away, away: home }))];
 };
 
-export const roundsPerSeason = (cfg: GameConfig) => cfg.career.clubsPerDivision - 1;
-export const seasonDays = (cfg: GameConfig) => roundsPerSeason(cfg) * cfg.career.daysPerMatchday;
+export const roundsPerSeason = (c: Career) => (c.divisions[0]?.fixtures.at(-1)?.round ?? -1) + 1;
+export const seasonDays = (cfg: GameConfig, c: Career) => (roundsPerSeason(c) + (c.cup?.rounds.length ?? 0)) * cfg.career.daysPerMatchday;
+
+export const seasonSchedule = (cfg: GameConfig, c: Career): ScheduledRound[] => {
+    const cupDates = new Map(c.cup?.rounds.map((round, index) => [round.day, { cup: round, round: index }]));
+    let leagueRound = 0;
+    return Array.from({ length: roundsPerSeason(c) + cupDates.size }, (_, index) => {
+        const day = index * cfg.career.daysPerMatchday + 1;
+        return { day, ...(cupDates.get(day) ?? { round: leagueRound++ }) };
+    });
+};
+
+export const scheduledFixture = (c: Career, date: ScheduledRound) =>
+    fixtureForClub(date.cup ? date.cup.fixtures : divisionOf(c, c.userClubId).fixtures.filter((f) => f.round === date.round), c.userClubId);
+
+const buildSeason = (cfg: GameConfig, c: Career, rng: Rng) => {
+    for (const d of c.divisions) d.fixtures = roundRobin(d.clubs, rng, `s${c.season}-t${d.tier}`);
+    c.cup = createCup(rng, c.season, Object.keys(c.clubs), roundsPerSeason(c), cfg.career.daysPerMatchday);
+};
 
 export const newCareer = (
     cfg: GameConfig,
@@ -212,7 +246,7 @@ export const newCareer = (
         market: [],
         news: [],
         ledger: [],
-        plan: {},
+        trainingFocus: DEFAULT_TRAINING_FOCUS,
         settings,
         history: [],
         nextId: 1,
@@ -260,9 +294,8 @@ export const newCareer = (
     else if (opts.kit) user.awayKit = awayKitFor(cfg, user.kit);
     if (opts.keeperKit) user.keeperKit = opts.keeperKit;
     c.userClubId = user.id;
-    for (const d of c.divisions) d.fixtures = roundRobin(d.clubs, rng, `s1-t${d.tier}`);
+    buildSeason(cfg, c, rng);
     c.market = buildMarket(cfg, rng, c);
-    c.plan = defaultPlan(cfg, user);
     initStory(c, rng);
     c.news.push({
         season: 1,
@@ -282,15 +315,12 @@ export const userClub = (c: Career) => c.clubs[c.userClubId]!;
 export const divisionOf = (c: Career, clubId: string) => c.divisions.find((d) => d.clubs.includes(clubId))!;
 
 export const today = (cfg: GameConfig, c: Career): Today => {
-    if (c.day > seasonDays(cfg)) return { kind: 'seasonEnd' };
-    const k = cfg.career.daysPerMatchday;
-    if ((c.day - 1) % k === 0) {
-        const round = (c.day - 1) / k;
-        const division = divisionOf(c, c.userClubId);
-        const fixture = division.fixtures.find((f) => f.round === round && (f.home === c.userClubId || f.away === c.userClubId))!;
-        return { kind: 'match', round, fixture, division };
-    }
-    return { kind: 'training' };
+    if (c.day > seasonDays(cfg, c)) return { kind: 'seasonEnd' };
+    const index = (c.day - 1) / cfg.career.daysPerMatchday;
+    if (!Number.isInteger(index)) return { kind: 'training' };
+    const date = seasonSchedule(cfg, c)[index]!;
+    const fixture = scheduledFixture(c, date);
+    return fixture ? { kind: 'match', fixture, round: date.round, cup: date.cup } : { kind: 'training', cup: date.cup };
 };
 
 export const table = (d: Division): TableRow[] => {
@@ -457,9 +487,12 @@ export const simulatedWinChance = (cfg: GameConfig, c: Career, f: Fixture, score
     }
     let ourProbability = Math.exp(-ours);
     let win = 0;
+    const cup = isCupFixture(f);
     for (let goals = 0; goals <= goalLimit(ours); goals++) {
         const mostTheyCanScore = goals + lead - 1;
-        if (mostTheyCanScore >= 0) win += ourProbability * (theirCumulative[mostTheyCanScore] ?? 1);
+        const outright = mostTheyCanScore < 0 ? 0 : (theirCumulative[mostTheyCanScore] ?? 1);
+        const tied = cup && mostTheyCanScore >= -1 ? (theirCumulative[mostTheyCanScore + 1] ?? 1) - outright : 0;
+        win += ourProbability * (outright + tied * 0.5);
         ourProbability *= ours / (goals + 1);
     }
     return Math.min(1, win);
@@ -487,41 +520,83 @@ export type MatchReport = {
     lines?: Record<string, PlayerMatchLine>;
 };
 
+const aiMatchXp = (cfg: GameConfig, rng: Rng, club: CareerClub) => {
+    for (const id of club.lineup) {
+        const p = club.squad.find((q) => q.id === id);
+        if (p) gainXp(cfg, rng, p, p.cls, cfg.career.matchXp * 0.8);
+    }
+};
+
+const playCupRound = (cfg: GameConfig, c: Career, rng: Rng, round: CupRound, userMatch?: { id: string; score: [number, number] }) => {
+    for (const f of round.fixtures) {
+        const score = f.id === userMatch?.id ? userMatch.score : simulateScore(cfg, rng, c, f);
+        recordCupScore(rng, f, score);
+        for (const id of [f.home, f.away]) {
+            if (id !== c.userClubId) aiMatchXp(cfg, rng, c.clubs[id]!);
+        }
+    }
+};
+
+const finishCupRound = (cfg: GameConfig, c: Career, rng: Rng, round: CupRound) => {
+    const cup = c.cup!;
+    const next = advanceCup(cup, round, rng, c.season);
+    if (cup.champion) {
+        const won = cup.champion === c.userClubId;
+        if (won) book(c, `${CUP_NAME} winners`, cfg.career.matchFee[userClub(c).tier]! * cfg.career.cupWinnerBonus);
+        news(c, `${c.clubs[cup.champion]!.name} win the ${CUP_NAME}!`, won ? 'good' : 'info');
+    }
+    const fixture = next && fixtureForClub(next.fixtures, c.userClubId);
+    if (fixture) {
+        const home = fixture.home === c.userClubId;
+        const opponent = c.clubs[home ? fixture.away : fixture.home]!;
+        news(c, `${CUP_NAME} draw · ${next.label}, ${home ? 'home to' : 'away at'} ${opponent.name} on Day ${next.day}.`);
+    }
+};
+
+const playLeagueRound = (cfg: GameConfig, c: Career, rng: Rng, round: number, userMatch: Fixture, report: MatchReport) => {
+    for (const d of c.divisions) {
+        for (const f of d.fixtures.filter((x) => x.round === round)) {
+            if (f.id === userMatch.id) {
+                f.result = report.score;
+                continue;
+            }
+            f.result = simulateScore(cfg, rng, c, f);
+            story.recordFixture(c, simLines(rng, c.clubs[f.home]!, f.result[0], f.result[1]));
+            story.recordFixture(c, simLines(rng, c.clubs[f.away]!, f.result[1], f.result[0]));
+        }
+    }
+};
+
 /**
- * Resolve the matchday: the user's fixture uses `report` (played or quick-simmed by the UI),
- * every other fixture in the pyramid is simulated. Pays wages and income, hands out match XP.
+ * Resolve the user's fixture from the report, sim the other fixtures, and apply matchday rewards.
  */
 export const playMatchday = (cfg: GameConfig, c: Career, report: MatchReport) => {
     const t = today(cfg, c);
     if (t.kind !== 'match') return;
     const rng = careerRng(c);
     const u = userClub(c);
-    for (const d of c.divisions) {
-        for (const f of d.fixtures.filter((x) => x.round === t.round)) {
-            if (f.id === t.fixture.id) f.result = report.score;
-            else {
-                f.result = simulateScore(cfg, rng, c, f);
-                // invented scorers & ratings feed the season stats and the Golden Boot race
-                story.recordFixture(c, simLines(rng, c.clubs[f.home]!, f.result[0], f.result[1]));
-                story.recordFixture(c, simLines(rng, c.clubs[f.away]!, f.result[1], f.result[0]));
-            }
-        }
-    }
-    // the user's result
     const f = t.fixture;
+    if (t.cup) playCupRound(cfg, c, rng, t.cup, { id: f.id, score: report.score });
+    else playLeagueRound(cfg, c, rng, t.round, f, report);
+
     const home = f.home === u.id;
     const [gf, ga] = home ? report.score : ([report.score[1], report.score[0]] as [number, number]);
     const opp = c.clubs[home ? f.away : f.home]!;
     const fee = cfg.career.matchFee[u.tier]!;
+    const winner = isCupFixture(f) ? cupWinner(f) : gf === ga ? undefined : gf > ga ? u.id : opp.id;
+    const won = winner === u.id;
+    const penalties = penaltyScore(f, home ? 0 : 1);
     book(c, `Match fee vs ${opp.short}`, fee);
-    if (gf > ga) book(c, 'Win bonus', Math.round(fee * cfg.career.winBonus));
-    else if (gf === ga) book(c, 'Draw bonus', Math.round(fee * cfg.career.drawBonus));
+    if (won) book(c, 'Win bonus', Math.round(fee * cfg.career.winBonus));
+    else if (!winner) book(c, 'Draw bonus', Math.round(fee * cfg.career.drawBonus));
     book(c, 'Wages', -wageBill(cfg, u));
+    const score = `${gf}–${ga}${penalties ? ` (${penalties})` : ''}`;
     news(
         c,
-        `${gf > ga ? 'Won' : gf < ga ? 'Lost' : 'Drew'} ${gf}–${ga} ${home ? 'at home to' : 'away at'} ${opp.name}.`,
-        gf > ga ? 'good' : gf < ga ? 'bad' : 'info',
+        `${t.cup ? `${CUP_NAME} · ${t.cup.label} · ` : ''}${won ? 'Won' : winner ? 'Lost' : 'Drew'} ${score} ${home ? 'at home to' : 'away at'} ${opp.name}.`,
+        won ? 'good' : winner ? 'bad' : 'info',
     );
+    if (t.cup && !won) news(c, `Your ${CUP_NAME} run ends in the ${t.cup.label.toLowerCase()}.`, 'bad');
 
     // match XP & injuries for the user's XI
     for (const id of report.played) {
@@ -539,10 +614,12 @@ export const playMatchday = (cfg: GameConfig, c: Career, report: MatchReport) =>
         }
     }
     // the user's fixture: real lines when played on the board, invented ones for a quick sim
-    const userLines = report.lines ?? simLines(rng, u, gf, ga);
-    const oppLines = report.lines ?? simLines(rng, opp, ga, gf);
+    const userLines = report.lines ?? (t.cup ? {} : simLines(rng, u, gf, ga));
     const mineOnly = Object.fromEntries(Object.entries(userLines).filter(([id]) => u.squad.some((p) => p.id === id)));
-    story.recordFixture(c, Object.fromEntries(Object.entries(oppLines).filter(([id]) => opp.squad.some((p) => p.id === id))));
+    if (!t.cup) {
+        const oppLines = report.lines ?? simLines(rng, opp, ga, gf);
+        story.recordFixture(c, Object.fromEntries(Object.entries(oppLines).filter(([id]) => opp.squad.some((p) => p.id === id))));
+    }
     afterMatchday(
         cfg,
         c,
@@ -556,21 +633,20 @@ export const playMatchday = (cfg: GameConfig, c: Career, report: MatchReport) =>
         (text, tone) => news(c, text, tone),
     );
 
-    // AI clubs: pay nothing we track, but their XI gains XP too
-    for (const club of Object.values(c.clubs)) {
-        if (club.id === u.id) continue;
-        for (const id of club.lineup) {
-            const p = club.squad.find((q) => q.id === id);
-            if (p) gainXp(cfg, rng, p, p.cls, cfg.career.matchXp * 0.8);
+    if (t.cup) finishCupRound(cfg, c, rng, t.cup);
+    else {
+        for (const club of Object.values(c.clubs)) {
+            if (club.id !== u.id) aiMatchXp(cfg, rng, club);
         }
     }
     saveRng(c, rng);
     c.day++;
 };
 
-/** Training day: run the user's plan, heal/aggravate injuries, AI clubs train too. */
+/** Run one drill per club and rest injured players. */
 export const trainingDay = (cfg: GameConfig, c: Career) => {
-    if (today(cfg, c).kind !== 'training') return;
+    const t = today(cfg, c);
+    if (t.kind !== 'training') return;
     const rng = careerRng(c);
     const u = userClub(c);
     const trainees: Trainee[] = [];
@@ -579,63 +655,54 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
         news(c, text, tone);
         updates.unshift(text);
     };
-    let used = 0;
+    let recovering = 0;
     let xp = 0;
     let newClass = false;
-    for (const p of u.squad) {
-        const s = c.plan[p.id];
-        const intensity = s && used < cfg.training.slots ? s.intensity : undefined;
-        if (intensity) used++;
-        if (p.injury) {
-            const heal = cfg.training.heal[intensity ?? 'rest'];
-            p.injury -= heal;
-            if (intensity === 'full' && rng.chance(cfg.training.aggravateChance)) {
-                p.injury += 2;
-                announce(`${p.name} trained through the pain and made it worse.`, 'bad');
+    const cupClubs = new Set(t.cup?.fixtures.flatMap((f) => [f.home, f.away]));
+    for (const club of Object.values(c.clubs)) {
+        if (cupClubs.has(club.id)) continue;
+        const isUser = club === u;
+        const focus = isUser ? c.trainingFocus : rng.pick(TRAINING_FOCUS_IDS);
+        for (const p of club.squad) {
+            const gain = trainingGain(cfg, p, focus);
+            if (!gain) {
+                if (isUser) recovering++;
+                p.injury = (p.injury ?? 0) - cfg.training.heal;
+                if (p.injury <= 0) {
+                    delete p.injury;
+                    if (isUser) announce(`${p.name} is fit again.`, 'good');
+                }
+                continue;
             }
-            if (p.injury <= 0) {
-                delete p.injury;
-                announce(`${p.name} is fit again.`, 'good');
-            }
-        }
-        if (s && intensity) {
-            if (!p.injury) trainees.push({ player: p, cls: s.cls });
-            const injuredPenalty = p.injury ? 0.5 : 1;
-            const amount = Math.round(cfg.training.xp[intensity] * injuredPenalty * (0.85 + rng() * 0.3));
+            const { cls, amount } = gain;
+            const before = classLevel(p, cls);
+            const ups = gainXp(cfg, rng, p, cls, amount);
+            if (!isUser) continue;
+            trainees.push({ player: p, cls });
             xp += amount;
-            const before = classLevel(p, s.cls);
-            const ups = gainXp(cfg, rng, p, s.cls, amount);
             if (ups) {
-                const lv = classLevel(p, s.cls);
                 if (before === 0) newClass = true;
                 announce(
                     before === 0
-                        ? `${p.name} picked up a new class: ${cfg.classes[s.cls].label}!`
-                        : `${p.name} reached ${cfg.classes[s.cls].short} ${lv}.`,
+                        ? `${p.name} picked up a new class: ${cfg.classes[cls].label}!`
+                        : `${p.name} reached ${cfg.classes[cls].short} ${classLevel(p, cls)}.`,
                     'good',
                 );
             }
         }
     }
-    for (const club of Object.values(c.clubs)) {
-        if (club.id === u.id) continue;
-        for (let i = 0; i < cfg.training.aiSessions; i++) {
-            const p = rng.pick(club.squad);
-            gainXp(cfg, rng, p, p.cls, cfg.training.xp.full * 0.8);
-            if (p.injury) {
-                p.injury -= 1;
-                if (p.injury <= 0) delete p.injury;
-            }
-        }
+    if (t.cup) {
+        playCupRound(cfg, c, rng, t.cup);
+        finishCupRound(cfg, c, rng, t.cup);
     }
     const letter = afterTraining(cfg, c, rng, { trainees, newClass }, (label, amount) => book(c, label, amount), announce);
     if (letter) {
         letter.trainingDay = c.day;
         updates.unshift(`New letter · ${letter.title}`);
     }
-    const summary = used
-        ? `${used} training session${used === 1 ? '' : 's'} completed · ${xp} XP earned.`
-        : 'Rest day. No training sessions ran.';
+    const summary = trainees.length
+        ? `${TRAINING_FOCUSES[c.trainingFocus].label} · ${trainees.length} trained · ${xp} XP earned${recovering ? ` · ${recovering} recovering` : ''}.`
+        : 'Recovery day. The squad rested.';
     news(c, summary);
     saveRng(c, rng);
     c.day++;
@@ -739,7 +806,7 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
 
     c.season++;
     c.day = 1;
-    for (const d of c.divisions) d.fixtures = roundRobin(d.clubs, rng, `s${c.season}-t${d.tier}`);
+    buildSeason(cfg, c, rng);
     c.market = buildMarket(cfg, rng, c);
     for (const s of summary) news(c, s, s.includes('Relegated') || s.includes('retired') ? 'bad' : 'good');
     news(c, `Season ${c.season} begins. A fresh crop of players is on the market.`, 'info');
@@ -791,23 +858,10 @@ export const sell = (cfg: GameConfig, c: Career, playerId: string): string | nul
     const price = salePrice(cfg, p);
     u.squad = u.squad.filter((q) => q.id !== p.id);
     u.lineup = u.lineup.filter((id) => id !== p.id);
-    delete c.plan[p.id];
     validLineup(cfg, u);
     book(c, `Sold ${p.name}`, price);
     news(c, `${p.name} sold for ${money(price)}.`, 'info');
     return null;
-};
-
-// ------------------------------------------------------------------ training plan
-
-/** A starting plan: the XI train their primary class at light intensity, up to the slot count. */
-export const defaultPlan = (cfg: GameConfig, club: CareerClub): Record<string, Session> => {
-    const plan: Record<string, Session> = {};
-    for (const id of club.lineup.slice(0, cfg.training.slots)) {
-        const p = club.squad.find((q) => q.id === id);
-        if (p && !p.injury) plan[p.id] = { cls: p.cls, intensity: 'light' };
-    }
-    return plan;
 };
 
 // ------------------------------------------------------------------ persistence
@@ -817,8 +871,11 @@ export const loadCareer = (): Career | null => {
     try {
         const raw = readSave();
         if (!raw) return null;
-        const c = JSON.parse(raw) as Career;
-        return c.version === 1 ? c : null;
+        const c = JSON.parse(raw) as Career & { plan?: unknown };
+        if (c.version !== 1) return null;
+        if (!TRAINING_FOCUS_IDS.includes(c.trainingFocus)) c.trainingFocus = DEFAULT_TRAINING_FOCUS;
+        delete c.plan;
+        return c;
     } catch {
         return null;
     }

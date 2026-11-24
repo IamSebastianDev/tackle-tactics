@@ -114,21 +114,16 @@ export class MatchController {
     readonly tutorialDone = grain(false);
     private resolveLesson: (() => void) | null = null;
     private tutEvents: MatchEvent[] = [];
-    /** Pre-match intro step (0 ground, 1 line-ups, 2 the story), or null when not showing. */
-    readonly intro = grain<number | null>(null);
+    /** Pre-match overview (squads on the pitch, commentators, ground) is showing. */
+    readonly intro = grain(false);
     private resolveIntro: (() => void) | null = null;
-    readonly introSteps = 3;
-    introNext() {
-        const i = this.intro();
-        if (i === null) return;
-        audio.play('click');
-        if (i + 1 < this.introSteps) this.intro.set(i + 1);
-        else this.introSkip();
-    }
-    introSkip() {
+    /** Close the pre-match overview and kick off. */
+    introDone(click = true) {
         const r = this.resolveIntro;
+        if (!r) return;
         this.resolveIntro = null;
-        r?.();
+        if (click) audio.play('click');
+        r();
     }
     /** Player pause (P): freezes the clock and the AI between actions. */
     readonly paused = grain(false);
@@ -231,7 +226,7 @@ export class MatchController {
 
     stop() {
         this.stopped = true;
-        this.introSkip();
+        this.introDone(false);
         cancelAnimationFrame(this.timerRaf);
         this.resolveInput?.({ t: 'stop' });
         this.resolveTip?.();
@@ -500,10 +495,10 @@ export class MatchController {
         const ref = m.state.referee;
         const style = this.cfg.referee.styles[ref.style];
         if (prefs().matchIntro) {
-            // the pre-match intro: the view shows it while `intro` holds a step; Enter/click advance, Esc skips
-            this.intro.set(0);
+            // the pre-match overview: the view shows it while `intro` is set; Enter, Esc or the button kick off
+            this.intro.set(true);
             await new Promise<void>((r) => (this.resolveIntro = r));
-            this.intro.set(null);
+            this.intro.set(false);
             if (this.stopped) return;
         }
         await this.showBanner(`${m.state.clubs[0].short} vs ${m.state.clubs[1].short}`, 'Kick off', 1100);

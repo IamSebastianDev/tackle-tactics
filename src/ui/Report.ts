@@ -1,3 +1,4 @@
+import { Dialog } from './Dialog';
 /** Full-time report: score, goal timeline, team stat bars, Man of the Match, player ratings. */
 import { html, on } from '@grainular/nord';
 import type { MatchController } from './controller';
@@ -7,7 +8,7 @@ import type { Piece, TeamSide } from '../types';
 
 const ratingClass = (r: number) => (r >= 8 ? 'r-great' : r >= 7 ? 'r-good' : r >= 6 ? 'r-ok' : 'r-poor');
 
-export const MatchReport = (ctl: MatchController, onContinue: () => void, continueLabel = 'Continue') => {
+export const MatchReport = (ctl: MatchController, onContinue: () => void, continueLabel = 'Continue', verdictOverride?: string) => {
     const m = ctl.match;
     const s = ctl.stats;
     const clubs = m.state.clubs;
@@ -53,15 +54,17 @@ export const MatchReport = (ctl: MatchController, onContinue: () => void, contin
         })}</ul>`;
     };
 
-    return html`<div class="modal report-modal">
-        <div class="modal-body report">
+    return Dialog({
+        label: 'Match report',
+        className: 'modal report-modal',
+        children: html`<div class="modal-body report">
             <div class="modal-scroll">
                 <div class="report-head">
                     <div class="rteam ${isLightKit(clubs[0].kit) ? 'light' : ''}" style="--kit:${kitColor(clubs[0].kit)}">${clubs[0].name}</div>
                     <div class="rscore">${String(a)}<span>–</span>${String(b)}</div>
                     <div class="rteam ${isLightKit(clubs[1].kit) ? 'light' : ''}" style="--kit:${kitColor(clubs[1].kit)}">${clubs[1].name}</div>
                 </div>
-                <h2 class="verdict">${verdict}</h2>
+                <h2 class="verdict">${verdictOverride ?? verdict}</h2>
                 <p class="ref-line">Referee ${m.state.referee.name} · ${m.cfg.referee.styles[m.state.referee.style].label} · ${String([...s.players.values()].reduce((n, l) => n + l.fouls, 0))} fouls</p>
                 <div class="report-grid">
                     <section>
@@ -93,6 +96,6 @@ export const MatchReport = (ctl: MatchController, onContinue: () => void, contin
                 </div>
             </div>
             <footer><button class="primary" ${on('click', onContinue)}>${continueLabel} →</button></footer>
-        </div>
-    </div>`;
+        </div>`,
+    });
 };

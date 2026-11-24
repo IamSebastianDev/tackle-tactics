@@ -582,6 +582,8 @@ export const defaultConfig = {
         matchFee: [260_000, 130_000, 64_000, 32_000, 17_000],
         winBonus: 0.6,
         drawBonus: 0.2,
+        /** Cup winner prize as a multiple of the club's match fee. */
+        cupWinnerBonus: 4,
         /** Season-goal lump sums as multiples of the tier's match fee. */
         goalTitle: 6,
         goalTop4: 2.5,
@@ -623,17 +625,13 @@ export const defaultConfig = {
         value: { base: 60_000, ovrExp: 4.2, wageRate: 0.0075 },
     },
     training: {
-        /** Players you can put through a session per training day. */
-        slots: 6,
-        xp: { light: 28, full: 55 },
-        /** Injury days healed per day by plan; full training may aggravate. */
-        heal: { rest: 2, light: 1, full: 0 },
-        aggravateChance: 0.25,
+        /** Base XP for every fit player, plus bonuses for the drill's attributes and role. */
+        xp: { base: 10, attributes: 18, primary: 18, secondary: 9 },
+        /** Injury days healed while sitting out a squad session. */
+        heal: 2,
         /** Injury chance per heavy knock taken in a match, and length range (days). */
         knockInjuryChance: 0.07,
         injuryDays: [2, 9] as [number, number],
-        /** AI clubs: sessions per training day. */
-        aiSessions: 5,
     },
     /** Player looks: how many skin tones exist (ui/recolor.ts) and how common each hair colour is. */
     looks: {

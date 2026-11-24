@@ -1,6 +1,9 @@
 import { combined, derived, grain } from '@grainular/grains';
+import { createConfirmation } from './confirm';
+import { controlValue, distinct } from './value';
+import { Dialog } from './Dialog';
 import { isDesktop, quitApp } from './desktop';
-import { $if, $render, attr, html, mounted, on } from '@grainular/nord';
+import { $each, $if, $render, $switch, attr, html, mounted, on } from '@grainular/nord';
 import { defaultConfig, withOverrides, type Difficulty, type GameConfig, type TeamStyle, type TimeoutPolicy } from '../config';
 import { createRng } from '../rng';
 import type { Club } from '../types';
@@ -15,6 +18,7 @@ import {
     loadCareer,
     newCareer,
     playMatchday,
+    seasonDays,
     saveCareer,
     simulateScore,
     simulatedWinChance,
@@ -24,8 +28,10 @@ import {
     type Career,
     awayKitFor,
     kitsClash,
+    type Fixture,
 } from '../meta/career';
-import { Hub } from './hub/Hub';
+import { CUP_NAME, penaltyScore } from '../meta/cup';
+import { Hub, type HubNotice } from './hub/Hub';
 import { styleOf } from '../ai/brain';
 import { recolorVersion } from './recolor';
 import {
@@ -127,12 +133,13 @@ const pacing = () => {
 };
 
 export const App = () => {
+    const confirmation = createConfirmation();
     const settings = grain<Settings>(loadSettings());
     const showHowto = grain(false);
     const screen = grain<'title' | 'setup' | 'newCareer' | 'hub' | 'match'>('title');
     let ctl: MatchController | null = null;
-    let career: Career | null = loadCareer();
-    let hubNotice: { title: string; lines: string[] } | null = null;
+    const career = grain<Career | null>(loadCareer());
+    const hubNotice = grain<HubNotice | null>(null);
     let matchExit: () => void = () => {};
     let finishOdds: (() => number) | undefined;
 
@@ -212,11 +219,17 @@ export const App = () => {
 
     const reportNotice = (c: Career, title: string, newsBefore: number) => {
         const fresh = c.news.slice(0, Math.max(0, c.news.length - newsBefore)).map((n) => n.text);
-        hubNotice = { title, lines: fresh.length ? fresh.slice(0, 8) : ['Matchday complete.'] };
+        hubNotice.set({ title, lines: fresh.length ? fresh.slice(0, 8) : ['Matchday complete.'] });
+    };
+
+    const resultTitle = (c: Career, f: Fixture) => {
+        const [home, away] = f.result!;
+        const penalties = penaltyScore(f);
+        return `${c.clubs[f.home]!.short} ${home} – ${away} ${c.clubs[f.away]!.short}${penalties ? ` (${penalties})` : ''}`;
     };
 
     const playCareerMatch = () => {
-        const c = career!;
+        const c = career()!;
         const cfg = careerCfg(c);
         const t = today(cfg, c);
         if (t.kind !== 'match') return;
@@ -273,15 +286,14 @@ export const App = () => {
                 : undefined;
             playMatchday(cfg, c, { score, knocks: m.state.knocks, played, lines });
             saveCareer(c);
-            const [h, a] = [c.clubs[t.fixture.home]!, c.clubs[t.fixture.away]!];
-            reportNotice(c, `${h.short} ${score[0]} – ${score[1]} ${a.short}${m.state.over ? '' : ' (rest simulated)'}`, before);
+            reportNotice(c, `${resultTitle(c, t.fixture)}${m.state.over ? '' : ' (rest simulated)'}`, before);
             screen.set('hub');
         };
         screen.set('match');
     };
 
     const simCareerMatch = () => {
-        const c = career!;
+        const c = career()!;
         const cfg = careerCfg(c);
         const t = today(cfg, c);
         if (t.kind !== 'match') return;
@@ -293,19 +305,20 @@ export const App = () => {
         c.rngState = rng.state();
         const before = c.news.length;
         playMatchday(cfg, c, { score, knocks: {}, played: userClub(c).lineup });
-        saveCareer(c);
-        const [h, a] = [c.clubs[t.fixture.home]!, c.clubs[t.fixture.away]!];
-        reportNotice(c, `${h.short} ${score[0]} – ${score[1]} ${a.short}`, before);
-        screen.set('title');
-        screen.set('hub');
+        reportNotice(c, resultTitle(c, t.fixture), before);
     };
 
     const hubActions = {
+        confirm: confirmation.confirm,
         playMatch: playCareerMatch,
         simMatch: simCareerMatch,
-        endSeason: () => endSeason(careerCfg(career!), career!),
+        endSeason: () => {
+            const c = career()!;
+            return endSeason(careerCfg(c), c);
+        },
         exit: () => {
-            if (career) saveCareer(career);
+            const c = career();
+            if (c) saveCareer(c);
             screen.set('title');
         },
         settings: () => showSettings.set(true),
@@ -313,62 +326,61 @@ export const App = () => {
 
     const set = <K extends keyof Settings>(k: K, v: Settings[K]) => settings.update((s) => ({ ...s, [k]: v }));
 
-    const select = <K extends keyof Settings>(k: K, opts: Array<[string, string]>, cast: (v: string) => Settings[K]) =>
-        html`<select ${on('change', (e) => set(k, cast((e.target as HTMLSelectElement).value)))}>
-            ${opts.map(([v, label]) => html`<option value="${v}" ${attr({ selected: settings()[k] === cast(v) })}>${label}</option>`)}
+    const setting = <K extends keyof Settings>(key: K) => distinct(derived(settings, (s) => s[key]));
+    const select = <K extends keyof Settings>(k: K, opts: Array<[string, string]>, cast: (v: string) => Settings[K]) => {
+        const value = derived(setting(k), (current) => opts.find(([v]) => current === cast(v))?.[0] ?? opts[0]![0]);
+        return html`<select ${controlValue(value)} ${on('change', (e) => set(k, cast((e.currentTarget as HTMLSelectElement).value)))}>
+            ${opts.map(([v, label]) => html`<option value="${v}" ${attr({ selected: value() === v })}>${label}</option>`)}
         </select>`;
-
-    const range = (k: 'timerSeconds' | 'rounds', min: number, max: number, step: number, unit: string) => {
-        const label = derived(settings, (s) => (k === 'timerSeconds' && s[k] <= 0 ? 'Off' : `${s[k]}${unit}`));
-        return html`<div class="range"><input type="range" min="${String(min)}" max="${String(max)}" step="${String(step)}" value="${String(settings()[k])}"
-            ${on('input', (e) => set(k, Number((e.target as HTMLInputElement).value)))} /><output>${label}</output></div>`;
     };
 
-    const setupSquads = derived(combined([settings, recolorVersion]), ([s]) => {
-        const cfg = configFor(s);
-        return { cfg, clubs: buildClubs(cfg, s), mode: s.mode };
-    });
+    const range = (k: 'timerSeconds' | 'rounds', min: number, max: number, step: number, unit: string) => {
+        const value = setting(k);
+        const label = derived(value, (n) => (k === 'timerSeconds' && n <= 0 ? 'Off' : `${n}${unit}`));
+        return html`<div class="range"><input type="range" min="${String(min)}" max="${String(max)}" step="${String(step)}" value="${String(value())}" ${controlValue(value)}
+            ${on('input', (e) => set(k, Number((e.currentTarget as HTMLInputElement).value)))} /><output>${label}</output></div>`;
+    };
+
+    const setupSquads = derived(
+        combined([setting('seed'), setting('homeFormation'), setting('awayFormation'), setting('homeKit'), setting('awayKit')]),
+        () => buildClubs(defaultConfig, settings()),
+    );
 
     const formations = defaultConfig.formations.map((f) => [f.id, f.label] as [string, string]);
     const kits = defaultConfig.kits.outfield.map((k) => [k, k[0]!.toUpperCase() + k.slice(1)] as [string, string]);
 
     const SetupSquad = (side: 'Home' | 'Away') => {
         const home = side === 'Home';
-        const heading = derived(setupSquads, ({ clubs, mode }) => {
-            const club = clubs[home ? 0 : 1]!;
-            const controller =
-                mode === 'watch' ? 'AI' : home ? (mode === 'hotseat' ? 'Player 1' : 'You') : mode === 'hotseat' ? 'Player 2' : 'AI';
-            return html`<header class="setup-club" style="--kit:${kitColor(club.kit)}">
-                <div><small>${side} · ${controller}</small><h2>${club.name}</h2></div>
-                <span>${defaultConfig.ai.styles[styleOf(club)].label}</span>
-            </header>`;
+        const club = derived(setupSquads, (clubs) => clubs[home ? 0 : 1]);
+        const controller = derived(setting('mode'), (mode) => {
+            if (mode === 'watch') return 'AI';
+            if (mode === 'hotseat') return home ? 'Player 1' : 'Player 2';
+            return home ? 'You' : 'AI';
         });
-        const players = derived(
-            setupSquads,
-            ({ cfg, clubs }) => html`<ul class="setup-roster" aria-label="${side} lineup">
-            ${clubs[home ? 0 : 1]!.squad.map((p) => {
-                const abilities = abilitiesOf(cfg, p)
-                    .map((id) => cfg.abilities[id].label)
-                    .join(', ');
-                return html`<li>
-                    <div class="sprite still" style="${spriteStyle(cfg, p.sprite, 'idle', 'down', p)}"></div>
-                    <span class="num">${String(p.number)}</span>
-                    <span class="nm" title="${p.name}">${p.name}</span>
-                    <span class="cl" title="${abilities || 'No abilities yet'}">${classLabel(cfg, p)}</span>
-                    <span class="sp" title="Speed (turn order)">${String(p.stats.speed)}</span>
-                </li>`;
-            })}
-        </ul>`,
-        );
+        const roster = $each(derived(club, (c) => c.squad)).$as((p) => {
+            const abilities = abilitiesOf(defaultConfig, p)
+                .map((id) => defaultConfig.abilities[id].label)
+                .join(', ');
+            const style = derived(recolorVersion, () => spriteStyle(defaultConfig, p.sprite, 'idle', 'down', p));
+            return html`<li>
+                <div class="sprite still" ${attr({ style })}></div>
+                <span class="num">${String(p.number)}</span><span class="nm" title="${p.name}">${p.name}</span>
+                <span class="cl" title="${abilities || 'No abilities yet'}">${classLabel(defaultConfig, p)}</span>
+                <span class="sp" title="Speed (turn order)">${String(p.stats.speed)}</span>
+            </li>`;
+        });
         return html`<section class="opts squad" aria-label="${side} squad">
-            ${$render(heading)}
+            <header class="setup-club" ${attr({ style: derived(club, (c) => `--kit:${kitColor(c.kit)}`) })}>
+                <div><small>${side} · ${controller}</small><h2>${derived(club, (c) => c.name)}</h2></div>
+                <span>${derived(club, (c) => defaultConfig.ai.styles[styleOf(c)].label)}</span>
+            </header>
             <div class="pair setup-team-options">
                 <label>Formation ${select(home ? 'homeFormation' : 'awayFormation', formations, (v) => v)}</label>
                 <label>Kit ${select(home ? 'homeKit' : 'awayKit', kits, (v) => v)}</label>
             </div>
             <div class="setup-lineup">
                 <div class="setup-roster-head" aria-hidden="true"><span>Player</span><span>Class</span><span>Speed</span></div>
-                ${$render(players)}
+                <ul class="setup-roster" aria-label="${side} lineup">${roster}</ul>
             </div>
         </section>`;
     };
@@ -466,11 +478,11 @@ export const App = () => {
                 <button class="primary" ${on('click', start)}>Kick off →</button>
             </footer>
         </div>
-        ${$if(showHowto).$then(
-            () => html`<div class="modal" ${on('click', (e) => {
-                if (e.target === e.currentTarget) showHowto.set(false);
-            })}>
-                <div class="modal-body howto-modal"><header><h2>How to play</h2><button class="ghost" ${on('click', () => showHowto.set(false))}>Close</button></header>
+        ${$if(showHowto).$then(() =>
+            Dialog({
+                label: 'How to play',
+                dismiss: () => showHowto.set(false),
+                children: html`<div class="modal-body howto-modal"><header><h2>How to play</h2><button class="ghost" ${on('click', () => showHowto.set(false))}>Close</button></header>
                 <div class="modal-scroll"><ul>
                     <li>All 22 players act one at a time, fastest first, teams alternating. A <b>round</b> is everyone acting once.</li>
                     <li>Each action has a timer. Act early to pass the baton; hesitate and you lose the action.</li>
@@ -481,7 +493,8 @@ export const App = () => {
                     <li><b>Abilities</b> come from class levels (hover a player's class for their kit). Wingers sprint, trick and cross; strikers run in behind and pick their shot; midfielders press, thread through balls and set the tempo; defenders slide, man-mark and foul; keepers command and rush out. Multiclass players get both kits. Most have a cooldown in rounds.</li>
                     <li>Keys: <kbd>Space</kbd> hold / end, <kbd>1</kbd>–<kbd>9</kbd> abilities, <kbd>T</kbd> tackle, <kbd>Esc</kbd> cancel, <kbd>A</kbd> let the AI play this action.</li>
                 </ul></div>
-            </div></div>`,
+            </div>`,
+            }),
         )}
     </main>`;
 
@@ -507,15 +520,15 @@ export const App = () => {
     };
 
     /** Title menu: one list, a ▶ on the focused item, its description underneath. Arrows + Enter work too. */
-    const Title = () => {
+    const Title = (c: Career | null) => {
         type Item = { id: string; label: string; desc: string; go: () => void; cls?: string };
         const items: Item[] = [
-            ...(career
+            ...(c
                 ? [
                       {
                           id: 'continue',
                           label: 'Continue career',
-                          desc: `${userClub(career).name} · Season ${String(career.season)} · Division ${String(userClub(career).tier + 1)}`,
+                          desc: `${userClub(c).name} · Season ${String(c.season)} · Division ${String(userClub(c).tier + 1)}`,
                           go: () => screen.set('hub'),
                           cls: 'primary',
                       },
@@ -568,18 +581,14 @@ export const App = () => {
             window.addEventListener('keydown', onKey);
             return () => window.removeEventListener('keydown', onKey);
         });
-        const menu = derived(
-            focus,
-            (f) =>
-                html`${items.map(
-                    (it, i) =>
-                        html`<button class="title-item ${it.cls ?? ''} ${i === f ? 'on' : ''}" ${on('mouseenter', () => focus.set(i))} ${on('focus', () => focus.set(i))} ${on('click', it.go)}>${it.label}</button>`,
-                )}`,
-        );
+        const menu = items.map((it, i) => {
+            const cls = derived(focus, (f) => `title-item ${it.cls ?? ''} ${i === f ? 'on' : ''}`);
+            return html`<button ${attr({ class: cls })} ${on('mouseenter', () => focus.set(i))} ${on('focus', () => focus.set(i))} ${on('click', it.go)}>${it.label}</button>`;
+        });
         const desc = derived(focus, (f) => items[f]?.desc ?? '');
         return html`<div class="setup title-screen" ${keys}>${titleScene()}<div class="setup-inner">
             <h1>Tackle <span>Tactics</span></h1>
-            <nav class="title-menu">${$render(menu)}</nav>
+            <nav class="title-menu">${menu}</nav>
             <p class="title-desc">${desc}</p>
             <p class="credits">Art by bubbabba · Goals in Pixels</p>
         </div></div>`;
@@ -591,9 +600,10 @@ export const App = () => {
         const keeperKit = grain(defaultConfig.kits.keepers[0]!);
         const awayKit = grain('white');
         // the away strip may never clash with the home one: move it along when the home kit changes
-        kit.subscribe((k) => {
+        const chooseHomeKit = (k: string) => {
+            kit.set(k);
             if (kitsClash(defaultConfig, awayKit(), k)) awayKit.set(awayKitFor(defaultConfig, k));
-        });
+        };
         /** The short name follows the club name until you type your own. */
         const short = grain('');
         const shortEdited = grain(false);
@@ -614,7 +624,7 @@ export const App = () => {
             const cls = derived(combined([target, clash]), ([cur, c]) => `kit-swatch ${cur === k ? 'on' : ''} ${c ? 'clash' : ''}`);
             const title = derived(clash, (c) => (c ? `${kitName(k)}: clashes with the home kit` : kitName(k)));
             const art = spriteStyle(defaultConfig, which === 'keeper' ? k : `${k}_player_1`, 'idle', 'down');
-            return html`<button ${attr({ class: cls, disabled: clash, title })} ${on('click', () => target.set(k))}>
+            return html`<button ${attr({ class: cls, disabled: clash, title })} ${on('click', () => (which === 'home' ? chooseHomeKit(k) : target.set(k)))}>
                 <span class="portrait kit-portrait"><span class="sprite still" style="${art}"></span></span>
                 <small>${kitName(k)}</small>
             </button>`;
@@ -631,10 +641,19 @@ export const App = () => {
             </div>
         </div>`;
         const s = settings();
-        const create = () => {
-            if (career && !confirm('Start a new career? Your current save will be replaced.')) return;
-            deleteCareer();
-            career = newCareer(
+        const startError = grain('');
+        const create = async () => {
+            const existing = career();
+            if (
+                existing &&
+                !(await confirmation.confirm({
+                    title: 'Start a new career?',
+                    body: `Your current career with ${userClub(existing).name} will be replaced.`,
+                    action: 'Start new career',
+                }))
+            )
+                return;
+            const next = newCareer(
                 defaultConfig,
                 Math.floor(Math.random() * 1e9),
                 {
@@ -651,16 +670,20 @@ export const App = () => {
                     keeperKit: keeperKit(),
                 },
             );
-            saveCareer(career);
-            hubNotice = {
-                title: `Welcome to ${userClub(career).name}`,
+            if (!saveCareer(next)) {
+                startError.set('Could not save the new career.');
+                return;
+            }
+            career.set(next);
+            hubNotice.set({
+                title: `Welcome to ${userClub(next).name}`,
                 lines: [
                     'You start in division 5 of 5. The top 2 clubs are promoted each season.',
-                    'Every 3 days there is a matchday; the days between are for training.',
-                    'Use Training to level up class skills (and unlock abilities), Tactics to set your XI, Market to buy and sell.',
+                    `The ${seasonDays(defaultConfig, next)}-day season includes home and away league fixtures and the all-division ${CUP_NAME}.`,
+                    'Choose a squad focus in Training to develop class skills. Set your XI in Tactics and buy or sell players in the Market.',
                     'Press the yellow button at the top right to move the calendar on.',
                 ],
-            };
+            });
             screen.set('hub');
         };
         return html`<div class="setup"><div class="setup-inner new-career">
@@ -705,80 +728,83 @@ export const App = () => {
                     (v) => v as TimeoutPolicy,
                 )}</label>
                 <p class="muted">Match settings apply to every match you play in this career. Default ${String(s.rounds)} rounds; 12–16 is a brisk match.</p>
+                <p class="neg" role="status" ${attr({ hidden: derived(startError, (message) => !message) })}>${startError}</p>
                 <div class="buttons"><button class="ghost" ${on('click', () => screen.set('title'))}>Back</button><button class="primary" ${on('click', create)}>Start career</button></div>
             </section>
             </div>
         </div></div>`;
     };
 
-    const view = derived(screen, (s) => {
-        if (s === 'match' && ctl) return MatchView(ctl, { onExit: matchExit, onSettings: () => showSettings.set(true), finishOdds });
-        if (s === 'hub' && career) {
-            if (import.meta.env.DEV) (window as unknown as { __career: Career }).__career = career; // debugging hook
-            const n = hubNotice;
-            hubNotice = null;
-            return Hub(careerCfg(career), career, hubActions, n);
-        }
-        if (s === 'newCareer') return NewCareer();
-        if (s === 'setup') return Setup();
-        return html`${Title()}${RadioPlayer({ floating: true })}`;
-    });
+    const view = $switch(screen)
+        .$case('match', () => {
+            if (!ctl) return html``;
+            const c = career();
+            const day = finishOdds && c ? today(careerCfg(c), c) : null;
+            return MatchView(ctl, {
+                onExit: matchExit,
+                onSettings: () => showSettings.set(true),
+                finishOdds,
+                knockout: day?.kind === 'match' && !!day.cup,
+            });
+        })
+        .$case('hub', () => {
+            const c = career();
+            if (!c) return html``;
+            if (import.meta.env.DEV) (window as unknown as { __career: Career }).__career = c;
+            return Hub(careerCfg(c), c, hubActions, hubNotice);
+        })
+        .$case('newCareer', NewCareer)
+        .$case('setup', Setup)
+        .$default(() => html`${$render(derived(career, Title))}${RadioPlayer({ floating: true })}`);
     // ------------------------------------------------------------ settings (one modal over any screen)
     const showSettings = grain(false);
-    const settingsModal = derived(showSettings, (open) =>
-        open
-            ? SettingsModal({
-                  onClose: () => showSettings.set(false),
-                  defaults: {
-                      get: () => {
-                          const x = settings();
-                          return {
-                              timerSeconds: x.timerSeconds,
-                              rounds: x.rounds,
-                              difficulty: x.difficulty,
-                              timeoutPolicy: x.timeoutPolicy,
-                          };
-                      },
-                      set: (o) => {
-                          settings.update((x) => ({ ...x, ...o }));
-                          saveSettings(settings());
-                      },
-                  },
-                  career: career ? { name: userClub(career).name, settings: career.settings, save: () => saveCareer(career!) } : undefined,
-                  onDeleteCareer: career
-                      ? () => {
-                            deleteCareer();
-                            career = null;
-                            showSettings.set(false);
-                            screen.set('newCareer');
-                            screen.set('title');
-                        }
-                      : undefined,
-              })
-            : html``,
-    );
+    const settingsModal = $if(showSettings).$then(() => {
+        const c = career();
+        return SettingsModal({
+            confirm: confirmation.confirm,
+            onClose: () => showSettings.set(false),
+            defaults: {
+                get: () => {
+                    const x = settings();
+                    return {
+                        timerSeconds: x.timerSeconds,
+                        rounds: x.rounds,
+                        difficulty: x.difficulty,
+                        timeoutPolicy: x.timeoutPolicy,
+                    };
+                },
+                set: (o) => {
+                    settings.update((x) => ({ ...x, ...o }));
+                    saveSettings(settings());
+                },
+            },
+            career: c ? { name: userClub(c).name, settings: c.settings, save: () => saveCareer(c) } : undefined,
+            onDeleteCareer: c
+                ? () => {
+                      deleteCareer();
+                      showSettings.set(false);
+                      screen.set('title');
+                      career.set(null);
+                  }
+                : undefined,
+        });
+    });
     const keys = mounted<HTMLDivElement>(() => {
-        const k = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && showSettings()) {
-                e.stopImmediatePropagation();
-                showSettings.set(false);
-            }
-        };
         // audio needs a user gesture; every button gets a tactile click
         const down = () => audio.unlock();
         window.addEventListener('keydown', down, { once: true });
         const click = (e: MouseEvent) => {
             if ((e.target as HTMLElement).closest('button')) audio.play('click');
         };
-        window.addEventListener('keydown', k, true);
         window.addEventListener('pointerdown', down);
         window.addEventListener('click', click);
+        const unwatchScreen = screen.subscribe((s) => radio.setMatch(s === 'match'));
         return () => {
-            window.removeEventListener('keydown', k, true);
+            unwatchScreen();
+            window.removeEventListener('keydown', down);
             window.removeEventListener('pointerdown', down);
             window.removeEventListener('click', click);
         };
     });
-    screen.subscribe((s) => radio.setMatch(s === 'match'));
-    return html`<div class="app-root" ${keys}>${$render(view)}${$render(settingsModal)}</div>`;
+    return html`<div class="app-root" ${keys}>${view}${settingsModal}${confirmation.dialog}</div>`;
 };

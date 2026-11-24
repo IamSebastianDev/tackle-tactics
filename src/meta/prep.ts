@@ -11,6 +11,7 @@ import { createRng } from '../rng';
 import type { Referee } from '../types';
 import { rollConditions, type Conditions } from '../world/stadium';
 import { stadiumOf, table, type Career, type Fixture } from './career';
+import { CUP_NAME, isCupFixture } from './cup';
 import { moraleLabel, rivalOf, shiftMorale, story } from './story';
 
 export type TeamTalk = 'calm' | 'fire' | 'demand';
@@ -107,7 +108,12 @@ export const storyLines = (cfg: GameConfig, c: Career, f: Fixture, p: Prep): str
     const div = c.divisions.find((d) => d.clubs.includes(u.id));
     const lines: string[] = [];
     if (isDerby(c, f)) lines.push(`It's the derby. ${opp.name} — the town has talked about nothing else all week.`);
-    if (div) {
+    if (isCupFixture(f)) {
+        const round = c.cup?.rounds[f.round];
+        lines.push(
+            `${CUP_NAME}${round ? ` · ${round.label}` : ''}. ${opp.name} play in Division ${opp.tier + 1}. A draw goes to penalties.`,
+        );
+    } else if (div) {
         const rows = table(div);
         const pos = (id: string) => rows.findIndex((r) => r.club === id) + 1;
         const played = rows.find((r) => r.club === u.id)?.p ?? 0;

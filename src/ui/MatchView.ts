@@ -1,10 +1,12 @@
 import { combined, derived, grain } from '@grainular/grains';
-import { $each, $if, $render, attr, createDirective, html, mounted, on } from '@grainular/nord';
+import { $each, $if, $render, $switch, attr, createDirective, html, mounted, on } from '@grainular/nord';
 import { isLightKit, kitColor } from './kits';
 import { Playbook } from './Playbook';
 import { atmosphere, pitchSurface, stadiumProps } from './StadiumView';
 import { conditionsLabel, generateStadium } from '../world/stadium';
 import { MatchReport } from './Report';
+import { Dialog } from './Dialog';
+import { distinct } from './value';
 import { MatchRadioButton, MatchRadioControls } from './RadioUI';
 import { audio } from './audio';
 import { CONTROL_MODES, prefs, setPref } from './prefs';
@@ -36,9 +38,9 @@ export { isLightKit, kitColor };
 const statBar = (label: string, v: number) =>
     html`<div class="stat"><span>${label}</span><i style="--v:${v}%"></i><b>${String(v)}</b></div>`;
 
-type MatchViewOptions = { onExit: () => void; onSettings?: () => void; finishOdds?: () => number };
+type MatchViewOptions = { onExit: () => void; onSettings?: () => void; finishOdds?: () => number; knockout?: boolean };
 
-export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds }: MatchViewOptions) => {
+export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds, knockout }: MatchViewOptions) => {
     const m = ctl.match;
     const cfg = ctl.cfg;
     const { cols, rows, margin } = cfg.pitch;
@@ -200,20 +202,6 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     });
 
     // ------------------------------------------------------------ camera
-    /**
-     * Fires only when `key()` changes after any of `sources` emits. Whole blocks (player card, dock)
-     * derive from this instead of the match tick, so they aren't torn down and rebuilt (sprites
-     * blinking) on every tick when nothing they show has changed.
-     */
-    const changes = (sources: Array<{ subscribe: (fn: () => void) => unknown }>, key: () => string) => {
-        const g = grain(key());
-        for (const src of sources)
-            src.subscribe(() => {
-                const k = key();
-                if (k !== g()) g.set(k);
-            });
-        return g;
-    };
     const zoomBias = grain(1);
     /**
      * Free camera: a pan offset (viewport px) on top of the automatic framing. Drag the pitch, use the
@@ -229,7 +217,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     };
     const nudge = (dx: number, dy: number) => pan.update((o) => clampPan(o.x + dx, o.y + dy));
     let framedFor = '';
-    ctl.tick.subscribe(() => {
+    const recenterOnTurn = () => {
         // a new player on the ball or a kick in the air: give the camera back to the game
         const frame = m.state.over ? '' : `${m.active().id}${ctl.followBall ? ':ball' : ''}`;
         if (frame !== framedFor) {
@@ -237,7 +225,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             const o = pan();
             if (o.x || o.y) pan.set({ x: 0, y: 0 });
         }
-    });
+    };
     /** How much the camera leans in: crowded balls get a closer look (Settings → auto zoom). */
     const autoZoom = (): { zoom: number; focus: Cell | null } => {
         if (!prefs().autoZoom || m.state.over) return { zoom: 1, focus: null };
@@ -415,10 +403,10 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 `${spriteStyle(cfg, p.player.sprite, currentAnim(p), p.facing, p.player)};width:${R}px;height:${R}px;left:${-R / 2}px;top:${-feet}px`,
         );
         const kit = kitColor(m.state.clubs[p.team].kit);
-        const tokenStam = derived(ctl.tick, () =>
-            p.stamina < cfg.fatigue.tired
-                ? html`<div class="tok-stam ${p.stamina < cfg.fatigue.exhausted ? 'low' : ''}"><i style="width:${String(Math.round(p.stamina * 2))}%"></i></div>`
-                : html``,
+        const stamina = derived(ctl.tick, () => p.stamina);
+        const tokenStam = $if(derived(stamina, (n) => n < cfg.fatigue.tired)).$then(
+            () =>
+                html`<div ${attr({ class: derived(stamina, (n) => `tok-stam ${n < cfg.fatigue.exhausted ? 'low' : ''}`) })}><i ${attr({ style: derived(stamina, (n) => `width:${Math.round(n * 2)}%`) })}></i></div>`,
         );
         const badges = derived(ctl.tick, () => {
             const s = p.status;
@@ -437,7 +425,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 <div class="sprite" ${attr({ style: sprite })}></div>
                 <div class="tag" style="--kit:${kit}">${String(p.player.number)}<span class="badges">${badges}</span></div>
                 <div class="carrier-mark"><i></i></div>
-                ${$render(tokenStam)}
+                ${tokenStam}
             </div>
         </div>`;
     };
@@ -496,28 +484,26 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         </div>`;
     };
 
-    const cardKey = changes([ctl.tick, recolorVersion], () => {
-        if (m.state.over) return 'over';
-        const p = m.active();
-        return `${p.id}|${movePoints(cfg, p)}|${p.reactionReady}|${Math.round(p.stamina)}|${p.yellows}|${ctl.isHuman(p.team)}|${recolorVersion()}`;
-    });
-    const activeCard = derived(cardKey, () => {
-        if (m.state.over) return html`<div class="card"></div>`;
-        const p = m.active();
+    const activePiece = distinct(derived(ctl.tick, () => (m.state.over ? null : m.active())));
+    const activeCard = derived(activePiece, (p) => {
+        if (!p) return html`<div class="card"></div>`;
         const s = p.player.stats;
         const kit = kitColor(club(p.team).kit);
         const human = ctl.isHuman(p.team);
+        const sprite = derived(recolorVersion, () => spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player));
+        const readiness = derived(ctl.tick, () => `Move ${movePoints(cfg, p)} · Reaction ${p.reactionReady ? 'ready' : 'spent'}`);
+        const stamina = derived(ctl.tick, () => Math.round(p.stamina));
         return html`<div class="card" style="--kit:${kit}">
             <div class="card-head">
-                <div class="portrait"><div class="sprite still" style="${spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player)}"></div></div>
+                <div class="portrait"><div class="sprite still" ${attr({ style: sprite })}></div></div>
                 <div>
                     <div class="pname">#${String(p.player.number)} ${p.player.name}</div>
                     <div class="pmeta">${classLabel(cfg, p.player)} · ${club(p.team).short} · ${human ? 'You' : 'AI'}</div>
-                    <div class="pmeta">Move ${String(movePoints(cfg, p))} · Reaction ${p.reactionReady ? 'ready' : 'spent'}</div>
-                    <div class="pmeta stam">Stamina ${staminaBar(p.stamina)} ${String(Math.round(p.stamina))}</div>
+                    <div class="pmeta">${readiness}</div>
+                    <div class="pmeta stam">Stamina <span ${attr({ class: derived(stamina, (n) => `stam-bar ${n < cfg.fatigue.exhausted ? 'low' : n < cfg.fatigue.tired ? 'mid' : ''}`) })}><i ${attr({ style: derived(stamina, (n) => `width:${n}%`) })}></i></span> ${derived(stamina, String)}</div>
                 </div>
             </div>
-            ${human ? html`` : kitList(p)}
+            ${human ? html`` : $render(derived(ctl.tick, () => kitList(p)))}
             <div class="stats">
                 ${statBar('SPD', s.speed)}${statBar('PAC', s.pace)}${statBar('PAS', s.passing)}${statBar('SHO', s.shooting)}
                 ${statBar('DRI', s.dribbling)}${statBar('TAC', s.tackling)}${statBar('REF', s.reflexes)}${statBar('COM', s.composure)}
@@ -606,7 +592,6 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 ? 'Pick a player'
                 : 'Instant';
     const infoFor = grain<AbilityId | null>(null);
-    ctl.awaitingHuman.subscribe(() => infoFor.set(null));
     /** While an ability is armed: what to click, and a way out. */
     const armedBar = derived(combined([ctl.mode, ctl.awaitingHuman]), ([mode, awaiting]) => {
         if (!mode || !awaiting) return html``;
@@ -630,86 +615,123 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         );
     };
 
-    const phaseStep = derived(combined([ctl.tick, ctl.awaitingHuman]), ([, awaiting]) => {
-        if (!awaiting || m.state.over || m.state.setPiece?.stage === 'setup') return html``;
-        const ph = m.state.phase;
-        return html`<div class="steps"><span class="${ph === 'move' ? 'on' : 'done'}">1 · Move</span><i></i><span class="${ph === 'act' ? 'on' : ''}">2 · Act</span></div>`;
+    const inputPhase = derived(combined([ctl.tick, ctl.awaitingHuman]), ([, awaiting]) => {
+        if (!awaiting || m.state.over) return 'idle';
+        return m.state.setPiece?.stage === 'setup' ? 'placing' : m.state.phase;
     });
+    const inTurn = derived(inputPhase, (phase) => phase === 'move' || phase === 'act');
+    const phaseStep = $if(inTurn).$then(
+        () => html`<div class="steps">
+        <span ${attr({ class: derived(inputPhase, (phase) => (phase === 'move' ? 'on' : 'done')) })}>1 · Move</span><i></i>
+        <span ${attr({ class: derived(inputPhase, (phase) => (phase === 'act' ? 'on' : '')) })}>2 · Act</span>
+    </div>`,
+    );
 
-    const dockKey = changes([ctl.tick, ctl.awaitingHuman], () => (ctl.awaitingHuman() ? `turn:${ctl.tick()}` : 'idle'));
-    const actions = derived(combined([dockKey, ctl.awaitingHuman, ctl.mode]), ([, awaiting, mode]) => {
-        if (!awaiting || m.state.over) return html`<div class="dock-row"></div>`;
-        const sp = m.state.setPiece;
-        if (sp?.stage === 'setup') {
+    const Placement = () => {
+        const text = derived(ctl.tick, () => {
+            const sp = m.state.setPiece;
+            if (sp?.stage !== 'setup') return { title: '', hint: '' };
             const left = sp.left[sp.next];
-            return html`<div class="dock-row setup-dock">
-                <div class="setup-info"><b>${sp.kind === 'corner' ? 'Corner' : 'Free kick'} · ${sp.next === sp.team ? 'Attacking' : 'Defending'}</b><span>${String(left)} placement${left === 1 ? '' : 's'} left · then the other side answers</span></div>
-                <div class="core"><button class="primary" ${on('click', () => ctl.pass())}>Done placing <kbd>Space</kbd></button></div>
-            </div>`;
-        }
-        const p = m.active();
-        const phase = m.state.phase;
-        const isCarrier = m.carrier()?.id === p.id;
-        const nowLane: Lane = phase === 'move' ? 'before' : 'after';
-        const keyed = phaseAbilities(p); // number keys follow the current step's cards
-        const owned = abilitiesOf(cfg, p.player);
-        const card = (id: AbilityId) => {
+            return {
+                title: `${sp.kind === 'corner' ? 'Corner' : 'Free kick'} · ${sp.next === sp.team ? 'Attacking' : 'Defending'}`,
+                hint: `${left} placement${left === 1 ? '' : 's'} left · then the other side answers`,
+            };
+        });
+        return html`<div class="dock-row setup-dock">
+            <div class="setup-info"><b>${derived(text, (t) => t.title)}</b><span>${derived(text, (t) => t.hint)}</span></div>
+            <div class="core"><button class="primary" ${on('click', () => ctl.pass())}>Done placing <kbd>Space</kbd></button></div>
+        </div>`;
+    };
+    const TurnActions = () => {
+        const owned = derived(activePiece, (p) => (p ? abilitiesOf(cfg, p.player) : []));
+        const lane = (which: Lane) => {
+            const ids = derived(owned, (list) => list.filter((id) => laneOf(id) === which));
+            const cls = derived(inputPhase, (phase) => `lane ${which === (phase === 'move' ? 'before' : 'after') ? 'now' : 'later'}`);
+            return $if(derived(ids, (list) => list.length > 0)).$then(
+                () => html`<div ${attr({ class: cls })}>
+                <span class="lane-label">${which === 'before' ? 'Before moving' : 'After moving'}</span>
+                <div class="lane-cards">${$each(ids)
+                    .$withKey((id) => id)
+                    .$as(AbilityCard)}</div>
+            </div>`,
+            );
+        };
+        const AbilityCard = (id: AbilityId) => {
             const a = abilityDef(cfg, id);
-            const reason = m.blockReason(p, id);
-            const cd = cooldownLeft(p, id, m.state.round);
-            const inLane = laneOf(id) === nowLane;
-            const armed = mode === id;
-            const k = keyed.indexOf(id) + 1;
-            const st = armed ? 'armed' : !inLane ? 'later' : cd > 0 ? 'wait' : reason ? 'blocked' : 'ready';
-            const label =
-                st === 'armed'
-                    ? 'Armed'
-                    : st === 'later'
-                      ? nowLane === 'before'
-                          ? 'After you move'
-                          : 'Before moving only'
-                      : st === 'wait'
-                        ? `Recharging · ${cd}`
-                        : st === 'blocked'
-                          ? reason
-                          : 'Ready';
+            const state = derived(combined([ctl.tick, ctl.mode]), ([, mode]) => {
+                if (m.state.over) return { state: 'later', label: '', odds: '', key: '', cooldown: 0 };
+                const p = m.active();
+                const phase = m.state.phase;
+                const reason = m.blockReason(p, id);
+                const cooldown = cooldownLeft(p, id, m.state.round);
+                const inLane = laneOf(id) === (phase === 'move' ? 'before' : 'after');
+                const status = mode === id ? 'armed' : !inLane ? 'later' : cooldown > 0 ? 'wait' : reason ? 'blocked' : 'ready';
+                const label =
+                    status === 'armed'
+                        ? 'Armed'
+                        : status === 'later'
+                          ? phase === 'move'
+                              ? 'After you move'
+                              : 'Before moving only'
+                          : status === 'wait'
+                            ? `Recharging · ${cooldown}`
+                            : status === 'blocked'
+                              ? (reason ?? '')
+                              : 'Ready';
+                const index = phaseAbilities(p).indexOf(id) + 1;
+                return {
+                    state: status,
+                    label,
+                    odds: slideOdds(p, id, status),
+                    key: status === 'ready' && index ? String(index) : '',
+                    cooldown,
+                };
+            });
             const enter = on('mouseenter', () => {
                 infoFor.set(id);
-                if (st === 'ready') ctl.preview.set(id);
+                if (state().state === 'ready') ctl.preview.set(id);
             });
             const leave = on('mouseleave', () => {
                 infoFor.set(null);
                 ctl.preview.set(null);
             });
-            return html`<button class="acard ${st}" ${enter} ${leave} ${on('click', () => ctl.useAbility(id))}>
+            const keyLabel = derived(state, (s) => s.key);
+            return html`<button ${attr({ class: derived(state, (s) => `acard ${s.state}`) })} ${enter} ${leave} ${on('click', () => ctl.useAbility(id))}>
                 <span class="ic">${a.icon}</span>
-                <span class="txt"><b>${a.label}</b><span>${kindOf(id)}${slideOdds(p, id, st)}</span></span>
-                <span class="state">${label}${st === 'ready' && k ? html`<kbd>${String(k)}</kbd>` : html``}</span>
-                ${st === 'wait' ? html`<span class="cd"><i style="width:${String(100 - (cd / Math.max(1, a.cooldown)) * 100)}%"></i></span>` : html``}
+                <span class="txt"><b>${a.label}</b><span>${kindOf(id)}${derived(state, (s) => s.odds)}</span></span>
+                <span class="state">${derived(state, (s) => s.label)}${$if(derived(keyLabel, Boolean)).$then(() => html`<kbd>${keyLabel}</kbd>`)}</span>
+                ${$if(derived(state, (s) => s.state === 'wait')).$then(() => html`<span class="cd"><i ${attr({ style: derived(state, (s) => `width:${100 - (s.cooldown / Math.max(1, a.cooldown)) * 100}%`) })}></i></span>`)}
             </button>`;
         };
-        const lane = (which: Lane) => {
-            const ids = owned.filter((id) => laneOf(id) === which);
-            if (!ids.length) return html``;
-            return html`<div class="lane ${which === nowLane ? 'now' : 'later'}">
-                <span class="lane-label">${which === 'before' ? 'Before moving' : 'After moving'}</span>
-                <div class="lane-cards">${ids.map(card)}</div>
-            </div>`;
-        };
-        const passives = passivesOf(cfg, p.player);
+        const passives = derived(activePiece, (p) => (p ? passivesOf(cfg, p.player) : []));
+        const hold = derived(ctl.tick, () => {
+            if (m.state.over) return '';
+            const carrying = m.carrier()?.id === m.active().id;
+            return m.state.phase === 'move' ? (carrying ? 'Stay & kick' : 'Hold') : carrying ? 'Keep ball' : 'End turn';
+        });
+        const standingOdds = derived(ctl.tick, () => {
+            const carrier = m.carrier();
+            if (m.state.over || m.state.phase !== 'act' || !carrier) return null;
+            const p = m.active();
+            return m.canTackle(p) ? odds(p, carrier) : null;
+        });
         return html`<div class="dock-row">
             <div class="cards">
-                ${owned.length ? html`${lane('before')}${lane('after')}` : html`<span class="no-abilities">No abilities yet. They unlock as this player levels up.</span>`}
-                ${passives.length ? html`<div class="passives"><span class="lane-label">Always on</span>${passives.map((id) => html`<span class="passive" title="${cfg.passives[id].desc}">◆ ${cfg.passives[id].label}</span>`)}</div>` : html``}
+                ${lane('before')}${lane('after')}
+                ${$if(derived(owned, (list) => !list.length)).$then(() => html`<span class="no-abilities">No abilities yet. They unlock as this player levels up.</span>`)}
+                ${$if(derived(passives, (list) => list.length > 0)).$then(() => html`<div class="passives"><span class="lane-label">Always on</span>${$each(passives).$as((id) => html`<span class="passive" title="${cfg.passives[id].desc}">◆ ${cfg.passives[id].label}</span>`)}</div>`)}
             </div>
             <div class="core">
-                ${phase === 'move' ? html`<button ${on('click', () => ctl.pass())}>${isCarrier ? 'Stay & kick' : 'Hold'} <kbd>Space</kbd></button>` : html``}
-                ${phase === 'act' && m.canTackle(p) ? html`<button class="warn" title="Chance to win the ball" ${on('click', () => ctl.input({ t: 'act', d: { kind: 'tackle' } }))}>Tackle ${String(odds(p, m.carrier()!))}% <kbd>T</kbd></button>` : html``}
-                ${phase === 'act' ? html`<button ${on('click', () => ctl.pass())}>${isCarrier ? 'Keep ball' : 'End turn'} <kbd>Space</kbd></button>` : html``}
+                ${$if(derived(standingOdds, (chance) => chance !== null)).$then(() => html`<button class="warn" title="Chance to win the ball" ${on('click', () => ctl.input({ t: 'act', d: { kind: 'tackle' } }))}>Tackle ${derived(standingOdds, String)}% <kbd>T</kbd></button>`)}
+                <button ${on('click', () => ctl.pass())}>${hold} <kbd>Space</kbd></button>
                 <button class="ghost" ${on('click', () => ctl.input({ t: 'auto' }))}>Auto <kbd>A</kbd></button>
             </div>
         </div>`;
-    });
+    };
+    const actions = $switch(distinct(derived(inputPhase, (phase) => (phase === 'move' || phase === 'act' ? 'turn' : phase))))
+        .$case('placing', Placement)
+        .$case('turn', TurnActions)
+        .$default(() => html`<div class="dock-row"></div>`);
 
     /** Explains the hovered or armed ability, above the dock (instead of a tiny tooltip). */
     const abilityInfo = derived(combined([infoFor, ctl.mode, ctl.awaitingHuman, ctl.tick]), ([hovered, armed, awaiting]) => {
@@ -738,15 +760,16 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             : m.state.bonusTurn
               ? [m.state.bonusTurn, ...m.state.order.slice(m.state.turnIndex + 1, m.state.turnIndex + 12)]
               : m.state.order.slice(m.state.turnIndex, m.state.turnIndex + 12);
-    const queueKey = changes([ctl.tick, prefs], () => queueIds().join(',') + '|' + prefs().controlMode);
+    const controlMode = derived(prefs, (p) => p.controlMode);
+    const queueKey = distinct(derived(ctl.tick, () => queueIds().join(',')));
     const queueItems = derived(queueKey, () => {
         const ids = queueIds();
-        return ids.map((id, i) => ({ id, key: ids.indexOf(id) === i ? id : `${id}#${i}`, first: i === 0 }));
+        return ids.map((id, i) => ({ id, key: ids.indexOf(id) === i ? id : `${id}#${i}` }));
     });
     // each portrait is built once per player and kept; only its markers update
     const queueItem = (q: { id: string; key: string }) => {
         const p = m.piece(q.id);
-        const cls = derived(queueKey, () => {
+        const cls = derived(combined([ctl.tick, controlMode]), () => {
             const auto = ctl.isHuman(p.team) && !ctl.needsOrders(p);
             return `qitem ${queueIds()[0] === q.id && !q.key.includes('#') ? 'now' : ''} ${auto ? 'auto' : ''}`;
         });
@@ -760,11 +783,14 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         .$withKey((q) => q.key)
         .$as(queueItem)}</div>`;
 
-    const log = derived(
-        ctl.commentary,
-        (lines) =>
-            html`<div class="log"><h5>Commentary <small>B. Quill</small></h5><ul>${lines.slice(0, 8).map((l) => html`<li class="${l.team === null ? '' : `t${l.team}`} ${l.tone}"><b>${String(l.minute)}'</b> ${l.text}</li>`)}</ul></div>`,
-    );
+    const log = html`<div class="log"><h5>Commentary <small>B. Quill</small></h5><ul>
+        ${$each(derived(ctl.commentary, (lines) => lines.slice(0, 8)))
+            .$withKey((line) => line.id)
+            .$as(
+                (line) =>
+                    html`<li class="${line.team === null ? '' : `t${line.team}`} ${line.tone}"><b>${String(line.minute)}'</b> ${line.text}</li>`,
+            )}
+    </ul></div>`;
 
     const caption = derived(ctl.caption, (c) =>
         c
@@ -823,7 +849,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     });
 
     // ------------------------------------------------------------ pre-match intro
-    const introCopy = introText(
+    const introLines = introText(
         cfg,
         m,
         [ctl.teamStyle(0), ctl.teamStyle(1)],
@@ -834,68 +860,80 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     );
     const avatar = (sprite: string) =>
         html`<div class="portrait intro-face"><div class="sprite still" style="${spriteStyle(cfg, sprite, 'idle', 'down')}"></div></div>`;
-    const lineup = (t: TeamSide) => {
+    const surname = (name: string) => name.split(' ').at(-1)!;
+    const pct = (v: number, of: number) => `${((v / of) * 100).toFixed(2)}%`;
+    /** Both squads at their kick-off spots on a miniature pitch. */
+    const introPitch = () => {
+        const P = cfg.pitch;
+        const feet = (cfg.sprites.feetY / cfg.sprites.framePx) * cfg.sprites.renderPx;
+        const R = cfg.sprites.renderPx;
+        const box = (depth: number, width: number, left: boolean, cls: string) =>
+            html`<i class="${cls}" style="${left ? 'left' : 'right'}:0;top:${pct((P.rows - width) / 2, P.rows)};width:${pct(depth, P.cols)};height:${pct(width, P.rows)}"></i>`;
+        const men = m.state.pieces.map((p) => {
+            const c = club(p.team);
+            const kit = p.player.cls === 'keeper' ? c.keeperKit : c.kit;
+            const danger = dangerMan(m, p.team) === p;
+            const anim = p.player.cls === 'keeper' ? 'gk_ready' : 'idle';
+            return html`<div class="ip-man${danger ? ' danger' : ''}" title="${`${p.player.number} ${p.player.name} · ${cfg.classes[p.player.cls].label}${danger ? ' · danger man' : ''}`}" style="left:${pct(p.pos.x + 0.5, P.cols)};top:${pct(p.pos.y + 0.5, P.rows)}">
+                <div class="sprite" style="${spriteStyle(cfg, p.player.sprite, anim, p.team === 0 ? 'right' : 'left', p.player)};width:${R}px;height:${R}px;left:${-R / 2}px;top:${-feet}px"></div>
+                <b class="ip-num${isLightKit(kit) ? ' light' : ''}" style="--kit:${kitColor(kit)}">${danger ? '★' : ''}${String(p.player.number)}</b>
+            </div>`;
+        });
+        return html`<div class="ip-turf"><div class="ip-field" style="aspect-ratio:${P.cols} / ${P.rows}">
+            ${box(P.boxDepth, P.boxWidth, true, 'ip-box')}${box(P.boxDepth, P.boxWidth, false, 'ip-box')}
+            ${box(P.sixDepth, P.sixWidth, true, 'ip-box')}${box(P.sixDepth, P.sixWidth, false, 'ip-box')}
+            <i class="ip-circle" style="width:${pct(P.circleRadius * 2, P.cols)}"></i>
+            ${men}
+        </div></div>`;
+    };
+    const introSide = (t: TeamSide) => {
         const c = club(t);
         const danger = dangerMan(m, t);
-        const st = cfg.ai.styles[ctl.teamStyle(t)];
-        return html`<section class="intro-team" style="--kit:${kitColor(c.kit)}">
-            <h3><i class="kit-dot"></i>${c.name}</h3>
-            <p class="muted">${c.formationId} · ${st.label}${ctl.isHuman(t) ? ' · You' : ''}</p>
-            <ol>${m.state.pieces
-                .filter((p) => p.team === t)
-                .toSorted((x, y) => x.slot - y.slot)
-                .map(
-                    (p) =>
-                        html`<li class="${p === danger ? 'danger' : ''}"><span class="num">${String(p.player.number)}</span><span class="nm">${p.player.name}</span><span class="cl">${cfg.classes[p.player.cls].short}${p === danger ? ' ★' : ''}</span></li>`,
-                )}</ol>
-        </section>`;
+        return html`<div class="intro-side" style="--kit:${kitColor(c.kit)}">
+            <h3><i class="kit-dot"></i>${c.name}${ctl.isHuman(t) ? html` <em class="you">You</em>` : html``}</h3>
+            <p>${c.formationId} · ${cfg.ai.styles[ctl.teamStyle(t)].label}</p>
+            ${danger ? html`<p class="danger">★ ${danger.player.name} <span>${cfg.classes[danger.player.cls].short}</span></p>` : html``}
+        </div>`;
     };
-    const introOverlay = derived(ctl.intro, (step) => {
-        if (step === null) return html``;
+    const introOverlay = () => {
         const [h, a] = m.state.clubs;
         const st = ctl.opts.stadium;
-        const panel =
-            step === 0
-                ? html`<div class="intro-body">
-                      <div class="intro-voice">${avatar('coach')}<div><small>${COMMENTATORS.lead.name} · ${COMMENTATORS.lead.role}</small><p>${introCopy.welcome}</p></div></div>
-                      <div class="intro-voice">${avatar('coach_2')}<div><small>${COMMENTATORS.colour.name} · ${COMMENTATORS.colour.role}</small><p>${introCopy.colour}</p></div></div>
-                      ${
-                          st
-                              ? html`<div class="intro-facts">
-                                <div><span>Ground</span><b>${st.name}</b></div>
-                                <div><span>Capacity</span><b>${st.capacity.toLocaleString('en')}</b></div>
-                                <div><span>Conditions</span><b>${ctl.opts.conditions ? conditionsLabel(ctl.opts.conditions) : 'Fair'}</b></div>
-                                <div><span>Referee</span><b>${m.state.referee.name}</b></div>
-                            </div>`
-                              : html``
-                      }
-                  </div>`
-                : step === 1
-                  ? html`<div class="intro-body intro-lineups">${lineup(0)}${lineup(1)}</div>`
-                  : html`<div class="intro-body intro-story"><h3>The story</h3><ul>${introCopy.story.map((l) => html`<li>${l}</li>`)}</ul></div>`;
-        const last = step + 1 >= ctl.introSteps;
-        return html`<div class="intro" ${on('click', (e) => {
-            if (!(e.target as HTMLElement).closest('button')) ctl.introNext();
-        })}>
+        const facts: [string, string][] = [
+            ...(st
+                ? ([
+                      ['Ground', st.name],
+                      ['Capacity', st.capacity.toLocaleString('en')],
+                  ] as [string, string][])
+                : []),
+            ['Conditions', ctl.opts.conditions ? conditionsLabel(ctl.opts.conditions) : 'Fair'],
+            ['Referee', `${m.state.referee.name} · ${cfg.referee.styles[m.state.referee.style].label}`],
+        ];
+        return html`<div class="intro">
             <div class="intro-card">
-                <div class="intro-strip"><span class="live">● Live</span><span>${['The ground', 'Line-ups', 'The story'][step]}</span></div>
+                <div class="intro-strip"><span class="live">● Live</span><span>Pre-match</span></div>
                 <h2 class="intro-title"><span style="--kit:${kitColor(h.kit)}">${h.name}</span><em>vs</em><span style="--kit:${kitColor(a.kit)}">${a.name}</span></h2>
-                ${panel}
+                <div class="intro-grid">
+                    <div class="intro-squads">${introPitch()}<div class="intro-sides">${introSide(0)}${introSide(1)}</div></div>
+                    <div class="intro-booth">
+                        <div class="intro-voices">${(['lead', 'colour'] as const).map(
+                            (v) =>
+                                html`<div class="intro-voice">${avatar(v === 'lead' ? 'coach' : 'coach_2')}<div><b>${COMMENTATORS[v].name}</b><small>${COMMENTATORS[v].role}</small></div></div>`,
+                        )}</div>
+                        <div class="intro-talk scroll">${introLines.map(
+                            (l) => html`<p class="${l.who}"><b>${surname(COMMENTATORS[l.who].name)}</b>${l.text}</p>`,
+                        )}</div>
+                        <div class="intro-facts">${facts.map(([k, v]) => html`<div><span>${k}</span><b>${v}</b></div>`)}</div>
+                    </div>
+                </div>
                 <footer class="intro-foot">
-                    <div class="dots">${[0, 1, 2].map((i) => html`<i class="${i === step ? 'on' : ''}"></i>`)}</div>
-                    <button class="ghost" ${on('click', () => ctl.introSkip())}>Skip <kbd>Esc</kbd></button>
-                    <button class="primary" ${on('click', () => ctl.introNext())}>${last ? 'Kick off' : 'Next'} <kbd>Enter</kbd></button>
+                    <button class="primary" ${on('click', () => ctl.introDone())}>Kick off <kbd>Enter</kbd></button>
                 </footer>
             </div>
         </div>`;
-    });
+    };
 
     const toast = derived(ctl.toast, (t) => (t ? html`<div class="toast">${t}</div>` : html``));
-    const focusChip = derived(
-        combined([prefs, ctl.tick]),
-        ([p]) =>
-            html`<button class="ghost focus-chip" title="Which of your players ask for orders" ${on('click', () => ctl.cycleControl())}>Focus: ${CONTROL_MODES.find((c) => c.id === p.controlMode)!.label} <kbd>F</kbd></button>`,
-    );
+    const focusChip = html`<button class="ghost focus-chip" title="Which of your players ask for orders" ${on('click', () => ctl.cycleControl())}>Focus: ${derived(controlMode, (mode) => CONTROL_MODES.find((c) => c.id === mode)!.label)} <kbd>F</kbd></button>`;
 
     const requestExit = () => {
         if (!finishOdds || m.state.over) return onExit();
@@ -910,57 +948,65 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         exitPrompt.set(null);
         ctl.paused.set(prompt.wasPaused);
     };
-    const focusCancel = mounted<HTMLButtonElement>((button) => {
-        const previous = document.activeElement;
-        button.focus();
-        return () => {
-            if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
-        };
-    });
-    const exitDialog = derived(exitPrompt, (prompt) => {
-        if (!prompt) return html``;
-        const percent = prompt.chance * 100;
+    const ExitDialog = () => {
+        const percent = exitPrompt()!.chance * 100;
         const chance = percent > 0 && percent < 1 ? '<1%' : percent < 100 && percent > 99 ? '>99%' : `${Math.round(percent)}%`;
-        return html`<div class="modal" ${on('click', (e) => {
-            if (e.target === e.currentTarget) cancelExit();
-        })}>
-            <div class="modal-body match-exit" role="dialog" aria-modal="true" aria-labelledby="match-exit-title">
-                <header><h2 id="match-exit-title">Leave match?</h2></header>
-                <div class="modal-scroll">
-                    <p>The rest of the match will be simulated from the current score. The final result will count in your career.</p>
-                    <div class="match-exit-odds"><strong>${chance}</strong><span>Estimated chance of winning if simulated</span></div>
-                </div>
-                <footer><button class="ghost" ${focusCancel} ${on('click', cancelExit)}>Keep playing</button><button class="warn" ${on('click', onExit)}>Simulate and leave</button></footer>
+        return Dialog({
+            label: 'Leave match?',
+            dismiss: cancelExit,
+            children: html`<div class="modal-body match-exit">
+            <header><h2>Leave match?</h2></header>
+            <div class="modal-scroll">
+                <p>The rest of the match will be simulated from the current score. The final result will count in your career.</p>
+                <div class="match-exit-odds"><strong>${chance}</strong><span>Estimated chance of winning if simulated</span></div>
             </div>
-        </div>`;
-    });
-    const report = derived(ctl.report, (r) => (r ? MatchReport(ctl, onExit, finishOdds ? 'Back to the club' : 'Back to menu') : html``));
-
-    const minimapSvg = () => {
-        const s = 4;
-        const dots = m.state.pieces
-            .map((p) => {
-                const active = !m.state.over && m.active().id === p.id;
-                return `<circle cx="${p.pos.x * s + s / 2}" cy="${p.pos.y * s + s / 2}" r="${active ? 3.4 : 2.4}" fill="${kitColor(club(p.team).kit)}" stroke="${active ? 'var(--active)' : '#0008'}" stroke-width="${active ? 1.5 : 0.8}" />`;
-            })
-            .join('');
-        const b = m.ballCell();
-        const svg = `<svg width="${cols * s}" height="${rows * s}" viewBox="0 0 ${cols * s} ${rows * s}">
-            <rect width="100%" height="100%" fill="#2f6b34" />
-            <line x1="${(cols * s) / 2}" y1="0" x2="${(cols * s) / 2}" y2="${rows * s}" stroke="#fff6" />
-            <rect x="0" y="${gTop * s}" width="2" height="${cfg.pitch.goalWidth * s}" fill="#fff" />
-            <rect x="${cols * s - 2}" y="${gTop * s}" width="2" height="${cfg.pitch.goalWidth * s}" fill="#fff" />
-            ${dots}<circle cx="${b.x * s + s / 2}" cy="${b.y * s + s / 2}" r="3.2" fill="#fff" stroke="#2f8cff" stroke-width="1.6" />
-        </svg>`;
-        return svg;
+            <footer><button class="ghost" autofocus ${on('click', cancelExit)}>Keep playing</button><button class="warn" ${on('click', onExit)}>Simulate and leave</button></footer>
+        </div>`,
+        });
     };
-    const minimap = html`<div class="minimap" ${createDirective((n) => {
+
+    const mapScale = 4;
+    const mapPoint = (n: number) => String((n + 0.5) * mapScale);
+    const mapBall = derived(ctl.tick, () => m.ballCell());
+    const mapPlayers = mounted<SVGGElement>((layer) => {
+        const dots = new Map<string, SVGCircleElement>();
         const draw = () => {
-            n.innerHTML = minimapSvg();
+            const pieces = m.state.pieces;
+            const active = m.state.over ? undefined : m.active().id;
+            for (const [id, dot] of dots) {
+                if (pieces.some((p) => p.id === id)) continue;
+                dot.remove();
+                dots.delete(id);
+            }
+            for (const p of pieces) {
+                let dot = dots.get(p.id);
+                if (!dot) {
+                    dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    dot.setAttribute('fill', kitColor(club(p.team).kit));
+                    layer.append(dot);
+                    dots.set(p.id, dot);
+                }
+                const current = active === p.id;
+                dot.setAttribute('cx', mapPoint(p.pos.x));
+                dot.setAttribute('cy', mapPoint(p.pos.y));
+                dot.setAttribute('r', current ? '3.4' : '2.4');
+                dot.setAttribute('stroke', current ? 'var(--active)' : '#0008');
+                dot.setAttribute('stroke-width', current ? '1.5' : '0.8');
+            }
         };
         draw();
-        ctl.tick.subscribe(draw);
-    })}></div>`;
+        return ctl.tick.subscribe(draw);
+    });
+    const mapWidth = cols * mapScale;
+    const mapHeight = rows * mapScale;
+    const minimap = html`<div class="minimap"><svg width="${String(mapWidth)}" height="${String(mapHeight)}" viewBox="0 0 ${mapWidth} ${mapHeight}">
+        <rect width="100%" height="100%" fill="#2f6b34" />
+        <line x1="${mapWidth / 2}" y1="0" x2="${mapWidth / 2}" y2="${mapHeight}" stroke="#fff6" />
+        <rect x="0" y="${gTop * mapScale}" width="2" height="${cfg.pitch.goalWidth * mapScale}" fill="#fff" />
+        <rect x="${mapWidth - 2}" y="${gTop * mapScale}" width="2" height="${cfg.pitch.goalWidth * mapScale}" fill="#fff" />
+        <g ${mapPlayers}></g>
+        <circle ${attr({ cx: derived(mapBall, (b) => mapPoint(b.x)), cy: derived(mapBall, (b) => mapPoint(b.y)) })} r="3.2" fill="#fff" stroke="#2f8cff" stroke-width="1.6" />
+    </svg></div>`;
 
     const banner = derived(ctl.banner, (b) =>
         b
@@ -970,53 +1016,77 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     );
 
     // ------------------------------------------------------------ bench & substitutions
-    const staminaBar = (v: number) =>
-        html`<span class="stam-bar ${v < cfg.fatigue.exhausted ? 'low' : v < cfg.fatigue.tired ? 'mid' : ''}"><i style="width:${String(Math.round(v))}%"></i></span>`;
-    const benchPanel = derived(combined([ctl.tick, benchPick, ctl.awaitingHuman]), ([, pick, awaiting]) => {
-        // whose bench: the human side (in hotseat, whoever is on the move)
-        const team: TeamSide = ctl.isHuman(0) && ctl.isHuman(1) ? m.active().team : ctl.isHuman(1) ? 1 : 0;
-        const mine = ctl.isHuman(team);
-        const onPitch = m.state.pieces.filter((p) => p.team === team).sort((a, b) => a.stamina - b.stamina);
-        const bench = m.bench(team);
-        const left = m.subsLeft(team);
-        const why = pick.off && pick.on ? m.subBlock(team, pick.off, pick.on) : null;
-        const canGo = mine && awaiting && !!pick.off && !!pick.on && !why && !ctl.inSetup();
+    const BenchPanel = () => {
+        // In hotseat, show the bench of the side whose turn it is.
+        const team = derived(ctl.tick, (): TeamSide => (ctl.isHuman(0) && ctl.isHuman(1) ? m.active().team : ctl.isHuman(1) ? 1 : 0));
+        const onPitch = derived(combined([team, ctl.tick]), ([side]) =>
+            m.state.pieces.filter((p) => p.team === side).sort((a, b) => a.stamina - b.stamina),
+        );
+        const bench = derived(combined([team, ctl.tick]), ([side]) => m.bench(side));
+        const left = derived(combined([team, ctl.tick]), ([side]) => String(m.subsLeft(side)));
+        const availability = derived(combined([team, ctl.tick, benchPick, ctl.awaitingHuman]), ([side, , pick, awaiting]) => {
+            const mine = ctl.isHuman(side);
+            const why = pick.off && pick.on ? m.subBlock(side, pick.off, pick.on) : null;
+            return {
+                disabled: !mine || !awaiting || !pick.off || !pick.on || !!why || ctl.inSetup(),
+                hint:
+                    pick.msg ??
+                    why ??
+                    (!mine
+                        ? 'Watching: the AI manages its own bench.'
+                        : !awaiting
+                          ? 'Substitutions happen on your turn.'
+                          : 'Tired players move less (under 50) and react worse (under 25). Pick one off, one on.'),
+            };
+        });
+        const choose = (slot: 'off' | 'on', id: string) =>
+            on('click', () => benchPick.update((pick) => ({ ...pick, [slot]: id, msg: null })));
+        const selectedClass = (slot: 'off' | 'on', id: string) => derived(benchPick, (pick) => (pick[slot] === id ? 'on' : ''));
         const go = () => {
-            if (!pick.off || !pick.on) return;
-            const err = ctl.substitute(pick.off, pick.on);
+            const { off, on: replacement } = benchPick();
+            if (!off || !replacement || availability().disabled) return;
+            const err = ctl.substitute(off, replacement);
             benchPick.set({ off: null, on: null, msg: err });
             if (!err) showBench.set(false);
         };
         return html`<div class="modal-body bench-panel">
-            <header><h2>Bench · ${club(team).short}</h2><span class="subs-left">${String(left)} of ${String(cfg.subs.max)} substitutions left</span><button class="ghost" ${on('click', () => showBench.set(false))}>Close <kbd>Esc</kbd></button></header>
+            <header><h2>Bench · ${derived(team, (side) => club(side).short)}</h2><span class="subs-left">${left} of ${String(cfg.subs.max)} substitutions left</span><button class="ghost" ${on('click', () => showBench.set(false))}>Close <kbd>Esc</kbd></button></header>
             <div class="modal-scroll">
                 <div class="bench-grid">
-                    <section><h4>On the pitch <small>tiredest first</small></h4><ul class="bench-list">${onPitch.map(
-                        (
-                            p,
-                        ) => html`<li class="${pick.off === p.id ? 'on' : ''}" ${on('click', () => benchPick.set({ ...pick, off: p.id, msg: null }))}>
-                        <div class="sprite still" style="${spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player)}"></div>
-                        <b>#${String(p.player.number)} ${p.player.name}</b><span class="cl">${cfg.classes[p.player.cls].short}</span>${staminaBar(p.stamina)}<span class="num">${String(Math.round(p.stamina))}</span></li>`,
-                    )}</ul></section>
-                    <section><h4>Bench</h4>${
-                        bench.length
-                            ? html`<ul class="bench-list">${bench.map(
-                                  (
-                                      p,
-                                  ) => html`<li class="${pick.on === p.id ? 'on' : ''}" ${on('click', () => benchPick.set({ ...pick, on: p.id, msg: null }))}>
-                        <div class="sprite still" style="${spriteStyle(cfg, p.sprite, 'idle', 'down', p)}"></div>
-                        <b>#${String(p.number)} ${p.name}</b><span class="cl">${classLabel(cfg, p)}</span><span class="num">Lv ${String(p.level)}</span></li>`,
-                              )}</ul>`
-                            : html`<p class="muted">Nobody left on the bench.</p>`
-                    }</section>
+                    <section><h4>On the pitch <small>tiredest first</small></h4><ul class="bench-list">${$each(onPitch)
+                        .$withKey((p) => p.id)
+                        .$as((p) => {
+                            const sprite = derived(recolorVersion, () => spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player));
+                            const stamina = derived(ctl.tick, () => Math.round(p.stamina));
+                            return html`<li ${attr({ class: selectedClass('off', p.id) })} ${choose('off', p.id)}>
+                            <div class="sprite still" ${attr({ style: sprite })}></div>
+                            <b>#${String(p.player.number)} ${p.player.name}</b><span class="cl">${cfg.classes[p.player.cls].short}</span>
+                            <span ${attr({ class: derived(stamina, (n) => `stam-bar ${n < cfg.fatigue.exhausted ? 'low' : n < cfg.fatigue.tired ? 'mid' : ''}`) })}><i ${attr({ style: derived(stamina, (n) => `width:${n}%`) })}></i></span><span class="num">${derived(stamina, String)}</span>
+                        </li>`;
+                        })}</ul></section>
+                    <section><h4>Bench</h4>${$if(derived(bench, (players) => players.length > 0))
+                        .$then(
+                            () => html`<ul class="bench-list">
+                        ${$each(bench)
+                            .$withKey((p) => p.id)
+                            .$as((p) => {
+                                const sprite = derived(recolorVersion, () => spriteStyle(cfg, p.sprite, 'idle', 'down', p));
+                                return html`<li ${attr({ class: selectedClass('on', p.id) })} ${choose('on', p.id)}>
+                                <div class="sprite still" ${attr({ style: sprite })}></div>
+                                <b>#${String(p.number)} ${p.name}</b><span class="cl">${classLabel(cfg, p)}</span><span class="num">Lv ${String(p.level)}</span>
+                            </li>`;
+                            })}
+                    </ul>`,
+                        )
+                        .$else(() => html`<p class="muted">Nobody left on the bench.</p>`)}</section>
                 </div>
             </div>
             <footer class="bench-foot">
-                <span class="muted">${pick.msg ?? why ?? (!mine ? 'Watching: the AI manages its own bench.' : !awaiting ? 'Substitutions happen on your turn.' : 'Tired players move less (under 50) and react worse (under 25). Pick one off, one on.')}</span>
-                <button class="primary" ${attr({ disabled: !canGo })} ${on('click', go)}>Make the change</button>
+                <span class="muted">${derived(availability, (a) => a.hint)}</span>
+                <button class="primary" ${attr({ disabled: derived(availability, (a) => a.disabled) })} ${on('click', go)}>Make the change</button>
             </footer>
         </div>`;
-    });
+    };
 
     // ------------------------------------------------------------ keyboard + resize
     const lifecycle = mounted<HTMLDivElement>(() => {
@@ -1036,11 +1106,11 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 ctl.dismissTip();
                 return;
             }
-            if (ctl.intro() !== null) {
-                if (e.key === 'Enter' || e.code === 'Space') {
+            if (ctl.intro()) {
+                if (e.key === 'Enter' || e.code === 'Space' || e.key === 'Escape') {
                     e.preventDefault();
-                    ctl.introNext();
-                } else if (e.key === 'Escape') ctl.introSkip();
+                    ctl.introDone();
+                }
                 return;
             }
             if (ctl.lesson()?.info && e.key === 'Enter') {
@@ -1087,6 +1157,8 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         window.addEventListener('pointerdown', closeMusic);
         // palette-swapped strips arrive asynchronously: redraw when they land, warm the common ones now
         const unRecolor = recolorVersion.subscribe(() => ctl.bump());
+        const unwatchTurn = ctl.tick.subscribe(recenterOnTurn);
+        const unwatchInput = ctl.awaitingHuman.subscribe(() => infoFor.set(null));
         for (const p of m.state.pieces) prewarmPlayer(p.player.sprite, p.player, p.player.cls === 'keeper');
         const wheel = (e: WheelEvent) => {
             if (!(e.target as HTMLElement).closest('.viewport')) return;
@@ -1151,11 +1223,14 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             window.removeEventListener('click', click, true);
             window.removeEventListener('contextmenu', noMenu);
             unRecolor();
+            unwatchTurn();
+            unwatchInput();
             ctl.stop();
         };
     });
 
-    const matchContent = html`<div ${attr({ inert: derived(exitPrompt, (prompt) => !!prompt) })}>
+    const pieces = derived(distinct(derived(ctl.tick, () => m.state.pieces.map((p) => p.id).join(','))), () => [...m.state.pieces]);
+    const matchContent = html`<div>
         <div ${attr({ class: shakeClass })}>
             <div class="world" ${attr({ style: camera })}>
                 <div class="pitch cond-${stadium.condition}" style="width:${W}px;height:${H}px" ${pitchLayer}></div>
@@ -1183,7 +1258,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 <div class="tokens">
                     ${stadiumProps(stadium, conditions, kitColor(club(0).kit), { L: px(0), T: px(0), PW: cols * C, PH: rows * C, C, W, H, S: cfg.sprites.renderPx / cfg.sprites.framePx })}
                     ${goalSprite('left')}${goalSprite('right')}
-                    ${$each(() => m.state.pieces)
+                    ${$each(pieces)
                         .$withKey((p) => p.id)
                         .$as(Token)}
                     <div class="ball" ${attr({ style: ballStyle })}>
@@ -1235,35 +1310,36 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 ${onSettings ? html`<button type="button" title="Settings" aria-label="Settings" ${on('click', onSettings)}>⚙</button>` : html``}
             </div>
             ${$if(showMusic).$then(MatchRadioControls)}
-            ${$render(focusChip)}
-            ${minimap}${queue}${$render(log)}</aside>
+            ${focusChip}
+            ${minimap}${queue}${log}</aside>
         <footer class="hud-bottom">
             ${$render(abilityInfo)}
             ${$render(armedBar)}
-            <div class="dock-head">${$render(phaseStep)}<div class="hint">${hint}</div></div>
-            ${$render(actions)}
+            <div class="dock-head">${phaseStep}<div class="hint">${hint}</div></div>
+            ${actions}
         </footer>
 
-        ${$if(showPlaybook).$then(
-            () => html`<div class="modal" ${on('click', (e) => {
-                if (e.target === e.currentTarget) showPlaybook.set(false);
-            })}>
-            <div class="modal-body"><header><h2>Playbook</h2><button class="ghost" ${on('click', () => showPlaybook.set(false))}>Close <kbd>Esc</kbd></button></header><div class="modal-scroll">${Playbook(cfg)}</div></div>
-        </div>`,
+        ${$if(showPlaybook).$then(() =>
+            Dialog({
+                label: 'Playbook',
+                dismiss: () => showPlaybook.set(false),
+                children: html`
+            <div class="modal-body"><header><h2>Playbook</h2><button class="ghost" ${on('click', () => showPlaybook.set(false))}>Close <kbd>Esc</kbd></button></header><div class="modal-scroll">${Playbook(cfg)}</div></div>`,
+            }),
         )}
-        ${$if(showBench).$then(
-            () =>
-                html`<div class="modal" ${on('click', (e) => {
-                    if (e.target === e.currentTarget) showBench.set(false);
-                })}>${$render(benchPanel)}</div>`,
-        )}
+        ${$if(showBench).$then(() => Dialog({ label: 'Bench & substitutions', dismiss: () => showBench.set(false), children: BenchPanel() }))}
         ${$render(tipPanel)}
-        ${$render(introOverlay)}
+        ${$if(ctl.intro).$then(introOverlay)}
         ${$render(lessonPanel)}
         ${$if(ctl.paused).$then(() => html`<div class="pause-veil"><div class="banner"><div class="banner-text">Paused</div><div class="banner-sub">Read the commentary, plan your move. P to resume.</div><button class="primary" ${on('click', () => ctl.togglePause())}>Resume</button></div></div>`)}
         ${$render(toast)}
         ${$render(banner)}
-        ${$render(report)}
+        ${$if(derived(ctl.report, Boolean)).$then(() => {
+            const [home, away] = m.state.score;
+            const cupDraw = knockout && home === away;
+            const label = cupDraw ? 'Resolve penalties' : finishOdds ? 'Back to the club' : 'Back to menu';
+            return MatchReport(ctl, onExit, label, cupDraw ? 'The cup tie goes to penalties.' : undefined);
+        })}
     </div>`;
-    return html`<div class="match" ${lifecycle}>${matchContent}${$render(exitDialog)}</div>`;
+    return html`<div class="match" ${lifecycle}>${matchContent}${$if(derived(exitPrompt, Boolean)).$then(ExitDialog)}</div>`;
 };

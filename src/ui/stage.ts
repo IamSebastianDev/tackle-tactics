@@ -25,6 +25,9 @@ export const fitStage = (stage: HTMLElement) => {
         stage.style.width = `${w}px`;
         stage.style.height = `${h}px`;
         stage.style.transform = `scale(${s})`;
+        stage.style.setProperty('--stage-scale', String(s));
+        stage.style.setProperty('--stage-width', `${w}px`);
+        stage.style.setProperty('--stage-height', `${h}px`);
         const p = prefs();
         stage.dataset.font = p.font;
         stage.classList.toggle('reduce-motion', p.reduceMotion);

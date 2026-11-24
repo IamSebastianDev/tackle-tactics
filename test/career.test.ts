@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { defaultConfig, withOverrides } from '../src/config';
 import {
     autoLineup,
@@ -8,9 +8,14 @@ import {
     endSeason,
     fixtureClubs,
     kitsClash,
+    loadCareer,
     newCareer,
     playMatchday,
     resolveLetter,
+    roundsPerSeason,
+    saveCareer,
+    seasonDays,
+    seasonSchedule,
     sell,
     simulateScore,
     simulatedWinChance,
@@ -20,8 +25,10 @@ import {
     userClub,
     wageBill,
 } from '../src/meta/career';
+import { CUP_NAME, cupWinner, isCupFixture, type CupFixture } from '../src/meta/cup';
 import { ovr, playerValue, wage } from '../src/meta/player';
 import { story } from '../src/meta/story';
+import { trainingGain } from '../src/meta/training';
 
 const cfg = defaultConfig;
 const settings = { timerSeconds: 10, rounds: 30, difficulty: 'normal' as const, timeoutPolicy: 'lose' as const };
@@ -39,6 +46,9 @@ describe('career', () => {
         expect(simulatedWinChance(oddsCfg, c, home, [1, 0], 0.5)).toBeCloseTo(Math.exp(-1), 10);
         expect(simulatedWinChance(oddsCfg, c, away, [0, 0], 0.5)).toBeCloseTo(1 - Math.exp(-1), 10);
         expect(simulatedWinChance(oddsCfg, c, away, [0, 2], 0)).toBe(1);
+        const cupFixture: CupFixture = { ...home, competition: 'cup' };
+        expect(simulatedWinChance(oddsCfg, c, cupFixture, [0, 0], 0.5)).toBeCloseTo(Math.exp(-1) / 2, 10);
+        expect(simulatedWinChance(oddsCfg, c, cupFixture, [0, 0], 0)).toBe(0.5);
         expect(c.rngState).toBe(savedRng);
     });
 
@@ -47,7 +57,11 @@ describe('career', () => {
         expect(c.divisions.length).toBe(5);
         for (const d of c.divisions) {
             expect(d.clubs.length).toBe(10);
-            expect(d.fixtures.length).toBe(45);
+            expect(d.fixtures.length).toBe(90);
+            expect(new Set(d.fixtures.map((f) => f.id)).size).toBe(90);
+            for (const [i, firstLeg] of d.fixtures.slice(0, 45).entries()) {
+                expect(d.fixtures[45 + i]).toMatchObject({ home: firstLeg.away, away: firstLeg.home, round: firstLeg.round + 9 });
+            }
             for (const id of d.clubs) {
                 const club = c.clubs[id]!;
                 expect(club.squad.length).toBe(16);
@@ -60,26 +74,159 @@ describe('career', () => {
         const [h, a] = fixtureClubs(cfg, c, t.kind === 'match' ? t.fixture : c.divisions[4]!.fixtures[0]!);
         expect(h.squad.length).toBe(11);
         expect(a.kit).not.toBe(h.kit);
+        const first = c.cup!.rounds[0]!;
+        expect(first.fixtures).toHaveLength(18);
+        expect(first.byes).toHaveLength(14);
+        expect(new Set([...first.byes, ...first.fixtures.flatMap((f) => [f.home, f.away])])).toEqual(new Set(Object.keys(c.clubs)));
+        const schedule = seasonSchedule(cfg, c);
+        expect(schedule.filter((date) => !date.cup).map((date) => date.round)).toEqual(Array.from({ length: 18 }, (_, i) => i));
+        expect(schedule.filter((date) => date.cup).map((date) => date.day)).toEqual([10, 22, 34, 46, 58, 70]);
+        expect(seasonDays(cfg, c)).toBe(72);
     });
 
-    it('records session and rest reports on the completed days even with a full news feed', () => {
+    it('decides a drawn cup tie on penalties and draws the next round without changing the league', () => {
         const c = newCareer(cfg, 42, settings);
-        const p = userClub(c).squad[0]!;
-        c.plan = { [p.id]: { cls: p.cls, intensity: 'light' } };
+        const opening = c.cup!.rounds[0]!;
+        const tie = opening.fixtures[0]!;
+        c.userClubId = tie.home;
+        c.day = opening.day;
+        expect(today(cfg, c)).toMatchObject({ kind: 'match', fixture: { id: tie.id } });
+        const standings = table(divisionOf(c, c.userClubId));
+        const quests = structuredClone(story(c).quests);
+
+        playMatchday(cfg, c, { score: [2, 2], knocks: {}, played: userClub(c).lineup });
+
+        expect(tie.result).toEqual([2, 2]);
+        expect(tie.penalties?.[0]).not.toBe(tie.penalties?.[1]);
+        expect(table(divisionOf(c, c.userClubId))).toEqual(standings);
+        expect(story(c).quests).toEqual(quests);
+        expect(story(c).seasonStats).toEqual({});
+        const next = c.cup!.rounds[1]!;
+        expect(next.fixtures).toHaveLength(16);
+        expect(new Set(next.fixtures.flatMap((f) => [f.home, f.away]))).toEqual(
+            new Set([...opening.byes, ...opening.fixtures.map(cupWinner)]),
+        );
+        expect(c.news).toEqual(
+            expect.arrayContaining([expect.objectContaining({ day: opening.day, text: expect.stringContaining('on pens') })]),
+        );
+    });
+
+    it.each(['win', 'loss'])('trains on a bye and finishes the cup after a user %s', (outcome) => {
+        const c = newCareer(cfg, 42, settings);
+        const cup = c.cup!;
+        const opening = cup.rounds[0]!;
+        c.userClubId = opening.byes[0]!;
+        c.day = opening.day;
+        expect(today(cfg, c)).toMatchObject({ kind: 'training', cup: opening });
+        expect(trainingDay(cfg, c)?.summary).toContain('16 trained');
+        expect(opening.fixtures.every((f) => !!cupWinner(f))).toBe(true);
+
+        for (const [index, round] of cup.rounds.slice(1).entries()) {
+            c.day = round.day;
+            const day = today(cfg, c);
+            expect(day.kind).toBe(outcome === 'loss' && index > 0 ? 'training' : 'match');
+            if (day.kind === 'training') {
+                trainingDay(cfg, c);
+                continue;
+            }
+            expect(day.kind).toBe('match');
+            if (day.kind !== 'match') throw new Error('Expected a cup tie');
+            expect(isCupFixture(day.fixture)).toBe(true);
+            const homeWins = (day.fixture.home === c.userClubId) === (outcome === 'win');
+            playMatchday(cfg, c, { score: homeWins ? [1, 0] : [0, 1], knocks: {}, played: [] });
+        }
+
+        expect(cup.rounds.flatMap((r) => r.fixtures)).toHaveLength(49);
+        expect(cup.champion).toBeDefined();
+        expect(cup.champion === c.userClubId).toBe(outcome === 'win');
+        expect(c.ledger.some((entry) => entry.label === `${CUP_NAME} winners`)).toBe(outcome === 'win');
+        c.day = 73;
+        const award = endSeason(cfg, c).awards.find((a) => a.title === CUP_NAME);
+        expect(award?.who).toBe(c.clubs[cup.champion!]!.name);
+        expect(c.cup?.champion).toBeUndefined();
+    });
+
+    it('trains the full fit squad, rests injured players, and records both training days', () => {
+        const c = newCareer(cfg, 42, settings);
+        const squad = userClub(c).squad;
+        const injured = squad[0]!;
+        c.trainingFocus = 'tackling';
         expect(trainingDay(cfg, c)).toBeUndefined();
         playMatchday(cfg, c, { score: [0, 0], knocks: {}, played: [] });
+        injured.injury = cfg.training.heal;
         c.news = Array.from({ length: 80 }, (_, i) => ({ season: c.season, day: 1, text: `Entry ${i}`, tone: 'info' }));
 
         const day = c.day;
+        const expectedGains = squad.slice(1).map((p) => trainingGain(cfg, p, c.trainingFocus)!);
+        const expectedXp = expectedGains.reduce((total, gain) => total + gain.amount, 0);
+        const injuredXp = { ...injured.xp };
         const report = trainingDay(cfg, c)!;
-        expect(report.summary).toMatch(/^1 training session completed · \d+ XP earned\.$/);
+        expect(report.summary).toBe(`Tackling · 15 trained · ${expectedXp} XP earned · 1 recovering.`);
+        expect(injured.injury).toBeUndefined();
+        expect(injured.xp).toEqual(injuredXp);
+        expect(report.updates).toContain(`${injured.name} is fit again.`);
+        for (const [i, p] of squad.slice(1).entries()) {
+            const { cls, amount } = expectedGains[i]!;
+            expect(p.xp[cls]).toBe(amount);
+        }
         expect(c.news[0]).toMatchObject({ season: c.season, day, text: report.summary });
 
-        c.plan = {};
+        for (const p of squad) p.injury = cfg.training.heal + 1;
         const rest = trainingDay(cfg, c)!;
-        expect(c.news[0]).toMatchObject({ season: c.season, day: day + 1, text: 'Rest day. No training sessions ran.' });
+        expect(squad.every((p) => p.injury === 1)).toBe(true);
+        expect(c.news[0]).toMatchObject({ season: c.season, day: day + 1, text: 'Recovery day. The squad rested.' });
         expect(rest.summary).toBe(c.news[0]!.text);
-        expect(c.news).toHaveLength(82);
+        expect(c.news).toHaveLength(83);
+    });
+
+    it('uses drill aptitude and class experience to scale XP', () => {
+        const c = newCareer(cfg, 42, settings);
+        const p = userClub(c).squad.find((player) => player.cls === 'defender')!;
+        const stats = { ...p.stats, passing: 45, composure: 60 };
+        const rookie = { ...p, stats, levels: { defender: 2 } };
+        const skilled = { ...rookie, stats: { ...stats, passing: 90 } };
+        const secondary = { ...rookie, levels: { defender: 2, midfielder: 1 } };
+        const specialist = { ...secondary, cls: 'midfielder' as const };
+        const gain = (player: typeof p) => trainingGain(cfg, player, 'passing')!;
+
+        expect(gain(rookie).cls).toBe('midfielder');
+        expect(gain(skilled).amount).toBeGreaterThan(gain(rookie).amount);
+        expect(gain(secondary).amount).toBeGreaterThan(gain(rookie).amount);
+        expect(gain(specialist).amount).toBeGreaterThan(gain(secondary).amount);
+        expect(trainingGain(cfg, p, 'goalkeeping')).toEqual({ cls: 'defender', amount: cfg.training.xp.base });
+    });
+
+    it('loads a legacy season intact and adds the expanded schedule at the turnover', () => {
+        const c = newCareer(cfg, 42, settings);
+        const p = userClub(c).squad[0]!;
+        delete c.cup;
+        for (const division of c.divisions) division.fixtures = division.fixtures.slice(0, 45);
+        divisionOf(c, c.userClubId).fixtures[0]!.result = [3, 2];
+        let raw = JSON.stringify({ ...c, trainingFocus: undefined, plan: { [p.id]: { cls: p.cls, intensity: 'full' } } });
+        vi.stubGlobal('localStorage', {
+            getItem: () => raw,
+            setItem: (_key: string, data: string) => {
+                raw = data;
+            },
+        });
+        const loaded = loadCareer()!;
+        const initialFocus = loaded.trainingFocus;
+        loaded.trainingFocus = 'goalkeeping';
+        saveCareer(loaded);
+        const reloaded = loadCareer();
+        vi.unstubAllGlobals();
+
+        expect(initialFocus).toBe('passing');
+        expect(reloaded).toEqual({ ...c, trainingFocus: 'goalkeeping' });
+        expect(reloaded).not.toHaveProperty('plan');
+        expect(seasonDays(cfg, loaded)).toBe(27);
+        expect(roundsPerSeason(loaded)).toBe(9);
+        expect(loaded.cup).toBeUndefined();
+        loaded.day = 28;
+        expect(today(cfg, loaded).kind).toBe('seasonEnd');
+        endSeason(cfg, loaded);
+        expect(seasonDays(cfg, loaded)).toBe(72);
+        expect(loaded.cup?.rounds[0]?.fixtures).toHaveLength(18);
     });
 
     it('plays three seasons headless: money flows, players grow, promotion/relegation move clubs', () => {

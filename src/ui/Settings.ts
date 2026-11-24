@@ -1,8 +1,10 @@
 /** Settings modal: display (scale, font, motion), pacing, match defaults, the current career, data. */
-import { combined, derived, grain, type WritableGrain } from '@grainular/grains';
+import { combined, derived, grain, type Grain } from '@grainular/grains';
+import type { Confirm } from './confirm';
 import { fullscreen, isDesktop, setFullscreen } from './desktop';
-import { $render, attr, html, on } from '@grainular/nord';
-const onClick = (f: () => void) => on('click', f);
+import { $switch, attr, html, on } from '@grainular/nord';
+import { controlValue, distinct } from './value';
+import { Dialog } from './Dialog';
 import type { Difficulty, TimeoutPolicy } from '../config';
 import type { CareerSettings } from '../meta/career';
 import { saveLocation } from '../meta/storage';
@@ -15,6 +17,7 @@ export type MatchOpts = { timerSeconds: number; rounds: number; difficulty: Diff
 
 export type SettingsProps = {
     onClose: () => void;
+    confirm: Confirm;
     /** Defaults for quick matches and new careers. */
     defaults: { get: () => MatchOpts; set: (o: MatchOpts) => void };
     /** The running career's match options, if one is loaded. */
@@ -22,29 +25,27 @@ export type SettingsProps = {
     onDeleteCareer?: () => void;
 };
 
-const seg = <T extends string | number>(value: T, options: Array<[T, string]>, set: (v: T) => void) =>
-    html`<div class="seg">${options.map(([v, label]) => html`<button class="${v === value ? 'on' : ''}" ${on('click', () => set(v))}>${label}</button>`)}</div>`;
+const seg = <T extends string | number>(value: Grain<T>, options: Array<[T, string]>, set: (v: T) => void) =>
+    html`<div class="seg">${options.map(([v, label]) => {
+        const active = derived(value, (current) => current === v);
+        return html`<button ${attr({ class: derived(active, (selected) => (selected ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => set(v))}>${label}</button>`;
+    })}</div>`;
 
-const slider = (value: number, min: number, max: number, step: number, unit: string, set: (v: number) => void) => {
-    const shown = grain(value);
-    return html`<div class="range"><input type="range" min="${String(min)}" max="${String(max)}" step="${String(step)}" value="${String(value)}"
-        ${on('input', (e) => {
-            const v = Number((e.target as HTMLInputElement).value);
-            shown.set(v);
-            set(v);
-        })} /><output>${derived(shown, (v) => `${v}${unit}`)}</output></div>`;
-};
+const slider = (value: Grain<number>, min: number, max: number, step: number, unit: string, set: (v: number) => void) =>
+    html`<div class="range"><input type="range" min="${String(min)}" max="${String(max)}" step="${String(step)}" value="${String(value())}" ${controlValue(value)}
+        ${on('input', (e) => set(Number((e.currentTarget as HTMLInputElement).value)))} /><output>${derived(value, (v) => `${v}${unit}`)}</output></div>`;
 
 /** One block of match options bound to a getter/setter. */
-const matchOptions = (get: () => MatchOpts, set: (o: MatchOpts) => void, bump: WritableGrain<number>) => {
+const matchOptions = (get: () => MatchOpts, set: (o: MatchOpts) => void) => {
+    const options = grain(get());
     const put = <K extends keyof MatchOpts>(k: K, v: MatchOpts[K]) => {
-        set({ ...get(), [k]: v });
-        bump.update((n) => n + 1);
+        const next = { ...get(), [k]: v };
+        set(next);
+        options.set(next);
     };
-    const o = get();
     return html`<div class="set-rows">
         <div class="set-row"><span>Action timer<small>Seconds per action before you lose it. Off = no clock at all.</small></span>${seg(
-            o.timerSeconds,
+            derived(options, (o) => o.timerSeconds),
             [
                 [0, 'Off'],
                 [8, '8s'],
@@ -56,9 +57,16 @@ const matchOptions = (get: () => MatchOpts, set: (o: MatchOpts) => void, bump: W
             ] as Array<[number, string]>,
             (v) => put('timerSeconds', v),
         )}</div>
-        <label class="set-row"><span>Match length<small>Rounds per match (everyone acts once per round)</small></span>${slider(o.rounds, 6, 40, 2, '', (v) => put('rounds', v))}</label>
+        <label class="set-row"><span>Match length<small>Rounds per match (everyone acts once per round)</small></span>${slider(
+            derived(options, (o) => o.rounds),
+            6,
+            40,
+            2,
+            '',
+            (v) => put('rounds', v),
+        )}</label>
         <div class="set-row"><span>AI difficulty</span>${seg(
-            o.difficulty,
+            derived(options, (o) => o.difficulty),
             [
                 ['easy', 'Easy'],
                 ['normal', 'Normal'],
@@ -67,7 +75,7 @@ const matchOptions = (get: () => MatchOpts, set: (o: MatchOpts) => void, bump: W
             (v) => put('difficulty', v),
         )}</div>
         <div class="set-row"><span>On timeout</span>${seg(
-            o.timeoutPolicy,
+            derived(options, (o) => o.timeoutPolicy),
             [
                 ['lose', 'Lose action'],
                 ['auto', 'AI plays it'],
@@ -78,80 +86,77 @@ const matchOptions = (get: () => MatchOpts, set: (o: MatchOpts) => void, bump: W
 };
 
 /** Every song on the station with an on/off switch; clicking a title plays it now. */
-const songList = derived(combined([prefs, nowPlaying]), ([p, playing]) => {
+const SongList = () => {
     const tracks = allTracks();
     if (!tracks.length) return html`<p class="muted">No songs yet: drop audio files into assets/music (named "Artist - Title").</p>`;
-    const off = new Set(p.radioDisabled);
-    const toggle = (k: string) => {
-        setPref('radioDisabled', off.has(k) ? p.radioDisabled.filter((x) => x !== k) : [...p.radioDisabled, k]);
-        radio.checkCurrent();
-    };
-    const onCount = tracks.filter((t) => !off.has(trackKey(t))).length;
+    const disabled = derived(prefs, (p) => p.radioDisabled);
+    const onCount = derived(disabled, (off) => String(tracks.filter((t) => !off.includes(trackKey(t))).length));
     return html`<div class="songs">
-        <div class="songs-head"><span>Songs <small>${String(onCount)} of ${String(tracks.length)} on · click a title to play it</small></span>
-            <button class="ghost" ${onClick(() => {
-                setPref('radioDisabled', []);
-            })}>All on</button></div>
+        <div class="songs-head"><span>Songs <small>${onCount} of ${String(tracks.length)} on · click a title to play it</small></span>
+            <button class="ghost" ${on('click', () => setPref('radioDisabled', []))}>All on</button></div>
         <ul>${tracks.map((t) => {
             const k = trackKey(t);
-            const enabled = !off.has(k);
-            const now = playing?.url === t.url;
-            return html`<li class="${enabled ? '' : 'off'} ${now ? 'now' : ''}">
-                <button class="song-play" title="Play now" ${onClick(() => radio.playNow(t))}><i>${now ? '♫' : '▶'}</i><b>${t.title}</b><span>${t.artist ?? STATION}</span></button>
+            const enabled = derived(disabled, (off) => !off.includes(k));
+            const now = derived(nowPlaying, (playing) => playing?.url === t.url);
+            const cls = derived(combined([enabled, now]), ([isEnabled, playing]) => `${isEnabled ? '' : 'off'} ${playing ? 'now' : ''}`);
+            const toggle = (value: 'on' | 'off') => {
+                if ((value === 'on') === enabled()) return;
+                const off = disabled();
+                setPref('radioDisabled', value === 'on' ? off.filter((key) => key !== k) : [...off, k]);
+                radio.checkCurrent();
+            };
+            return html`<li ${attr({ class: cls })}>
+                <button class="song-play" title="Play now" ${on('click', () => radio.playNow(t))}><i>${derived(now, (playing) => (playing ? '♫' : '▶'))}</i><b>${t.title}</b><span>${t.artist ?? STATION}</span></button>
                 ${seg(
-                    enabled ? 'on' : 'off',
+                    derived(enabled, (value) => (value ? 'on' : 'off')),
                     [
                         ['on', 'On'],
                         ['off', 'Off'],
                     ],
-                    (v) => {
-                        if ((v === 'on') !== enabled) toggle(k);
-                    },
+                    toggle,
                 )}
             </li>`;
         })}</ul>
     </div>`;
-});
+};
 
 export const SettingsModal = (props: SettingsProps) => {
     const savePath = grain('…');
     void saveLocation()
         .then((p) => savePath.set(p))
         .catch(() => savePath.set('Unknown'));
-    const tab = grain<'display' | 'sound' | 'gameplay' | 'career'>('display');
-    const bump = grain(0);
-    const body = derived(combined([tab, prefs, bump]), ([t, p]) => {
-        if (t === 'display') {
-            return html`<div class="set-rows">
+    type Tab = 'display' | 'sound' | 'gameplay' | 'career';
+    const tab = grain<Tab>('display');
+    const pref = <K extends keyof ReturnType<typeof prefs>>(key: K) => distinct(derived(prefs, (p) => p[key]));
+    const toggle = (key: 'autoZoom' | 'reduceMotion' | 'muted' | 'radioOn' | 'matchIntro' | 'tips') =>
+        derived(pref(key), (value) => (value ? 'on' : 'off'));
+    const Display = () => {
+        return html`<div class="set-rows">
                 <div class="set-row"><span>UI scale<small>Bigger UI shows less around it. Applies instantly.</small></span>
                     ${seg(
-                        p.uiScale,
+                        pref('uiScale'),
                         UI_SCALES.map((s) => [s, `${Math.round(s * 100)}%`] as [number, string]),
                         (v) => setPref('uiScale', v),
                     )}</div>
                 <div class="set-row"><span>Fullscreen<small>F11 or ${isDesktop && navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl'}+Enter toggles it anywhere.</small></span>
-                    ${$render(
-                        derived(fullscreen, (f) =>
-                            seg(
-                                f ? 'on' : 'off',
-                                [
-                                    ['off', 'Window'],
-                                    ['on', 'Fullscreen'],
-                                ],
-                                (v) => void setFullscreen(v === 'on'),
-                            ),
-                        ),
+                    ${seg(
+                        derived(fullscreen, (f) => (f ? 'on' : 'off')),
+                        [
+                            ['off', 'Window'],
+                            ['on', 'Fullscreen'],
+                        ],
+                        (v) => void setFullscreen(v === 'on'),
                     )}</div>
                 <div class="set-row top"><span>Font<small>The players and the pitch stay pixel art in every style.</small></span>
                     <div class="font-list">${FONTS.map(
                         (
                             f,
-                        ) => html`<button class="font-opt ${p.font === f.id ? 'on' : ''}" data-font="${f.id}" ${on('click', () => setPref('font', f.id))}>
+                        ) => html`<button ${attr({ class: derived(pref('font'), (font) => `font-opt ${font === f.id ? 'on' : ''}`) })} data-font="${f.id}" ${on('click', () => setPref('font', f.id))}>
                         <b>${f.label}</b><span class="sample">Division 5 of 5 · 128k g · Run in behind</span><small>${f.note}</small></button>`,
                     )}</div></div>
                 <div class="set-row"><span>Auto zoom<small>The camera leans in when players crowd the ball. Wheel or +/− zoom by hand, 0 resets.</small></span>
                     ${seg(
-                        p.autoZoom ? 'on' : 'off',
+                        toggle('autoZoom'),
                         [
                             ['on', 'On'],
                             ['off', 'Off'],
@@ -160,7 +165,7 @@ export const SettingsModal = (props: SettingsProps) => {
                     )}</div>
                 <div class="set-row"><span>Reduce motion<small>Stops blinking and pulsing UI elements.</small></span>
                     ${seg(
-                        p.reduceMotion ? 'on' : 'off',
+                        toggle('reduceMotion'),
                         [
                             ['off', 'Off'],
                             ['on', 'On'],
@@ -168,20 +173,27 @@ export const SettingsModal = (props: SettingsProps) => {
                         (v) => setPref('reduceMotion', v === 'on'),
                     )}</div>
             </div>`;
-        }
-        if (t === 'sound') {
-            const vol = (
-                k: 'sfxVolume' | 'crowdVolume',
-                label: string,
-                note: string,
-            ) => html`<label class="set-row"><span>${label}<small>${note}</small></span>
-                ${slider(Math.round(p[k] * 100), 0, 100, 5, '%', (v) => {
-                    setPref(k, v / 100);
-                    if (k === 'sfxVolume') audio.play('kick');
-                })}</label>`;
-            return html`<div class="set-rows">
+    };
+    const Sound = () => {
+        const vol = (
+            k: 'sfxVolume' | 'crowdVolume',
+            label: string,
+            note: string,
+        ) => html`<label class="set-row"><span>${label}<small>${note}</small></span>
+                ${slider(
+                    derived(pref(k), (value) => Math.round(value * 100)),
+                    0,
+                    100,
+                    5,
+                    '%',
+                    (v) => {
+                        setPref(k, v / 100);
+                        if (k === 'sfxVolume') audio.play('kick');
+                    },
+                )}</label>`;
+        return html`<div class="set-rows">
                 <div class="set-row"><span>Sound<small>M toggles it during a match.</small></span>${seg(
-                    p.muted ? 'off' : 'on',
+                    derived(pref('muted'), (muted) => (muted ? 'off' : 'on')),
                     [
                         ['on', 'On'],
                         ['off', 'Muted'],
@@ -192,16 +204,23 @@ export const SettingsModal = (props: SettingsProps) => {
                 ${vol('crowdVolume', 'Crowd', 'The ambience that swells as the ball nears goal.')}
                 <h4>Radio <small>songs from assets/music · N next song · R on/off</small></h4>
                 <div class="set-row"><span>Radio</span>${seg(
-                    p.radioOn ? 'on' : 'off',
+                    toggle('radioOn'),
                     [
                         ['on', 'On'],
                         ['off', 'Off'],
                     ],
                     (v) => radio.setOn(v === 'on'),
                 )}</div>
-                <label class="set-row"><span>Radio volume</span>${slider(Math.round(p.radioVolume * 100), 0, 100, 5, '%', (v) => setPref('radioVolume', v / 100))}</label>
+                <label class="set-row"><span>Radio volume</span>${slider(
+                    derived(pref('radioVolume'), (value) => Math.round(value * 100)),
+                    0,
+                    100,
+                    5,
+                    '%',
+                    (v) => setPref('radioVolume', v / 100),
+                )}</label>
                 <div class="set-row"><span>During matches<small>Quieter keeps it under the crowd and the commentary.</small></span>${seg(
-                    p.radioInMatch,
+                    pref('radioInMatch'),
                     [
                         ['on', 'Full'],
                         ['quiet', 'Quieter'],
@@ -209,14 +228,14 @@ export const SettingsModal = (props: SettingsProps) => {
                     ] as Array<['on' | 'quiet' | 'off', string]>,
                     (v) => setPref('radioInMatch', v),
                 )}</div>
-                ${$render(songList)}
+                ${SongList()}
             </div>`;
-        }
-        if (t === 'gameplay') {
-            return html`<div>
+    };
+    const Gameplay = () => {
+        return html`<div>
                 <div class="set-rows"><div class="set-row"><span>Match intro<small>Commentators, the ground, both line-ups and the story before kick-off. Esc skips it.</small></span>
                     ${seg(
-                        p.matchIntro ? 'on' : 'off',
+                        toggle('matchIntro'),
                         [
                             ['on', 'Show'],
                             ['off', 'Skip'],
@@ -225,7 +244,7 @@ export const SettingsModal = (props: SettingsProps) => {
                     )}</div>
                 <div class="set-row"><span>AI speed<small>How quickly AI players act and results resolve.</small></span>
                     ${seg(
-                        p.aiSpeed,
+                        pref('aiSpeed'),
                         [
                             ['fast', 'Fast'],
                             ['normal', 'Normal'],
@@ -234,10 +253,10 @@ export const SettingsModal = (props: SettingsProps) => {
                         (v) => setPref('aiSpeed', v),
                     )}</div>
                 <div class="set-row top"><span>Focus<small>Which of your players ask for orders. F cycles it in a match.</small></span>
-                    <div class="font-list">${CONTROL_MODES.map((m) => html`<button class="font-opt ${p.controlMode === m.id ? 'on' : ''}" ${on('click', () => setPref('controlMode', m.id))}><b>${m.label}</b><small>${m.note}</small></button>`)}</div></div>
+                    <div class="font-list">${CONTROL_MODES.map((m) => html`<button ${attr({ class: derived(pref('controlMode'), (mode) => `font-opt ${mode === m.id ? 'on' : ''}`) })} ${on('click', () => setPref('controlMode', m.id))}><b>${m.label}</b><small>${m.note}</small></button>`)}</div></div>
                 <div class="set-row"><span>Coach tips<small>One-time hints the first time something happens.</small></span>
                     <div class="seg">${seg(
-                        p.tips ? 'on' : 'off',
+                        toggle('tips'),
                         [
                             ['on', 'On'],
                             ['off', 'Off'],
@@ -249,9 +268,10 @@ export const SettingsModal = (props: SettingsProps) => {
                     })}>Replay all tips</button></div></div>
                 </div>
                 <h4>Match defaults <small>quick matches & new careers</small></h4>
-                ${matchOptions(props.defaults.get, props.defaults.set, bump)}
+                ${matchOptions(props.defaults.get, props.defaults.set)}
             </div>`;
-        }
+    };
+    const Career = () => {
         const c = props.career;
         if (!c) return html`<p class="muted">No career loaded.</p>`;
         return html`<div>
@@ -262,36 +282,39 @@ export const SettingsModal = (props: SettingsProps) => {
                     Object.assign(c.settings, o);
                     c.save();
                 },
-                bump,
             )}
             <h4>Save file <small>saved automatically after every change</small></h4>
             <p class="save-path">${savePath}</p>
             ${
                 props.onDeleteCareer
                     ? html`<div class="danger-zone"><span>Delete this career save. This can't be undone.</span>
-                <button class="warn" ${on('click', () => {
-                    if (confirm(`Delete the career "${c.name}"? This cannot be undone.`)) props.onDeleteCareer!();
+                <button class="warn" ${on('click', async () => {
+                    if (
+                        await props.confirm({
+                            title: 'Delete this career?',
+                            body: `“${c.name}” will be removed from the active save slot.`,
+                            action: 'Delete career',
+                        })
+                    )
+                        props.onDeleteCareer!();
                 })}>Delete career</button></div>`
                     : html``
             }
         </div>`;
-    });
-    const tabs = derived(
-        tab,
-        (t) => html`<div class="seg tabs">
-        ${(['display', 'sound', 'gameplay', ...(props.career ? ['career'] : [])] as Array<'display' | 'sound' | 'gameplay' | 'career'>).map(
-            (id) =>
-                html`<button class="${t === id ? 'on' : ''}" ${on('click', () => tab.set(id))}>${id === 'career' ? 'Career' : id[0]!.toUpperCase() + id.slice(1)}</button>`,
-        )}
-    </div>`,
-    );
-    return html`<div class="modal settings-modal" ${on('click', (e) => {
-        if (e.target === e.currentTarget) props.onClose();
-    })}>
-        <div class="modal-body" ${attr({ role: 'dialog', 'aria-label': 'Settings' })}>
+    };
+    const tabs: Tab[] = ['display', 'sound', 'gameplay'];
+    if (props.career) tabs.push('career');
+    return Dialog({
+        label: 'Settings',
+        className: 'modal settings-modal',
+        dismiss: props.onClose,
+        children: html`<div class="modal-body">
             <header><h2>Settings</h2><button class="ghost" ${on('click', props.onClose)}>Close <kbd>Esc</kbd></button></header>
-            ${$render(tabs)}
-            <div class="modal-scroll set-body">${$render(body)}</div>
-        </div>
-    </div>`;
+            <div class="seg tabs">${tabs.map((id) => {
+                const active = derived(tab, (current) => current === id);
+                return html`<button ${attr({ class: derived(active, (selected) => (selected ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => tab.set(id))}>${id[0]!.toUpperCase() + id.slice(1)}</button>`;
+            })}</div>
+            <div class="modal-scroll set-body">${$switch(tab).$case('display', Display).$case('sound', Sound).$case('gameplay', Gameplay).$default(Career)}</div>
+        </div>`,
+    });
 };
