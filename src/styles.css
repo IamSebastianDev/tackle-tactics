@@ -5500,3 +5500,10 @@ td.name .flag {
     min-width: 34px;
     justify-content: center;
 }
+
+/* tactics: what the selected formation is for */
+.formation-note {
+    margin: -4px 0 8px;
+    color: var(--muted);
+    font-size: 13px;
+}

@@ -37,7 +37,7 @@
             "rules": { "no-console": "off" }
         },
         {
-            "files": ["test/tune.test.ts", "test/styles.test.ts", "test/chains.test.ts"],
+            "files": ["test/tune.test.ts", "test/styles.test.ts", "test/chains.test.ts", "test/formations.test.ts"],
             "rules": { "vitest/expect-expect": "off" }
         }
     ]

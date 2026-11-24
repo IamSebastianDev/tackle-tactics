@@ -31,7 +31,13 @@ export type FormationSlot = {
     roleWeight: number;
 };
 
-export type Formation = { id: string; label: string; slots: FormationSlot[] };
+export type Formation = {
+    id: string;
+    label: string;
+    /** One line on what the shape is for, shown on the tactics screen. */
+    note: string;
+    slots: FormationSlot[];
+};
 
 export const defaultConfig = {
     match: {
@@ -276,6 +282,7 @@ export const defaultConfig = {
         {
             id: '4-3-3',
             label: '4-3-3',
+            note: 'Balanced. Wingers stretch the play for a lone striker; three in midfield keep the ball.',
             slots: [
                 { cls: 'keeper', x: 0.03, y: 0.5, ballShift: 0.15, roleWeight: 0.2 },
                 { cls: 'defender', x: 0.2, y: 0.15, ballShift: 0.45, roleWeight: 0.6 },
@@ -293,6 +300,7 @@ export const defaultConfig = {
         {
             id: '4-4-2',
             label: '4-4-2 (deep block)',
+            note: 'Sit deep in two banks of four and hit the two strikers early.',
             slots: [
                 { cls: 'keeper', x: 0.03, y: 0.5, ballShift: 0.15, roleWeight: 0.2 },
                 { cls: 'defender', x: 0.17, y: 0.15, ballShift: 0.4, roleWeight: 0.45 },
@@ -300,8 +308,8 @@ export const defaultConfig = {
                 { cls: 'defender', x: 0.14, y: 0.62, ballShift: 0.35, roleWeight: 0.3 },
                 { cls: 'defender', x: 0.17, y: 0.85, ballShift: 0.4, roleWeight: 0.45 },
                 { cls: 'winger', x: 0.32, y: 0.12, ballShift: 0.55, roleWeight: 0.8 },
-                { cls: 'midfielder', x: 0.3, y: 0.38, ballShift: 0.5, roleWeight: 0.4 },
-                { cls: 'midfielder', x: 0.3, y: 0.62, ballShift: 0.5, roleWeight: 0.4 },
+                { cls: 'midfielder', x: 0.31, y: 0.38, ballShift: 0.55, roleWeight: 0.55 },
+                { cls: 'midfielder', x: 0.31, y: 0.62, ballShift: 0.55, roleWeight: 0.55 },
                 { cls: 'winger', x: 0.32, y: 0.88, ballShift: 0.55, roleWeight: 0.8 },
                 { cls: 'striker', x: 0.47, y: 0.4, ballShift: 0.65, roleWeight: 1.0 },
                 { cls: 'striker', x: 0.47, y: 0.6, ballShift: 0.65, roleWeight: 1.0 },
@@ -310,6 +318,7 @@ export const defaultConfig = {
         {
             id: '3-4-3',
             label: '3-4-3 (high line)',
+            note: 'All-out attack: three up top, a high line, and space behind it.',
             slots: [
                 { cls: 'keeper', x: 0.05, y: 0.5, ballShift: 0.2, roleWeight: 0.2 },
                 { cls: 'defender', x: 0.24, y: 0.25, ballShift: 0.5, roleWeight: 0.5 },
@@ -322,6 +331,64 @@ export const defaultConfig = {
                 { cls: 'striker', x: 0.47, y: 0.22, ballShift: 0.65, roleWeight: 1.0 },
                 { cls: 'striker', x: 0.48, y: 0.5, ballShift: 0.7, roleWeight: 1.1 },
                 { cls: 'striker', x: 0.47, y: 0.78, ballShift: 0.65, roleWeight: 1.0 },
+            ],
+        },
+        {
+            // two holders screen the back four; the No. 10 links to a lone striker
+            id: '4-2-3-1',
+            label: '4-2-3-1',
+            note: 'Two holders screen the defence; the No. 10 feeds a lone striker.',
+            slots: [
+                { cls: 'keeper', x: 0.03, y: 0.5, ballShift: 0.15, roleWeight: 0.2 },
+                { cls: 'defender', x: 0.2, y: 0.15, ballShift: 0.45, roleWeight: 0.6 },
+                { cls: 'defender', x: 0.17, y: 0.38, ballShift: 0.4, roleWeight: 0.35 },
+                { cls: 'defender', x: 0.17, y: 0.62, ballShift: 0.4, roleWeight: 0.35 },
+                { cls: 'defender', x: 0.2, y: 0.85, ballShift: 0.45, roleWeight: 0.6 },
+                { cls: 'midfielder', x: 0.32, y: 0.4, ballShift: 0.55, roleWeight: 0.4 },
+                { cls: 'midfielder', x: 0.32, y: 0.6, ballShift: 0.55, roleWeight: 0.4 },
+                { cls: 'winger', x: 0.46, y: 0.1, ballShift: 0.6, roleWeight: 1.0 },
+                { cls: 'midfielder', x: 0.43, y: 0.5, ballShift: 0.65, roleWeight: 0.95 },
+                { cls: 'winger', x: 0.46, y: 0.9, ballShift: 0.6, roleWeight: 1.0 },
+                { cls: 'striker', x: 0.48, y: 0.5, ballShift: 0.7, roleWeight: 1.1 },
+            ],
+        },
+        {
+            // narrow: no wingers, the full-backs bring the width, two strikers up top
+            id: '4-3-1-2',
+            label: '4-3-1-2 (diamond)',
+            note: 'Narrow: no wingers, full-backs bring the width, two strikers through the middle.',
+            slots: [
+                { cls: 'keeper', x: 0.03, y: 0.5, ballShift: 0.15, roleWeight: 0.2 },
+                { cls: 'defender', x: 0.19, y: 0.14, ballShift: 0.4, roleWeight: 0.55 },
+                { cls: 'defender', x: 0.17, y: 0.38, ballShift: 0.4, roleWeight: 0.35 },
+                { cls: 'defender', x: 0.17, y: 0.62, ballShift: 0.4, roleWeight: 0.35 },
+                { cls: 'defender', x: 0.19, y: 0.86, ballShift: 0.4, roleWeight: 0.55 },
+                // the diamond holds its shape rather than swarming the ball (it dominated when it chased)
+                { cls: 'midfielder', x: 0.29, y: 0.5, ballShift: 0.3, roleWeight: 0.25 },
+                { cls: 'midfielder', x: 0.36, y: 0.3, ballShift: 0.35, roleWeight: 0.5 },
+                { cls: 'midfielder', x: 0.36, y: 0.7, ballShift: 0.35, roleWeight: 0.5 },
+                { cls: 'midfielder', x: 0.42, y: 0.5, ballShift: 0.4, roleWeight: 0.65 },
+                { cls: 'striker', x: 0.48, y: 0.4, ballShift: 0.65, roleWeight: 0.9 },
+                { cls: 'striker', x: 0.48, y: 0.6, ballShift: 0.65, roleWeight: 0.9 },
+            ],
+        },
+        {
+            // five at the back, wing-backs tuck in, two strikers stay high to break
+            id: '5-3-2',
+            label: '5-3-2 (counter)',
+            note: 'Five at the back to soak it up, two strikers left high to break.',
+            slots: [
+                { cls: 'keeper', x: 0.03, y: 0.5, ballShift: 0.15, roleWeight: 0.2 },
+                { cls: 'defender', x: 0.22, y: 0.1, ballShift: 0.55, roleWeight: 0.75 },
+                { cls: 'defender', x: 0.15, y: 0.3, ballShift: 0.35, roleWeight: 0.3 },
+                { cls: 'defender', x: 0.13, y: 0.5, ballShift: 0.3, roleWeight: 0.25 },
+                { cls: 'defender', x: 0.15, y: 0.7, ballShift: 0.35, roleWeight: 0.3 },
+                { cls: 'defender', x: 0.22, y: 0.9, ballShift: 0.55, roleWeight: 0.75 },
+                { cls: 'midfielder', x: 0.3, y: 0.32, ballShift: 0.5, roleWeight: 0.45 },
+                { cls: 'midfielder', x: 0.28, y: 0.5, ballShift: 0.5, roleWeight: 0.35 },
+                { cls: 'midfielder', x: 0.3, y: 0.68, ballShift: 0.5, roleWeight: 0.45 },
+                { cls: 'striker', x: 0.46, y: 0.4, ballShift: 0.7, roleWeight: 1.05 },
+                { cls: 'striker', x: 0.46, y: 0.6, ballShift: 0.7, roleWeight: 1.05 },
             ],
         },
     ] as Formation[],

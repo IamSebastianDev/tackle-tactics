@@ -206,7 +206,6 @@ export const newCareer = (
         const ids: string[] = [];
         for (let k = 0; k < cfg.career.clubsPerDivision; k++, ci++) {
             const id = `c${ci}`;
-            const formation = cfg.formations[Math.floor(rng() * cfg.formations.length)]!.id;
             const club: CareerClub = {
                 id,
                 name: nation.clubName(rng, places[ci % places.length]!),
@@ -214,12 +213,13 @@ export const newCareer = (
                 kit: outfieldKit(cfg, ci),
                 awayKit: awayKitFor(cfg, outfieldKit(cfg, ci), ci + 3),
                 keeperKit: keeperKit(cfg, ci),
-                formationId: formation,
+                formationId: cfg.formations[0]!.id,
                 squad: buildSquad(cfg, rng, c, tier),
                 tier,
                 budget: cfg.career.startingBudget[tier]!,
                 lineup: [],
             };
+            club.formationId = pickFormation(cfg, rng, club);
             club.lineup = autoLineup(cfg, club);
             c.clubs[id] = club;
             ids.push(id);
@@ -311,6 +311,26 @@ export const squadOvr = (cfg: GameConfig, club: CareerClub) => {
 export const wageBill = (cfg: GameConfig, club: CareerClub) => club.squad.reduce((a, p) => a + wage(cfg, p), 0);
 
 // ------------------------------------------------------------------ lineups & match clubs
+
+/** Strength of a club's best XI in a formation (sum of slot fits). */
+const lineupFit = (cfg: GameConfig, club: Club, formationId: string) => {
+    const lineup = autoLineup(cfg, { ...club, formationId });
+    const formation = cfg.formations.find((f) => f.id === formationId)!;
+    return lineup.reduce((sum, id, i) => {
+        const p = club.squad.find((q) => q.id === id);
+        return sum + (p ? fitFor(cfg, p, formation.slots[i]!.cls) : 0);
+    }, 0);
+};
+
+/**
+ * An AI club's formation: a random pick among the shapes its squad fills nearly as well as its
+ * best one, so clubs play to their players without every club converging on the same shape.
+ */
+export const pickFormation = (cfg: GameConfig, rng: Rng, club: Club, tolerance = 0.02): string => {
+    const fits = cfg.formations.map((f) => ({ id: f.id, fit: lineupFit(cfg, club, f.id) }));
+    const best = Math.max(...fits.map((f) => f.fit));
+    return rng.pick(fits.filter((f) => f.fit >= best * (1 - tolerance))).id;
+};
 
 /** Best fit for each formation slot, injured players excluded. */
 export const autoLineup = (cfg: GameConfig, club: Club): string[] => {
@@ -749,6 +769,8 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
                     club.squad.push(newPlayer(cfg, rng, c, cls, club.tier, club.squad.length + 1, [17, 20]));
                 }
             }
+            // a new season, a fresh look at the shape that suits the squad
+            club.formationId = pickFormation(cfg, rng, club);
         }
         club.lineup = autoLineup(cfg, club);
     }

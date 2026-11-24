@@ -725,6 +725,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                         changed();
                         toast('Best XI picked.');
                     })}>Auto-pick XI</button></div>
+                <p class="formation-note">${derived(lineup, (team) => team.formation.note)}</p>
                 <div class="board">${slotEls}<div class="half"></div><div class="box"></div></div>
             </div>
             <div class="card fill">${$render(bench)}</div>

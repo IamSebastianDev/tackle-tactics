@@ -325,6 +325,8 @@ describe('career', () => {
 
     it('the away side changes into its away kit only when the strips clash', () => {
         const c = newCareer(cfg, 11, settings, { kit: 'blue', awayKit: 'yellow' });
+        // every generated club's change strip differs from its home one (checked before the test edits kits)
+        for (const cl of Object.values(c.clubs)) expect(kitsClash(cfg, cl.kit, cl.awayKit!)).toBe(false);
         const u = userClub(c);
         const f = c.divisions.at(-1)!.fixtures.find((x) => x.away === u.id)!;
         const host = c.clubs[f.home]!;
@@ -333,6 +335,5 @@ describe('career', () => {
         expect(fixtureClubs(cfg, c, f)[1].kit).toBe('yellow');
         host.kit = 'red'; // no clash: home strip
         expect(fixtureClubs(cfg, c, f)[1].kit).toBe('blue');
-        for (const cl of Object.values(c.clubs)) expect(kitsClash(cfg, cl.kit, cl.awayKit!)).toBe(false);
     });
 });
