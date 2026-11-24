@@ -5,6 +5,7 @@
  * change and the view derives from it.
  */
 import { grain } from '@grainular/grains';
+import { describePlays, type PlayKind } from './playbyplay';
 import { applyAct, applyMove, Brain, type ActDecision, type MoveDecision } from '../ai/brain';
 import type { Difficulty, GameConfig, TeamStyle } from '../config';
 import { abilityDef, type AbilityId } from '../engine/abilities';
@@ -69,6 +70,9 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 export const MOVE_MODES: AbilityId[] = ['sprint', 'run', 'press', 'rush'];
 export const KICK_MODES: AbilityId[] = ['placed', 'power', 'chip', 'through', 'cross'];
 export const TARGET_MODES: AbilityId[] = ['mark', 'tempo'];
+
+/** A line in the live simulation feed: a play (from the events) or a commentator's line. */
+export type SimLine = { kind: PlayKind | 'talk'; text: string; team: TeamSide | null; minute: number; voice: boolean };
 
 export class MatchController {
     readonly match: Match;
@@ -576,6 +580,9 @@ export class MatchController {
         }
     }
 
+    /** A goal whose restart the presenter hasn't made yet (it waits for the celebration). */
+    private pendingRestart: TeamSide | null = null;
+
     /** Human substitutions waiting for the next break between turns (your side wasn't on the ball). */
     readonly pendingSubs = grain<Array<{ team: TeamSide; off: string; on: string }>>([]);
 
@@ -753,6 +760,62 @@ export class MatchController {
             a = brain.decideAct(p);
         }
         await this.handle(applyAct(m, a));
+    }
+
+    /**
+     * Live simulation (quick sim, finishing a match early): one whole turn played by the AI for both
+     * sides, synchronously and without any presentation. Returns the turn's play-by-play and the
+     * commentators' lines, each stamped with the match minute. Stats keep counting as usual.
+     */
+    simTurn(): Array<SimLine> {
+        const m = this.match;
+        if (m.state.over) return [];
+        const out: SimLine[] = [];
+        const minute = () => this.stats.minute();
+        const take = (events: MatchEvent[]) => {
+            if (!events.length) return;
+            const goalsBefore = this.stats.goals.length;
+            this.stats.observe(events);
+            const assist = this.stats.goals.length > goalsBefore ? this.stats.goals.at(-1)!.assist : undefined;
+            for (const play of describePlays(m, events)) out.push({ ...play, minute: minute(), voice: false });
+            for (const l of this.commentator.call(events, assist))
+                out.push({ kind: 'talk', text: l.text, team: l.team, minute: minute(), voice: true });
+            for (const e of events) if (e.t === 'goal') take(m.restartAfterGoal(e.team));
+        };
+        // the match was left during a goal celebration: kick off again first
+        if (this.pendingRestart !== null) {
+            const team = this.pendingRestart;
+            this.pendingRestart = null;
+            take(m.restartAfterGoal(team));
+        }
+        // a set piece being lined up: both sides place their players
+        for (let guard = 0; guard < 24 && m.state.setPiece?.stage === 'setup'; guard++) {
+            const t = m.state.setPiece.next;
+            const d = this.brains[t].decidePlacement(t);
+            if (d) take(m.place(d.id, d.to));
+            else m.passPlacement(t);
+        }
+        const p = m.active();
+        const brain = this.brains[p.team];
+        this.stats.onTurn();
+        for (let guard = 0; guard < 3 && m.state.phase === 'move'; guard++) {
+            const d = brain.decideMove(p);
+            take(applyMove(m, d));
+            if (d.kind !== 'trick') break;
+        }
+        if (m.state.phase === 'move') m.hold();
+        if (m.state.phase === 'act' && m.state.pieces.includes(p)) take(applyAct(m, brain.decideAct(p)));
+        m.state.phase = 'done';
+        const round = m.state.round;
+        take(m.nextTurn());
+        // at each new round both benches may freshen legs (the AI picks for the manager too)
+        if (m.state.round !== round && !m.state.over)
+            for (const t of [0, 1] as TeamSide[]) {
+                const d = this.brains[t].decideSub(t);
+                if (d) take(m.substitute(t, d.off, d.on));
+            }
+        this.bump();
+        return out;
     }
 
     private handleTimeout() {
@@ -969,11 +1032,15 @@ export class MatchController {
                     this.flightZone.set(null);
                     this.bump();
                     const scorer = m.piece(e.scorer);
+                    this.pendingRestart = e.team;
                     await this.showBanner(
                         'GOAL!',
                         `${scorer.player.name} · ${m.state.score[0]} – ${m.state.score[1]}`,
                         this.cfg.match.goalPauseMs,
                     );
+                    // left mid-celebration: the live simulation restarts play itself (see simTurn)
+                    if (this.stopped) return;
+                    this.pendingRestart = null;
                     this.ballAt = null;
                     this.followBall = false;
                     this.say(this.commentator.call(m.restartAfterGoal(e.team)));

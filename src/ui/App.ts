@@ -1,4 +1,5 @@
 import { combined, derived, grain } from '@grainular/grains';
+import { SimView } from './SimView';
 import { Dropdown } from './Dropdown';
 import { DEFAULT_NATION, NATION_IDS, NATIONS, type NationId } from '../world/nations';
 import { flag } from './flag';
@@ -13,7 +14,6 @@ import type { Club } from '../types';
 import { generateClub } from '../world/generate';
 import { abilitiesOf, classLabel } from '../engine/abilities';
 import {
-    careerRng,
     deleteCareer,
     stadiumOf,
     endSeason,
@@ -23,7 +23,6 @@ import {
     playMatchday,
     seasonDays,
     saveCareer,
-    simulateScore,
     simulatedWinChance,
     today,
     userClub,
@@ -139,7 +138,9 @@ export const App = () => {
     const confirmation = createConfirmation();
     const settings = grain<Settings>(loadSettings());
     const showHowto = grain(false);
-    const screen = grain<'title' | 'setup' | 'newCareer' | 'hub' | 'match'>('title');
+    const screen = grain<'title' | 'setup' | 'newCareer' | 'hub' | 'match' | 'sim'>('title');
+    /** The live simulation screen's content (quick sim, or finishing a match early). */
+    let simView: (() => ReturnType<typeof SimView>) | null = null;
     let ctl: MatchController | null = null;
     const career = grain<Career | null>(loadCareer());
     const hubNotice = grain<HubNotice | null>(null);
@@ -231,11 +232,12 @@ export const App = () => {
         return `${c.clubs[f.home]!.short} ${home} – ${away} ${c.clubs[f.away]!.short}${penalties ? ` (${penalties})` : ''}`;
     };
 
-    const playCareerMatch = () => {
+    /** Today's career fixture, set up for the engine: prep, talk, conditions, the controller. */
+    const buildCareerMatch = () => {
         const c = career()!;
         const cfg = careerCfg(c);
         const t = today(cfg, c);
-        if (t.kind !== 'match') return;
+        if (t.kind !== 'match') return null;
         const side = userSide(c, t.fixture);
         const controllers: [Controller, Controller] = side === 0 ? ['human', 'ai'] : ['ai', 'human'];
         const stadium = stadiumOf(c, c.clubs[t.fixture.home]!);
@@ -247,7 +249,7 @@ export const App = () => {
         const clubs = fixtureClubs(cfg, c, t.fixture);
         clubs[side].morale = Math.max(10, Math.min(100, (clubs[side].morale ?? 60) + matchEdge(cfg, c, t.fixture, prep)));
         const plans: [TeamStyle | null, TeamStyle | null] = side === 0 ? [prep.plan, null] : [null, prep.plan];
-        ctl = new MatchController(weatherCfg(cfg, conditions), clubs, {
+        const match = new MatchController(weatherCfg(cfg, conditions), clubs, {
             controllers,
             difficulty: c.settings.difficulty,
             seed: Math.floor(Math.random() * 1e9),
@@ -257,58 +259,59 @@ export const App = () => {
             plans,
             story: storyLines(cfg, c, t.fixture, prep),
         });
-        if (import.meta.env.DEV) (window as unknown as { __tt: MatchController }).__tt = ctl;
-        const remainingFraction = () => Math.max(0, 1 - (ctl!.match.state.round - 1) / cfg.match.rounds);
-        finishOdds = () => simulatedWinChance(cfg, c, t.fixture, ctl!.match.state.score, remainingFraction());
-        matchExit = () => {
-            const m = ctl!.match;
-            let score = [...m.state.score] as [number, number];
-            if (!m.state.over) {
-                // leaving early: the rest of the match is simulated from the current score
-                const rng = careerRng(c);
-                const rest = simulateScore(cfg, rng, c, t.fixture, remainingFraction());
-                c.rngState = rng.state();
-                score = [score[0] + rest[0], score[1] + rest[1]];
-            }
+        if (import.meta.env.DEV) (window as unknown as { __tt: MatchController }).__tt = match;
+        /** The match is over (played, simulated, or both): record it and go back to the club. */
+        const finish = (note = '') => {
+            const m = match.match;
             const played = m
                 .everyone()
                 .filter((p) => p.team === side)
                 .map((p) => p.id);
-            const stats = ctl!.stats;
-            ctl!.stop();
+            const stats = match.stats;
+            match.stop();
             ctl = null;
             const before = c.news.length;
-            // real lines only if the match was finished on the board
-            const lines = m.state.over
-                ? Object.fromEntries(
-                      m.everyone().map((p) => {
-                          const l = stats.players.get(p.id);
-                          return [p.id, { goals: l?.goals ?? 0, assists: l?.assists ?? 0, rating: stats.rating(p) }];
-                      }),
-                  )
-                : undefined;
-            playMatchday(cfg, c, { score, knocks: m.state.knocks, played, lines });
+            const lines = Object.fromEntries(
+                m.everyone().map((p) => {
+                    const l = stats.players.get(p.id);
+                    return [p.id, { goals: l?.goals ?? 0, assists: l?.assists ?? 0, rating: stats.rating(p) }];
+                }),
+            );
+            playMatchday(cfg, c, { score: [...m.state.score] as [number, number], knocks: m.state.knocks, played, lines });
             saveCareer(c);
-            reportNotice(c, `${resultTitle(c, t.fixture)}${m.state.over ? '' : ' (rest simulated)'}`, before);
+            reportNotice(c, `${resultTitle(c, t.fixture)}${note}`, before);
+            simView = null;
             screen.set('hub');
+        };
+        return { c, cfg, t, match, finish };
+    };
+
+    /** Play the rest of a match live, without the pitch (the match itself keeps going on the engine). */
+    const showSim = (match: MatchController, title: string, onDone: () => void) => {
+        simView = () => SimView(match, { title, doneLabel: 'Back to the club', onDone });
+        screen.set('sim');
+    };
+
+    const playCareerMatch = () => {
+        const built = buildCareerMatch();
+        if (!built) return;
+        const { c, cfg, t, match, finish } = built;
+        ctl = match;
+        const remainingFraction = () => Math.max(0, 1 - (match.match.state.round - 1) / cfg.match.rounds);
+        finishOdds = () => simulatedWinChance(cfg, c, t.fixture, match.match.state.score, remainingFraction());
+        matchExit = () => {
+            if (match.match.state.over) return finish();
+            // leaving early: the rest is simulated for real, and you can watch it play out
+            match.stop();
+            showSim(match, 'The rest of the match, simulated', () => finish(' (rest simulated)'));
         };
         screen.set('match');
     };
 
     const simCareerMatch = () => {
-        const c = career()!;
-        const cfg = careerCfg(c);
-        const t = today(cfg, c);
-        if (t.kind !== 'match') return;
-        const rng = careerRng(c);
-        const prep = prepFor(cfg, c, t.fixture);
-        const talk = applyTalk(cfg, c, t.fixture, prep, rng);
-        if (talk) c.news.unshift({ season: c.season, day: c.day, text: talk, tone: 'info' });
-        const score = simulateScore(cfg, rng, c, t.fixture, 1, matchEdge(cfg, c, t.fixture, prep));
-        c.rngState = rng.state();
-        const before = c.news.length;
-        playMatchday(cfg, c, { score, knocks: {}, played: userClub(c).lineup });
-        reportNotice(c, resultTitle(c, t.fixture), before);
+        const built = buildCareerMatch();
+        if (!built) return;
+        showSim(built.match, 'Simulated match', () => built.finish(' (simulated)'));
     };
 
     const hubActions = {
@@ -788,6 +791,7 @@ export const App = () => {
     };
 
     const view = $switch(screen)
+        .$case('sim', () => (simView ? simView() : html``))
         .$case('match', () => {
             if (!ctl) return html``;
             const c = career();
