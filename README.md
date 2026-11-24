@@ -252,7 +252,7 @@ cargo-xwin route) and needs a one-time setup; the script lists anything missing:
 ```bash
 rustup target add x86_64-apple-darwin x86_64-pc-windows-msvc
 cargo install --locked cargo-xwin
-brew install nsis llvm
+brew install llvm lld   # + nsis for the installer (optional)
 ```
 
 The first Windows build downloads Microsoft's CRT and Windows SDK headers (cargo-xwin), which accepts Microsoft's
