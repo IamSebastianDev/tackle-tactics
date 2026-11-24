@@ -16,13 +16,14 @@
         "title": "Tackle Tactics",
         "width": 1600,
         "height": 900,
-        "minWidth": 1180,
-        "minHeight": 680,
+        "minWidth": 960,
+        "minHeight": 540,
         "resizable": true,
         "fullscreen": false,
-        "center": true,
+        "center": false,
         "backgroundColor": "#070808",
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "visible": false
       }
     ],
     "security": {

@@ -79,10 +79,32 @@ fn save_path(app: tauri::AppHandle) -> Result<String, String> {
     Ok(save_file(&app)?.display().to_string())
 }
 
+/// Size the window to the screen it opens on: up to 1600×900, at most 92% of the usable area
+/// (menu bar and Dock excluded), kept at 16:9 and centred. The window starts hidden so it never
+/// flashes at the wrong size or half off-screen.
+fn fit_to_screen(window: &tauri::WebviewWindow) {
+    let monitor = window.current_monitor().ok().flatten().or_else(|| window.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else { return };
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let (ax, ay) = (area.position.x as f64 / scale, area.position.y as f64 / scale);
+    let (aw, ah) = (area.size.width as f64 / scale, area.size.height as f64 / scale);
+    let mut w = (aw * 0.92).min(1600.0);
+    let mut h = (ah * 0.92).min(900.0);
+    // keep the game's 16:9 stage proportions
+    if w / h > 16.0 / 9.0 { w = h * 16.0 / 9.0 } else { h = w * 9.0 / 16.0 }
+    let _ = window.set_size(tauri::LogicalSize::new(w.round(), h.round()));
+    let _ = window.set_position(tauri::LogicalPosition::new((ax + (aw - w) / 2.0).round(), (ay + (ah - h) / 2.0).round()));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                fit_to_screen(&window);
+                let _ = window.show();
+            }
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
