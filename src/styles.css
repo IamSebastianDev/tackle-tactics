@@ -5567,15 +5567,21 @@ button.dd-button:focus-visible {
     transform: scaleY(-1);
 }
 .dd-list {
-    /* a popover: undo the UA's centring, place it from the button (Dropdown.ts sets left/top/scale) */
+    /* a popover anchored under its button (Dropdown.ts sets the anchor name); flips above when
+       there's no room below. Anchor positions resolve through the stage's scale transform, and zoom
+       sizes the contents to match the scaled game without changing the anchored position. */
     position: fixed;
     inset: auto;
-    margin: 0;
+    top: anchor(bottom);
+    left: anchor(left);
+    min-width: anchor-size(width);
+    margin: 2px 0 0;
+    position-try-fallbacks: flip-block;
+    zoom: var(--stage-scale, 1);
     padding: 2px 0;
     max-height: 300px;
     overflow-y: auto;
     overscroll-behavior: none;
-    transform-origin: 0 0;
     color: var(--text);
     font-family: var(--body);
     font-size: 15px;
