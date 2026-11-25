@@ -5,11 +5,21 @@
 # (scripts/fetch-assets.mjs, run by `npm run build`'s asset check), using these repository secrets:
 #   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 # Builds are unsigned, like the local ones (see "Releases" in the README).
+#
+# Test builds: Actions → Release → Run workflow builds the chosen platform(s) from a branch without
+# releasing anything; the files are attached to the run as artifacts.
 name: Release
 
 on:
     push:
         tags: ['v*']
+    workflow_dispatch:
+        inputs:
+            platform:
+                description: Test build for
+                type: choice
+                options: [linux, macos, windows, all]
+                default: linux
 
 permissions:
     contents: write
@@ -27,6 +37,7 @@ env:
 jobs:
     # a draft release first, so every build can attach its files; published at the end
     draft:
+        if: github.event_name == 'push'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
@@ -34,6 +45,19 @@ jobs:
               run: |
                   gh release view "$TAG" >/dev/null 2>&1 ||
                     gh release create "$TAG" --draft --verify-tag --generate-notes --title "Tackle Tactics ${TAG#v}"
+
+    # which desktop platforms to build: all of them for a release, the chosen one for a test build
+    plan:
+        runs-on: ubuntu-latest
+        outputs:
+            matrix: ${{ steps.pick.outputs.matrix }}
+        steps:
+            - id: pick
+              env:
+                  CHOSEN: ${{ github.event_name == 'push' && 'all' || inputs.platform }}
+              run: |
+                  ALL='[{"os":"macos-latest","platform":"macos"},{"os":"windows-latest","platform":"windows"},{"os":"ubuntu-22.04","platform":"linux"}]'
+                  echo "matrix=$(echo "$ALL" | jq -c --arg p "$CHOSEN" '{include: [.[] | select($p == "all" or .platform == $p)]}')" >> "$GITHUB_OUTPUT"
 
     web:
         needs: draft
@@ -49,15 +73,13 @@ jobs:
             - run: gh release upload "$TAG" releases/*/Tackle-Tactics_*_web.zip --clobber
 
     desktop:
-        needs: draft
+        needs: [plan, draft]
+        # runs for releases (after the draft) and for test builds (no draft)
+        if: ${{ !cancelled() && needs.plan.result == 'success' && needs.draft.result != 'failure' }}
         strategy:
             fail-fast: false
-            matrix:
-                include:
-                    - { os: macos-latest, platform: macos }
-                    - { os: windows-latest, platform: windows }
-                    # the oldest supported Ubuntu: an AppImage runs on systems at least as new as its build
-                    - { os: ubuntu-22.04, platform: linux }
+            # Linux builds on the oldest supported Ubuntu (22.04): an AppImage runs on systems at least as new
+            matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
         runs-on: ${{ matrix.os }}
         defaults:
             run:
@@ -80,6 +102,9 @@ jobs:
               run: |
                   sudo apt-get update
                   sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf file
+                  # the AppImage carries its own GStreamer plugins (bundleMediaFramework): without them the
+                  # web engine loads the host's mismatched ones for audio and crashes (e.g. on SteamOS)
+                  sudo apt-get install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
             # npm runs package scripts with cmd.exe on Windows; ours are sh scripts
             - name: Use bash for npm scripts
               if: matrix.platform == 'windows'
@@ -87,7 +112,8 @@ jobs:
             - run: npm ci
             - name: Build
               run: |
-                  V="${TAG#v}"
+                  # a release is named by its tag; a test build by the version and commit
+                  if [ "${{ github.event_name }}" = push ]; then V="${TAG#v}"; else V="$(node -p "require('./package.json').version")-$(git rev-parse --short HEAD)"; fi
                   NAME="Tackle-Tactics_$V"
                   mkdir -p out
                   case "${{ matrix.platform }}" in
@@ -113,7 +139,14 @@ jobs:
                       ;;
                   esac
                   ls -l out
-            - run: gh release upload "$TAG" out/* --clobber
+            - if: github.event_name == 'push'
+              run: gh release upload "$TAG" out/* --clobber
+            - if: github.event_name != 'push'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: test-build-${{ matrix.platform }}
+                  path: out/*
+                  retention-days: 14
 
     publish:
         needs: [web, desktop]
