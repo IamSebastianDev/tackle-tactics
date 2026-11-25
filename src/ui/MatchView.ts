@@ -27,6 +27,10 @@ import { movePoints, tackleChance } from '../engine/rules';
 import type { Cell, Piece, TeamSide } from '../types';
 import { KICK_MODES, MOVE_MODES, TARGET_MODES, type MatchController } from './controller';
 import { prewarmPlayer, resolveAnim, spriteStyle } from './sprites';
+import { groundSvg, turnArrowSvg } from './pixelShapes';
+
+/** Static SVG markup (the pixel markers), set once. */
+const rawSvg = (markup: string) => createDirective((n) => void (n.innerHTML = markup));
 import { recolorVersion } from './recolor';
 import { COMMENTATORS, dangerMan, introText } from './intro';
 
@@ -444,12 +448,12 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             return b.join('');
         });
         return html`<div ${attr({ class: cls, style: wrap })}>
-            <div class="ground" style="--kit:${kit}"></div>
+            <div class="ground-wrap" style="--kit:${kit}" ${rawSvg(groundSvg)}></div>
             <div class="stand">
                 <div class="sprite" ${attr({ style: sprite })}></div>
                 <div class="tag" style="--kit:${kit}">${String(p.player.number)}<span class="badges">${badges}</span></div>
                 <div class="tok-name">${p.player.name}</div>
-                <div class="turn-mark"><i></i></div>
+                <div class="turn-mark" ${rawSvg(turnArrowSvg)}></div>
                 ${tokenStam}
             </div>
         </div>`;

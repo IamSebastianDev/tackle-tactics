@@ -488,52 +488,155 @@ a {
     width: 0;
     height: 0;
 }
-.token .ground {
-    position: absolute;
-    width: 26px;
-    height: 12px;
-    left: -13px;
-    top: -6px;
-    border-radius: 50%;
-    background: radial-gradient(ellipse, #0008 40%, transparent 72%);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--kit) 85%, transparent);
-}
-.token.active .ground {
-    box-shadow:
-        0 0 0 3px var(--active),
-        0 0 0 5px var(--ink);
-}
-.token.spent .ground {
-    opacity: 0.5;
-}
 .stand {
     position: absolute;
     left: 0;
     top: 0;
 }
+
+/* ---- player markers in the sprites' pixel language (src/ui/pixelShapes.ts): one art pixel is
+   52/32 px. Feet: shadow + team ring; blue = has the ball; yellow + outline = their turn. */
+.token {
+    --ap: calc(52px / 32);
+}
+.token .ground-wrap {
+    position: absolute;
+    left: calc(-13 * var(--ap));
+    top: calc(-5 * var(--ap));
+    line-height: 0;
+}
+.token .ground-wrap svg {
+    display: block;
+}
+.ground .g-shadow {
+    fill: #0007;
+}
+.ground .g-inner {
+    fill: var(--kit);
+}
+.ground .g-outer,
+.ground .g-ink {
+    fill: transparent;
+}
+.token.spent .ground-wrap {
+    opacity: 0.5;
+}
+.token.carrier .ground .g-inner {
+    fill: #2f8cff;
+}
+.token.carrier .ground .g-outer {
+    fill: var(--ink);
+}
+.token.active .ground .g-inner {
+    fill: var(--active);
+}
+.token.active .ground .g-outer {
+    fill: var(--ink);
+}
+/* acting with the ball: blue inside, yellow outside */
+.token.active.carrier .ground .g-inner {
+    fill: #2f8cff;
+}
+.token.active.carrier .ground .g-outer {
+    fill: var(--active);
+}
+.token.active.carrier .ground .g-ink {
+    fill: var(--ink);
+}
+.token.inspected .ground .g-ink {
+    fill: #fff;
+}
+/* the shirt number: a flat team-colour plate in the pixel font, a crisp 1-pixel outline and a
+   2-pixel tail pointing at the player */
 .token .tag {
     position: absolute;
-    left: 10px;
-    top: -48px;
-    font-family: var(--display);
-    font-size: 10px;
-    line-height: 1;
-    padding: 2px 3px 1px;
+    left: calc(6 * var(--ap));
+    top: calc(-30 * var(--ap));
+    min-width: calc(7 * var(--ap));
+    padding: calc(1 * var(--ap)) calc(1.5 * var(--ap)) calc(0.5 * var(--ap));
+    font: 13px/1 var(--pixel);
+    text-align: center;
     background: var(--kit);
     color: #fff;
-    text-shadow: 1px 1px 0 #000;
+    text-shadow: 0 var(--ap) 0 #0009;
     box-shadow:
-        0 0 0 2px var(--ink),
-        2px 2px 0 2px #0006;
+        0 0 0 var(--ap) var(--ink),
+        0 calc(2 * var(--ap)) 0 var(--ap) #0005;
     white-space: nowrap;
 }
+.token .tag::before {
+    content: '';
+    position: absolute;
+    left: calc(-1 * var(--ap));
+    bottom: calc(-3 * var(--ap));
+    width: calc(2 * var(--ap));
+    height: calc(2 * var(--ap));
+    background: var(--ink);
+}
 .token.team1 .tag {
-    left: -26px;
+    left: auto;
+    right: calc(6 * var(--ap));
+}
+.token.team1 .tag::before {
+    left: auto;
+    right: calc(-1 * var(--ap));
 }
 .token.active .tag {
     background: var(--active);
     color: #111;
-    text-shadow: none;
+    text-shadow: 0 var(--ap) 0 #fff6;
+}
+.token .tag .badges {
+    margin-left: calc(1 * var(--ap));
+    letter-spacing: 0;
+}
+.token .tag .badges:empty {
+    display: none;
+}
+/* the turn arrow bobs by whole art pixels */
+.turn-mark {
+    display: none;
+    position: absolute;
+    left: calc(-5.5 * var(--ap));
+    top: calc(-44 * var(--ap));
+    line-height: 0;
+    animation: bob 0.8s steps(1) infinite;
+}
+.turn-mark svg {
+    display: block;
+}
+.token.active .turn-mark {
+    display: block;
+}
+.turn-mark .a-ink {
+    fill: var(--ink);
+}
+.turn-mark .a-fill {
+    fill: var(--active);
+}
+.turn-mark .a-hi {
+    fill: color-mix(in srgb, var(--active) 55%, #fff);
+}
+@keyframes bob {
+    50% {
+        transform: translateY(calc(-2 * var(--ap)));
+    }
+}
+/* the carrier's plate: blue outline and a pixel ball */
+.token.carrier .tag {
+    box-shadow:
+        0 0 0 var(--ap) #2f8cff,
+        0 calc(2 * var(--ap)) 0 var(--ap) #0005;
+}
+.token.carrier .tag::after {
+    content: '';
+    display: inline-block;
+    width: calc(3 * var(--ap));
+    height: calc(3 * var(--ap));
+    margin-left: calc(1 * var(--ap));
+    vertical-align: 0;
+    background: #fff;
+    box-shadow: 0 0 0 calc(0.5 * var(--ap)) #2f8cff;
 }
 .token.staggered .sprite {
     filter: saturate(0.45) brightness(0.8);
@@ -567,9 +670,6 @@ a {
 .token.hovered,
 .token.inspected {
     z-index: 9000 !important;
-}
-.token.inspected .ground {
-    box-shadow: 0 0 0 2px #fff;
 }
 /* the player card while it shows someone other than the active player */
 .inspect-bar {
@@ -3953,68 +4053,6 @@ dialog.drawer-wrap:not([open]) {
 /* ================================================================== READABILITY PASS */
 /* Markers: yellow = whose turn it is (arrow above the head, ring at the feet); blue = the ball
    (a steady ring at the carrier's feet and a ball dot on their tag; a pulsing ring only when loose). */
-.token.carrier .ground {
-    box-shadow:
-        0 0 0 3px #2f8cff,
-        0 0 0 5px var(--ink);
-}
-/* acting with the ball: blue inside, yellow outside */
-.token.active.carrier .ground {
-    box-shadow:
-        0 0 0 3px #2f8cff,
-        0 0 0 6px var(--active),
-        0 0 0 8px var(--ink);
-}
-.turn-mark {
-    display: none;
-    position: absolute;
-    left: -10px;
-    top: -80px;
-    width: 20px;
-    height: 16px;
-    animation: bob 0.8s steps(2) infinite;
-}
-.token.active .turn-mark {
-    display: block;
-}
-.turn-mark i {
-    position: absolute;
-    inset: 0;
-    background: var(--active);
-    clip-path: polygon(0 0, 100% 0, 50% 100%);
-}
-.turn-mark::before {
-    content: '';
-    position: absolute;
-    left: -3px;
-    top: -3px;
-    width: 26px;
-    height: 22px;
-    background: var(--ink);
-    clip-path: polygon(0 0, 100% 0, 50% 100%);
-}
-@keyframes bob {
-    50% {
-        transform: translateY(-5px);
-    }
-}
-.token.carrier .tag {
-    box-shadow:
-        0 0 0 2px #2f8cff,
-        2px 2px 0 2px #0006;
-}
-/* the carrier's tag carries a ball dot */
-.token.carrier .tag::after {
-    content: '';
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    margin-left: 3px;
-    vertical-align: 1px;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow: 0 0 0 1.5px #2f8cff;
-}
 .ball.held .ball-ring {
     display: none;
 }
