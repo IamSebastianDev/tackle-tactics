@@ -5,9 +5,7 @@
 //   R2_BUCKET    optional, defaults to tackle-tactics-assets
 //   R2_ENDPOINT  optional, e.g. https://<account>.eu.r2.cloudflarestorage.com for an EU bucket
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { rmSync, writeFileSync } from 'node:fs';
 import { AwsClient } from 'aws4fetch';
 
 const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY } = process.env;
@@ -26,10 +24,14 @@ if (!res.ok) {
     process.exit(1);
 }
 
-const dir = mkdtempSync(join(tmpdir(), 'tt-assets-'));
-const file = join(dir, 'game-assets.tar.gz');
+// unpacked by a relative name from the repo folder: on Windows, a tar that reads "C:\…" as
+// host:path (Git Bash's GNU tar) can't open an absolute path
+const file = '.game-assets.tar.gz';
 writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-// skip macOS metadata ("._*") that older archives may carry
-execFileSync('tar', ['-xzf', file, '--exclude', '._*', '--exclude', '.DS_Store', '-C', process.cwd()], { stdio: 'inherit' });
-rmSync(dir, { recursive: true });
+try {
+    // skip macOS metadata ("._*") that older archives may carry
+    execFileSync('tar', ['-xzf', file, '--exclude', '._*', '--exclude', '.DS_Store'], { stdio: 'inherit' });
+} finally {
+    rmSync(file, { force: true });
+}
 console.log('fetch-assets: art and music unpacked from R2');

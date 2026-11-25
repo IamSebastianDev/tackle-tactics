@@ -1,0 +1,129 @@
+# Builds every platform when a version tag (v1.2.3) is pushed, and publishes a GitHub Release with
+# the files once all of them succeeded. Start one with `npm run release` (scripts/release.sh).
+#
+# The art and songs aren't in git: every job downloads them from the private R2 bucket
+# (scripts/fetch-assets.mjs, run by `npm run build`'s asset check), using these repository secrets:
+#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+# Builds are unsigned, like the local ones (see "Releases" in the README).
+name: Release
+
+on:
+    push:
+        tags: ['v*']
+
+permissions:
+    contents: write
+
+concurrency:
+    group: release-${{ github.ref_name }}
+
+env:
+    TAG: ${{ github.ref_name }}
+    GH_TOKEN: ${{ github.token }}
+    R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+    R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+    R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+jobs:
+    # a draft release first, so every build can attach its files; published at the end
+    draft:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - name: Create the draft release
+              run: |
+                  gh release view "$TAG" >/dev/null 2>&1 ||
+                    gh release create "$TAG" --draft --verify-tag --generate-notes --title "Tackle Tactics ${TAG#v}"
+
+    web:
+        needs: draft
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version-file: .nvmrc
+                  cache: npm
+            - run: npm ci
+            - run: npm run web:build
+            - run: gh release upload "$TAG" releases/*/Tackle-Tactics_*_web.zip --clobber
+
+    desktop:
+        needs: draft
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - { os: macos-latest, platform: macos }
+                    - { os: windows-latest, platform: windows }
+                    # the oldest supported Ubuntu: an AppImage runs on systems at least as new as its build
+                    - { os: ubuntu-22.04, platform: linux }
+        runs-on: ${{ matrix.os }}
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version-file: .nvmrc
+                  cache: npm
+            - uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: ${{ matrix.platform == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: src-tauri
+                  key: ${{ matrix.platform }}
+            - name: Linux build dependencies
+              if: matrix.platform == 'linux'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf file
+            # npm runs package scripts with cmd.exe on Windows; ours are sh scripts
+            - name: Use bash for npm scripts
+              if: matrix.platform == 'windows'
+              run: npm config set script-shell "$(cygpath -w "$(command -v bash)")"
+            - run: npm ci
+            - name: Build
+              run: |
+                  V="${TAG#v}"
+                  NAME="Tackle-Tactics_$V"
+                  mkdir -p out
+                  case "${{ matrix.platform }}" in
+                    macos)
+                      npx tauri build --target universal-apple-darwin --bundles app
+                      APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/Tackle Tactics.app"
+                      # a plain drag-to-Applications image (Tauri's DMG step scripts Finder, which CI has no session for)
+                      STAGE=$(mktemp -d)
+                      cp -R "$APP" "$STAGE/"
+                      ln -s /Applications "$STAGE/Applications"
+                      hdiutil create -quiet -volname "Tackle Tactics $V" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "out/${NAME}_macos-universal.dmg"
+                      ditto -c -k --keepParent "$APP" "out/${NAME}_macos-universal.app.zip"
+                      ;;
+                    windows)
+                      npx tauri build --bundles nsis
+                      cp src-tauri/target/release/bundle/nsis/*-setup.exe "out/${NAME}_windows-x64-setup.exe"
+                      cp src-tauri/target/release/tackle-tactics.exe "out/${NAME}_windows-x64-portable.exe"
+                      ;;
+                    linux)
+                      npx tauri build --bundles appimage,deb
+                      cp src-tauri/target/release/bundle/appimage/*.AppImage "out/${NAME}_linux-x86_64.AppImage"
+                      cp src-tauri/target/release/bundle/deb/*.deb "out/${NAME}_linux-amd64.deb"
+                      ;;
+                  esac
+                  ls -l out
+            - run: gh release upload "$TAG" out/* --clobber
+
+    publish:
+        needs: [web, desktop]
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - name: Checksums, then publish
+              run: |
+                  mkdir files && cd files
+                  gh release download "$TAG" --pattern 'Tackle-Tactics_*'
+                  sha256sum -- * > SHA256SUMS.txt
+                  gh release upload "$TAG" SHA256SUMS.txt --clobber
+                  gh release edit "$TAG" --draft=false --latest

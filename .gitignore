@@ -18,3 +18,4 @@ public/assets/
 
 # wrangler local state
 .wrangler/
+.game-assets.tar.gz

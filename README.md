@@ -249,13 +249,31 @@ disclaimer and credits are in the game under Settings → About.
 
 **Version.** `package.json` is the single source of the version: `tauri.conf.json` reads it, the game shows it at
 the bottom of Settings (with the build's commit), and the `version` script keeps `src-tauri/Cargo.toml` in step.
-Bump it with npm, which also commits and tags:
+
+**Cutting a release.** One command, on an up-to-date `main` with a clean tree:
 
 ```bash
-npm version patch        # 0.1.0 → 0.1.1 (or minor / major)
+npm run release              # 0.1.0 → 0.1.1 (or: npm run release -- minor / major / 1.2.0)
 ```
 
-**Desktop builds.** `npm run desktop:build` builds both platforms from a Mac and writes them to
+It uploads the current art and songs to R2 (`assets:upload`), bumps the version with `npm version` (a commit and a
+`v…` tag), and pushes both. The tag starts `.github/workflows/release.yml`, which builds on GitHub's runners and
+publishes a GitHub Release once every build succeeded:
+
+| File                                      |                                                            |
+| ----------------------------------------- | ---------------------------------------------------------- |
+| `…_macos-universal.dmg` / `.app.zip`      | Apple silicon + Intel                                      |
+| `…_windows-x64-setup.exe`                 | installer (built natively, so NSIS works)                  |
+| `…_windows-x64-portable.exe`              | runs without installing (needs WebView2, in Windows 10/11) |
+| `…_linux-x86_64.AppImage` / `…_amd64.deb` | Linux (built on Ubuntu 22.04)                              |
+| `…_web.zip`                               | the browser build, for itch.io                             |
+| `SHA256SUMS.txt`                          | checksums of all of the above                              |
+
+The workflow needs the repository secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` (the same
+read-only R2 token as the Cloudflare build). A failed platform leaves the release as a draft; re-run the failed job
+from the Actions tab and the rest carries on.
+
+**Local desktop builds.** `npm run desktop:build` builds macOS and Windows from a Mac and writes them to
 `releases/<version>/` (git-ignored), with a `SHA256SUMS.txt`:
 
 | File                                 |                                                                                |
