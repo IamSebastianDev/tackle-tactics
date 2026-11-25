@@ -299,11 +299,11 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         if (cl.squad.length < cfg.career.squadMin + 1)
             items.push(html`<li class="bad">Thin squad (${String(cl.squad.length)}). Check the market.</li>`);
         if (!items.length) items.push(html`<li class="good">All good. The squad is fit.</li>`);
-        return html`<div class="card"><h3>Squad status</h3><ul class="alerts">${items}</ul></div>`;
+        return items;
     };
 
-    /** The dressing room: a morale meter, what it does on the pitch, and what moved it. */
-    const moraleCard = () => {
+    /** The squad at a glance: morale (meter, match edge, form) above the things that need attention. */
+    const squadCard = () => {
         const s = story(c);
         const m = s.morale;
         const tone = m >= 70 ? 'hi' : m >= 55 ? 'ok' : m >= 40 ? 'meh' : 'lo';
@@ -332,18 +332,17 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                     : '';
         const drift = m > 62 ? 'Cools off on training days.' : m < 58 ? 'Recovers a little on training days.' : 'Steady.';
         return html`<div class="card morale m-${tone}">
-            <h3>Dressing room</h3>
+            <h3>Squad status</h3>
             <div class="morale-top">
-                <div class="morale-mood"><b>${moraleLabel(m)}</b><small>${String(m)}/100</small></div>
-                <div class="morale-edge" title="Morale shifts shot accuracy, tackles and interceptions in every match">
-                    <b>${edge > 0 ? `+${String(edge)}` : String(edge)}%</b><small>match edge</small>
-                </div>
+                <span class="morale-mood"><b>${moraleLabel(m)}</b> morale <small>${String(m)}/100</small></span>
+                <span class="morale-edge" title="Morale shifts shot accuracy, tackles and interceptions in every match"><b>${edge > 0 ? `+${String(edge)}` : String(edge)}%</b> match edge</span>
             </div>
             <div class="morale-meter" title="Morale ${String(m)}/100">${cells}<span class="mid"></span></div>
             <div class="morale-foot">
                 <span>Form <b class="form">${form.length ? form.map((r) => html`<i class="r${r}">${r}</i>`) : '–'}</b></span>
                 <span class="muted">${run ? `${run}. ` : ''}${drift}</span>
             </div>
+            <ul class="alerts">${alerts()}</ul>
         </div>`;
     };
 
@@ -366,7 +365,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     };
 
     const Overview = () => html`<div class="grid-2">
-        <div class="col">${modelRegion(nextUp)}${modelRegion(moraleCard)}${modelRegion(questsCard)}${modelRegion(alerts)}${NewsFeed()}</div>
+        <div class="col">${modelRegion(nextUp)}${modelRegion(squadCard)}${modelRegion(questsCard)}${NewsFeed()}</div>
         <div class="col">${modelRegion(miniTable)}${modelRegion(xiCard)}${modelRegion(historyCard)}</div>
     </div>`;
 
