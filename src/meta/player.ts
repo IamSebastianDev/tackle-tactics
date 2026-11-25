@@ -139,10 +139,13 @@ export const potentialStars = (cfg: GameConfig, p: Player) => {
     return Math.max(1, Math.min(5, Math.round(1 + ((p.growth - lo) / (hi - lo)) * 4)));
 };
 
+/** The money sign: a pixel coin drawn by the 'TT Coin' font (src/ui/coin.woff) on this code point. */
+export const COIN = '\uE000';
+
 export const money = (n: number) => {
     const sign = n < 0 ? '−' : '';
     const a = Math.abs(n);
-    if (a >= 1_000_000) return `${sign}${(a / 1_000_000).toFixed(a >= 10_000_000 ? 0 : 2)}M g`;
-    if (a >= 1_000) return `${sign}${Math.round(a / 1_000)}k g`;
-    return `${sign}${a} g`;
+    if (a >= 1_000_000) return `${sign}${(a / 1_000_000).toFixed(a >= 10_000_000 ? 0 : 2)}M${COIN}`;
+    if (a >= 1_000) return `${sign}${Math.round(a / 1_000)}k${COIN}`;
+    return `${sign}${a}${COIN}`;
 };

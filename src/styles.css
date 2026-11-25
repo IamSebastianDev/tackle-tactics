@@ -30,9 +30,9 @@
     --bad: #ff5a5f;
     --accent: var(--gold);
 
-    --display: 'TT Display', 'Arial Narrow', sans-serif;
-    --body: 'TT Body', system-ui, sans-serif;
-    --pixel: 'TT Pixel', ui-monospace, monospace;
+    --display: 'TT Coin', 'TT Display', 'Arial Narrow', sans-serif;
+    --body: 'TT Coin', 'TT Body', system-ui, sans-serif;
+    --pixel: 'TT Coin', 'TT Pixel', ui-monospace, monospace;
     --shadow: 3px 3px 0 #000a;
 }
 
@@ -2874,18 +2874,18 @@ dialog.drawer-wrap:not([open]) {
     -webkit-font-smoothing: antialiased;
 }
 #app[data-font='arcade'] {
-    --display: 'TT Pixel', monospace;
-    --body: 'Pixelify Sans', 'TT Pixel', sans-serif;
+    --display: 'TT Coin', 'TT Pixel', monospace;
+    --body: 'TT Coin', 'Pixelify Sans', 'TT Pixel', sans-serif;
     -webkit-font-smoothing: none;
     font-size-adjust: 0.56;
 }
 #app[data-font='terminal'] {
-    --body: 'VT323', ui-monospace, monospace;
+    --body: 'TT Coin', 'VT323', ui-monospace, monospace;
     -webkit-font-smoothing: none;
     font-size-adjust: 0.6;
 }
 #app[data-font='clean'] {
-    --display: 'TT Body', system-ui, sans-serif;
+    --display: 'TT Coin', 'TT Body', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
 }
 #app[data-font='broadcast'] .name b,
@@ -3008,13 +3008,13 @@ dialog.drawer-wrap:not([open]) {
     color: var(--on-accent);
 }
 .font-opt[data-font='broadcast'] .sample {
-    font-family: 'TT Display', sans-serif;
+    font-family: 'TT Coin', 'TT Display', sans-serif;
 }
 .font-opt[data-font='arcade'] .sample {
-    font-family: 'Pixelify Sans', sans-serif;
+    font-family: 'TT Coin', 'Pixelify Sans', sans-serif;
 }
 .font-opt[data-font='terminal'] .sample {
-    font-family: 'VT323', monospace;
+    font-family: 'TT Coin', 'VT323', monospace;
     font-size: 21px;
     line-height: 1;
 }

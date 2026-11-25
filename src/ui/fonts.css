@@ -100,3 +100,12 @@
     font-style: normal;
     font-display: block;
 }
+
+/* The money sign: a pixel coin on U+E000 (scripts/gen-coin-font.py). First in every font stack,
+   but it only covers that one character, so all other text falls through to the real face. */
+@font-face {
+    font-family: 'TT Coin';
+    src: url('./coin.woff') format('woff');
+    unicode-range: U+E000;
+    font-display: block;
+}
