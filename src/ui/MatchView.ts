@@ -10,7 +10,7 @@ import { distinct } from './value';
 import { MatchRadioButton, MatchRadioControls } from './RadioUI';
 import { audio } from './audio';
 import { CONTROL_MODES, prefs, setPref } from './prefs';
-import { stageSize } from './stage';
+import { stageSize, viewScale } from './stage';
 import {
     abilitiesOf,
     abilityDef,
@@ -1273,10 +1273,6 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         // drag to pan: right/middle button at once, left button after a short move (so clicks still work)
         let drag: { x: number; y: number; px: number; py: number; moved: boolean; button: number } | null = null;
         let swallowClick = false;
-        const stageScale = () => {
-            const app = document.getElementById('app');
-            return app ? app.getBoundingClientRect().width / app.offsetWidth || 1 : 1;
-        };
         const down = (e: PointerEvent) => {
             if (!(e.target as HTMLElement).closest('.viewport') || e.button > 2) return;
             const o = pan();
@@ -1292,7 +1288,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 dragging.set(true);
             }
             if (drag.moved) {
-                const sc = stageScale();
+                const sc = viewScale();
                 pan.set(clampPan(drag.px + dx / sc, drag.py + dy / sc));
             }
         };

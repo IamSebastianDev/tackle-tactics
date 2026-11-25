@@ -9,6 +9,9 @@ export type ControlMode = 'all' | 'near' | 'key';
 export type Prefs = {
     /** 1 = default; larger = bigger UI (smaller logical canvas). */
     uiScale: number;
+    /** How the 1600×900 stage is scaled to the window: sharp (CSS zoom, laid out at screen size) or
+     *  smooth (a transform, drawn once and scaled). Auto: sharp on Linux, whose engine blurs transforms. */
+    scaling: 'auto' | 'sharp' | 'smooth';
     font: FontPreset;
     reduceMotion: boolean;
     aiSpeed: AiSpeed;
@@ -62,6 +65,7 @@ export const CONTROL_MIN_NEAREST = 3;
 const KEY = 'tackle-tactics:prefs';
 const DEFAULTS: Prefs = {
     uiScale: 1,
+    scaling: 'auto',
     font: 'broadcast',
     reduceMotion: false,
     aiSpeed: 'normal',

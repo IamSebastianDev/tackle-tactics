@@ -1416,7 +1416,7 @@ dialog.drawer-wrap {
     margin: 0;
     border: 0;
     color: var(--text);
-    zoom: var(--stage-scale, 1);
+    zoom: var(--layer-zoom, 1);
 }
 dialog.modal::backdrop,
 dialog.drawer-wrap::backdrop {
@@ -5554,7 +5554,7 @@ dialog.drawer-wrap:not([open]) {
     color: var(--text);
     background: none;
     overflow: visible;
-    zoom: var(--stage-scale, 1);
+    zoom: var(--layer-zoom, 1);
 }
 .confirm-modal::backdrop {
     background: #060707d8;
@@ -5725,7 +5725,7 @@ button.dd-button:focus-visible {
     min-width: anchor-size(width);
     margin: 2px 0 0;
     position-try-fallbacks: flip-block;
-    zoom: var(--stage-scale, 1);
+    zoom: var(--layer-zoom, 1);
     padding: 2px 0;
     max-height: 300px;
     overflow-y: auto;

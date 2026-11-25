@@ -5,10 +5,9 @@ import { combined, derived, type WritableGrain } from '@grainular/grains';
 import { $if, attr, html, mounted, on } from '@grainular/nord';
 import { prefs, setPref, type RadioPosition } from './prefs';
 import { announce, nowPlaying, radio, radioPlaying, STATION } from './radio';
-import { stageSize } from './stage';
+import { stageSize, viewScale } from './stage';
 
 const moveRadio = mounted<HTMLDivElement>((node) => {
-    const stage = node.closest<HTMLElement>('#app')!;
     const margin = 8;
     let position = prefs().radioPosition;
     let drag: { id: number; x: number; y: number; right: number; bottom: number; moved: boolean } | null = null;
@@ -26,13 +25,14 @@ const moveRadio = mounted<HTMLDivElement>((node) => {
     };
     const start = (e: PointerEvent) => {
         if (drag || e.button !== 0 || !(e.target instanceof Element) || !e.target.closest('.radio-grip')) return;
-        const rect = node.getBoundingClientRect();
+        // where it sits now, in logical stage pixels (computed style is logical whatever the scaling)
+        const css = getComputedStyle(node);
         drag = {
             id: e.pointerId,
             x: e.clientX,
             y: e.clientY,
-            right: rect.right - e.clientX,
-            bottom: rect.bottom - e.clientY,
+            right: parseFloat(css.right) || 0,
+            bottom: parseFloat(css.bottom) || 0,
             moved: false,
         };
     };
@@ -45,11 +45,11 @@ const moveRadio = mounted<HTMLDivElement>((node) => {
             node.classList.add('dragging');
             drag.moved = true;
         }
-        const { w, h } = stageSize();
-        const rect = stage.getBoundingClientRect();
+        // pointer movement in screen pixels → stage pixels (same under transform and zoom)
+        const s = viewScale();
         position = place({
-            right: ((rect.right - e.clientX - drag.right) * w) / rect.width,
-            bottom: ((rect.bottom - e.clientY - drag.bottom) * h) / rect.height,
+            right: drag.right - (e.clientX - drag.x) / s,
+            bottom: drag.bottom - (e.clientY - drag.y) / s,
         });
     };
     const finish = (e: PointerEvent) => {

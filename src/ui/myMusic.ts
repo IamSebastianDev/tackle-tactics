@@ -92,10 +92,25 @@ const fromMemory = (blob: Blob) => {
  */
 export const playFromMemory = isDesktop && /Linux/.test(navigator.userAgent);
 
+const fetchBlob = async (url: string) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${String(res.status)} for ${url}`);
+    return res.blob();
+};
+/** The next station song, read while the current one plays, so the change is instant. */
+let ahead: { url: string; blob: Promise<Blob> } | null = null;
+
+export const preloadStation = (t: Track | undefined) => {
+    if (!playFromMemory || !t || t.mine || ahead?.url === t.url) return;
+    const blob = fetchBlob(t.url);
+    blob.catch(() => undefined); // a failed preload is retried when the song comes up
+    ahead = { url: t.url, blob };
+};
+
 export const stationUrl = async (t: Track): Promise<string> => {
-    const res = await fetch(t.url);
-    if (!res.ok) throw new Error(`${String(res.status)} for ${t.url}`);
-    return fromMemory(await res.blob());
+    const blob = ahead?.url === t.url ? ahead.blob : fetchBlob(t.url);
+    if (ahead?.url === t.url) ahead = null;
+    return fromMemory(await blob);
 };
 
 /** Where to play one of the player's songs from (loads it now). */

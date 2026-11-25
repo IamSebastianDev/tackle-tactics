@@ -6,7 +6,7 @@
  */
 import { grain } from '@grainular/grains';
 import playlist from 'virtual:playlist';
-import { myTracks, playFromMemory, songUrl, stationUrl } from './myMusic';
+import { myTracks, playFromMemory, preloadStation, songUrl, stationUrl } from './myMusic';
 import { prefs, setPref } from './prefs';
 
 /** A song: the station's (a URL in the build) or one of the player's own (`mine`: its file name). */
@@ -100,6 +100,11 @@ class Radio {
             el.src = url;
             this.applyVolume();
             if (this.volume() > 0 && radioPlaying()) void el.play().catch(() => undefined);
+            // Linux reads songs whole before playing: fetch the next one now
+            if (playFromMemory) {
+                if (!this.queue.length) this.refill();
+                preloadStation(this.queue[0]);
+            }
         };
         if (t.mine || playFromMemory)
             (t.mine ? songUrl(t) : stationUrl(t)).then(start, () => {

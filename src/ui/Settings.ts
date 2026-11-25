@@ -181,6 +181,16 @@ export const SettingsModal = (props: SettingsProps) => {
                         UI_SCALES.map((s) => [s, `${Math.round(s * 100)}%`] as [number, string]),
                         (v) => setPref('uiScale', v),
                     )}</div>
+                <div class="set-row"><span>Scaling<small>Sharp draws the game at your screen's full resolution (best on big screens); Smooth scales one finished picture. Auto picks Sharp on Linux.</small></span>
+                    ${seg(
+                        pref('scaling'),
+                        [
+                            ['auto', 'Auto'],
+                            ['sharp', 'Sharp'],
+                            ['smooth', 'Smooth'],
+                        ],
+                        (v) => setPref('scaling', v),
+                    )}</div>
                 <div class="set-row"><span>Fullscreen<small>F11 or ${isDesktop && navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl'}+Enter toggles it anywhere.</small></span>
                     ${seg(
                         derived(fullscreen, (f) => (f ? 'on' : 'off')),
