@@ -139,7 +139,8 @@ Applied as a single end-of-season stat delta:
 
 ### League & competition
 
-- **5 divisions × 10 clubs** (all defaults, all config-driven). Player starts in the bottom division.
+- **5 divisions × 10 clubs** (all defaults, all config-driven). The manager picks the starting division (the bottom one by default); budget and squad follow that division.
+- **Your ground:** name, mowing pattern, pitch and corner flags are chosen at the start and can be changed any time. Its size (village → town → city → grand) has to be built: each step needs a division (4, 3, 2) and money, and earns more gate receipts per home match.
 - Double round robin: everyone plays everyone home and away (18 matches). Simple points — 3 win / 1 draw / 0 loss.
 - **Pyramid Cup:** a single-match knockout spanning all 50 clubs. The opening draw gives 14 clubs a bye. Subsequent rounds are drawn as teams advance. Ties go directly to simulated penalties, and the final follows the last league matchday.
 - **The world:** every one of the 16 nations plays its own full 5×10 pyramid alongside the manager's (800 clubs), simulated each matchday with promotion and relegation.

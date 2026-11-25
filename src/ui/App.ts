@@ -1,4 +1,6 @@
 import { combined, derived, grain } from '@grainular/grains';
+import { GroundEditor } from './GroundEditor';
+import { money } from '../meta/player';
 import { SimView } from './SimView';
 import { Dropdown } from './Dropdown';
 import { DEFAULT_NATION, NATION_IDS, NATIONS, type NationId } from '../world/nations';
@@ -31,6 +33,8 @@ import {
     awayKitFor,
     kitsClash,
     type Fixture,
+    groundAllowed,
+    startingGroundSize,
 } from '../meta/career';
 import { CUP_NAME, penaltyScore } from '../meta/cup';
 import { Hub, type HubNotice } from './hub/Hub';
@@ -44,6 +48,9 @@ import {
     type StadiumSize,
     type TimeOfDay,
     type Weather,
+    defaultGroundLook,
+    sizeLabel,
+    type GroundLook,
 } from '../world/stadium';
 import { SettingsModal } from './Settings';
 import { LESSONS } from './tutorial';
@@ -601,6 +608,34 @@ export const App = () => {
     const NewCareer = () => {
         const name = grain('');
         const nation = grain<NationId>(DEFAULT_NATION);
+        const cc = defaultConfig.career;
+        /** Starting division (0 = top flight); the ground can be as big as that division allows. */
+        const startTier = grain(cc.divisions - 1);
+        const groundLook = grain<GroundLook>({ ...defaultGroundLook(''), name: '' });
+        const groundSize = grain<StadiumSize>(startingGroundSize(defaultConfig, cc.divisions - 1));
+        const pickTier = (t: number) => {
+            startTier.set(t);
+            // the ground defaults to the biggest the division allows (pick a smaller one on the next step)
+            groundSize.set(startingGroundSize(defaultConfig, t));
+        };
+        const divisionPicker = html`<div class="seg nc-divisions">${Array.from({ length: cc.divisions }, (_, t) => {
+            const active = derived(startTier, (cur) => cur === t);
+            return html`<button type="button" ${attr({ class: derived(active, (x) => (x ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => pickTier(t))}>Div ${String(t + 1)}</button>`;
+        })}</div>
+        <p class="muted nc-division-note">${derived(startTier, (t) => {
+            const where =
+                t === cc.divisions - 1
+                    ? 'The bottom of the pyramid: the long climb.'
+                    : t === 0
+                      ? 'The top flight: stay up and chase the Champions Cup.'
+                      : 'Mid-pyramid: promotion is the goal.';
+            return `${where} Budget ${money(cc.startingBudget[t]!)}, squad of Division ${t + 1} quality, grounds up to ${sizeLabel(startingGroundSize(defaultConfig, t)).toLowerCase()}.`;
+        })}</p>`;
+        const groundEditor = GroundEditor(defaultConfig, groundLook, groundSize, {
+            allowed: (sz) => groundAllowed(defaultConfig, sz, startTier()),
+            lockedNote: (sz) => `Division ${String(cc.ground[sz].minTier + 1)}+`,
+            watch: startTier,
+        });
         const kit = grain('blue');
         const keeperKit = grain(defaultConfig.kits.keepers[0]!);
         const awayKit = grain('white');
@@ -671,7 +706,7 @@ export const App = () => {
             <dt>Clubs</dt><dd>${derived(nation, (id) => samples[id].clubs.join(' · '))}</dd>
             <dt>Players</dt><dd>${derived(nation, (id) => samples[id].players.join(' · '))}</dd>
         </dl>
-        <p class="muted">You start in the bottom division of its 5-tier pyramid. Most players at its clubs are local; the transfer market scouts every country.</p>`;
+        <p class="muted">Your club plays in its 5-tier pyramid, in the division you choose. Most players at its clubs are local; the transfer market scouts every country.</p>`;
         const s = settings();
         const startError = grain('');
         const create = async () => {
@@ -701,6 +736,8 @@ export const App = () => {
                     awayKit: awayKit(),
                     keeperKit: keeperKit(),
                     nation: nation(),
+                    tier: startTier(),
+                    ground: { look: groundLook(), size: groundSize() },
                 },
             );
             if (!saveCareer(next)) {
@@ -711,7 +748,7 @@ export const App = () => {
             hubNotice.set({
                 title: `Welcome to ${userClub(next).name}`,
                 lines: [
-                    `You start in division 5 of 5 of the ${NATIONS[next.nation].adjective} pyramid. The top 2 clubs are promoted each season.`,
+                    `You start in division ${userClub(next).tier + 1} of 5 of the ${NATIONS[next.nation].adjective} pyramid. The top 2 clubs are promoted each season.`,
                     `The ${seasonDays(defaultConfig, next)}-day season includes home and away league fixtures and the all-division ${CUP_NAME}.`,
                     'Choose a squad focus in Training to develop class skills. Set your XI in Tactics and buy or sell players in the Market.',
                     'Press the yellow button at the top right to move the calendar on.',
@@ -735,6 +772,8 @@ export const App = () => {
                     ${countryPicker}
                 </section>
                 <section class="opts">
+                    <h4>Starting division</h4>
+                    ${divisionPicker}
                     <h4>Match settings</h4>
                     <label>Action timer ${range('timerSeconds', 0, 45, 1, 's')}</label>
                     <label>Match length (rounds) ${range('rounds', 6, 40, 2, '')}</label>
@@ -772,14 +811,16 @@ export const App = () => {
                         )} /></label>
                     </div>
                     ${preview}
-                    <h4>Goalkeeper</h4>
-                    <div class="kit-grid">${defaultConfig.kits.keepers.map((k) => swatch(k, 'keeper'))}</div>
+                    <h4>Your ground</h4>
+                    ${groundEditor}
                 </section>
                 <section class="opts">
                     <h4>Home kit</h4>
                     <div class="kit-grid">${kits.map(([k]) => swatch(k, 'home'))}</div>
                     <h4>Away kit <small>worn when the home kit clashes with the hosts'</small></h4>
                     <div class="kit-grid">${kits.map(([k]) => swatch(k, 'away'))}</div>
+                    <h4>Goalkeeper</h4>
+                    <div class="kit-grid">${defaultConfig.kits.keepers.map((k) => swatch(k, 'keeper'))}</div>
                 </section>
             </div>
             <footer class="nc-actions">

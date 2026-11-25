@@ -682,6 +682,16 @@ export const defaultConfig = {
         drawBonus: 0.2,
         /** Cup winner prize as a multiple of the club's match fee. */
         cupWinnerBonus: 4,
+        /**
+         * The manager's ground: each size's capacity, the division needed before expanding to it
+         * (tier, 0 = top), the building cost, and gate receipts per home match (× the match fee).
+         */
+        ground: {
+            village: { capacity: 1_200, minTier: 4, cost: 0, gate: 0.15 },
+            town: { capacity: 6_000, minTier: 3, cost: 300_000, gate: 0.4 },
+            city: { capacity: 18_000, minTier: 2, cost: 1_200_000, gate: 0.8 },
+            grand: { capacity: 45_000, minTier: 1, cost: 4_000_000, gate: 1.4 },
+        },
         /** AI transfer activity (training days) and offers for the manager's players. */
         transfers: {
             /** Clubs (random, any nation) that look at the market each training day. */

@@ -10,7 +10,16 @@ import { createRng, type Rng } from '../rng';
 import type { Club, Player, TeamSide } from '../types';
 import { generatePlayer } from '../world/generate';
 import { DEFAULT_NATION, NATION_IDS, NATIONS, pickNationality, shortCode, type NationId } from '../world/nations';
-import { generateStadium, type Stadium } from '../world/stadium';
+import {
+    STADIUM_SIZES,
+    customStadium,
+    defaultGroundLook,
+    generateStadium,
+    sizeLabel,
+    type GroundLook,
+    type Stadium,
+    type StadiumSize,
+} from '../world/stadium';
 import {
     CUP_NAME,
     INTL_CUP_NAME,
@@ -52,6 +61,8 @@ export type CareerSettings = { timerSeconds: number; rounds: number; difficulty:
 export type CareerClub = Club & {
     /** The nation whose pyramid the club plays in. */
     nation: NationId;
+    /** The home ground: built on first use for AI clubs, chosen by the manager for theirs. */
+    stadium?: Stadium;
     tier: number;
     budget: number;
     /** Player ids in formation-slot order (11). */
@@ -62,7 +73,7 @@ export type CareerClub = Club & {
  * Save format version. Breaking changes bump it; an older save is simply not loaded (no
  * migrations: the manager starts a new career).
  */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 export type Career = {
     version: typeof SAVE_VERSION;
@@ -304,7 +315,18 @@ export const newCareer = (
     cfg: GameConfig,
     seed: number,
     settings: CareerSettings,
-    opts: { name?: string; short?: string; kit?: string; awayKit?: string; keeperKit?: string; nation?: NationId } = {},
+    opts: {
+        name?: string;
+        short?: string;
+        kit?: string;
+        awayKit?: string;
+        keeperKit?: string;
+        nation?: NationId;
+        /** Starting division (0 = top flight … 4 = bottom); the default is the bottom. */
+        tier?: number;
+        /** The manager's ground: its look and a size the starting division allows. */
+        ground?: { look: GroundLook; size: StadiumSize };
+    } = {},
 ): Career => {
     const rng = createRng(seed);
     const nation = NATIONS[opts.nation ?? DEFAULT_NATION];
@@ -336,9 +358,9 @@ export const newCareer = (
         c.world[other] = buildPyramid(cfg, rng, c, other, `${other}-c`, kitStart);
         kitStart += 7;
     }
-    // the user takes over a club in the bottom division
-    const bottom = c.divisions.at(-1)!;
-    const user = c.clubs[bottom.clubs[0]!]!;
+    // the manager takes over a club in the chosen division (the bottom one by default)
+    const startTier = Math.max(0, Math.min(cfg.career.divisions - 1, opts.tier ?? cfg.career.divisions - 1));
+    const user = c.clubs[c.divisions[startTier]!.clubs[0]!]!;
     if (opts.name) {
         user.name = opts.name;
         user.short =
@@ -352,6 +374,12 @@ export const newCareer = (
     if (opts.awayKit && !kitsClash(cfg, opts.awayKit, user.kit)) user.awayKit = opts.awayKit;
     else if (opts.kit) user.awayKit = awayKitFor(cfg, user.kit);
     if (opts.keeperKit) user.keeperKit = opts.keeperKit;
+    // the ground: the chosen look, at a size the starting division has unlocked
+    const size = opts.ground && groundAllowed(cfg, opts.ground.size, startTier) ? opts.ground.size : startingGroundSize(cfg, startTier);
+    const place = user.name.split(' ')[0]!;
+    const look = opts.ground?.look ?? defaultGroundLook(place);
+    const named = look.name.trim() || `${place} ${({ village: 'Meadow', town: 'Park', city: 'Stadium', grand: 'Arena' } as const)[size]}`;
+    user.stadium = customStadium({ ...look, name: named }, size, cfg.career.ground[size].capacity);
     c.userClubId = user.id;
     buildSeason(cfg, c, rng, intlQualifiers(cfg, c, false));
     c.market = buildMarket(cfg, rng, c);
@@ -360,7 +388,12 @@ export const newCareer = (
         season: 1,
         day: 1,
         tone: 'info',
-        text: `You take charge of ${user.name}, bottom of the pyramid. Promotion is the goal.`,
+        text:
+            startTier === cfg.career.divisions - 1
+                ? `You take charge of ${user.name}, bottom of the pyramid. Promotion is the goal.`
+                : startTier === 0
+                  ? `You take charge of ${user.name} in the top flight. Stay up, then aim for the Champions Cup.`
+                  : `You take charge of ${user.name} in Division ${startTier + 1}. Promotion is the goal.`,
     });
     saveRng(c, rng);
     return c;
@@ -449,8 +482,8 @@ const lineupFit = (cfg: GameConfig, club: Club, formationId: string, fit: FitTab
  * best one, so clubs play to their players without every club converging on the same shape.
  */
 export const pickFormation = (cfg: GameConfig, rng: Rng, club: Club, tolerance = 0.02): string => {
-    const table = fitTable(cfg);
-    const fits = cfg.formations.map((f) => ({ id: f.id, fit: lineupFit(cfg, club, f.id, table) }));
+    const fits0 = fitTable(cfg);
+    const fits = cfg.formations.map((f) => ({ id: f.id, fit: lineupFit(cfg, club, f.id, fits0) }));
     const best = Math.max(...fits.map((f) => f.fit));
     return rng.pick(fits.filter((f) => f.fit >= best * (1 - tolerance))).id;
 };
@@ -687,6 +720,7 @@ export const playMatchday = (cfg: GameConfig, c: Career, report: MatchReport) =>
     const won = winner === u.id;
     const penalties = penaltyScore(f, home ? 0 : 1);
     book(c, `Match fee vs ${opp.short}`, fee);
+    if (home) book(c, `Gate receipts · ${stadiumOf(c, u).name}`, Math.round(fee * cfg.career.ground[stadiumOf(c, u).size].gate));
     if (won) book(c, 'Win bonus', Math.round(fee * cfg.career.winBonus));
     else if (!winner) book(c, 'Draw bonus', Math.round(fee * cfg.career.drawBonus));
     book(c, 'Wages', -wageBill(cfg, u));
@@ -1243,7 +1277,45 @@ export const resolveLetter = (cfg: GameConfig, c: Career, idx: number): string =
 
 /** A club's home ground, created on first use (old saves just get one). Grounds lean on the division. */
 export const stadiumOf = (c: Career, club: CareerClub): Stadium => {
-    const cl = club as CareerClub & { stadium?: Stadium };
-    if (!cl.stadium) cl.stadium = generateStadium(`${c.seed}-${club.id}`, club.name.split(' ')[0]!, club.tier);
-    return cl.stadium;
+    if (!club.stadium) club.stadium = generateStadium(`${c.seed}-${club.id}`, club.name.split(' ')[0]!, club.tier);
+    return club.stadium;
+};
+
+// ------------------------------------------------------------------ the manager's ground
+
+/** Can a ground of `size` be had in division `tier`? (Bigger grounds need a higher division.) */
+export const groundAllowed = (cfg: GameConfig, size: StadiumSize, tier: number) => tier <= cfg.career.ground[size].minTier;
+/** The biggest ground a division allows: what a club starting there opens with by default. */
+export const startingGroundSize = (cfg: GameConfig, tier: number): StadiumSize =>
+    STADIUM_SIZES.toReversed().find((s) => groundAllowed(cfg, s, tier)) ?? 'village';
+/** The next size up, and what stands in the way (null when it can be built now). */
+export const groundUpgrade = (cfg: GameConfig, c: Career) => {
+    const u = userClub(c);
+    const now = stadiumOf(c, u).size;
+    const next = STADIUM_SIZES[STADIUM_SIZES.indexOf(now) + 1];
+    if (!next) return null;
+    const rule = cfg.career.ground[next];
+    const blocked = !groundAllowed(cfg, next, u.tier)
+        ? `Reach Division ${rule.minTier + 1} first`
+        : u.budget < rule.cost
+          ? `Needs ${money(rule.cost)}`
+          : null;
+    return { size: next, cost: rule.cost, capacity: rule.capacity, blocked };
+};
+/** Build the next size up: pays for it, raises the capacity (and the gate receipts). */
+export const expandGround = (cfg: GameConfig, c: Career): string | null => {
+    const up = groundUpgrade(cfg, c);
+    if (!up) return 'Your ground is as big as they come.';
+    if (up.blocked) return up.blocked;
+    const u = userClub(c);
+    const st = stadiumOf(c, u);
+    book(c, `Ground expansion: ${sizeLabel(up.size).toLowerCase()}`, -up.cost);
+    u.stadium = { ...st, size: up.size, capacity: up.capacity };
+    news(c, `${st.name} is now a ${sizeLabel(up.size).toLowerCase()}: ${up.capacity.toLocaleString('en')} seats.`, 'good');
+    return null;
+};
+/** Change how the ground looks (name, mowing, pitch, flags): free, any time. */
+export const setGroundLook = (c: Career, look: GroundLook) => {
+    const u = userClub(c);
+    u.stadium = { ...stadiumOf(c, u), ...look, name: look.name.trim() || stadiumOf(c, u).name };
 };

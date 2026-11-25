@@ -96,3 +96,35 @@ export const conditionsLabel = (c: Conditions) =>
 
 export const sizeLabel = (s: StadiumSize) =>
     ({ village: 'Village ground', town: 'Town ground', city: 'City stadium', grand: 'Grand stadium' })[s];
+
+// ------------------------------------------------------------------ the manager's own ground
+
+export const STADIUM_SIZES: StadiumSize[] = ['village', 'town', 'city', 'grand'];
+export const MOW_PATTERNS: MowPattern[] = ['stripes', 'checker', 'hoops', 'plain'];
+export const PITCH_CONDITIONS: PitchCondition[] = ['lush', 'dry', 'muddy', 'frost'];
+export const CORNER_FLAGS: Array<Stadium['flag']> = ['red', 'yellow', 'checked'];
+
+/** What the manager can change about their ground at any time (the size has to be built). */
+export type GroundLook = Pick<Stadium, 'name' | 'pattern' | 'bands' | 'condition' | 'flag'>;
+
+export const defaultGroundLook = (place: string): GroundLook => ({
+    name: `${place} Meadow`,
+    pattern: 'stripes',
+    bands: 10,
+    condition: 'lush',
+    flag: 'red',
+});
+
+/** A ground built to the manager's look: home fans, kept in good nick. */
+export const customStadium = (look: GroundLook, size: StadiumSize, capacity: number): Stadium => ({
+    ...look,
+    name: look.name.trim() || 'The Meadow',
+    size,
+    capacity,
+    fill: 0.6,
+    fans: 'home',
+    wear: 0.2,
+});
+
+export const patternLabel = (p: MowPattern) => ({ stripes: 'Stripes', checker: 'Checker', hoops: 'Hoops', plain: 'Plain' })[p];
+export const conditionLabel = (c: PitchCondition) => ({ lush: 'Lush', dry: 'Dry', muddy: 'Muddy', frost: 'Frosty' })[c];

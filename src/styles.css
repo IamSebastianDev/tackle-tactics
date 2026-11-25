@@ -6067,3 +6067,184 @@ button.lvl-ready {
 .tbl td.at .crest {
     margin-right: 4px;
 }
+
+/* ---- the manager's ground (GroundEditor.ts) */
+.ground-editor {
+    display: grid;
+    gap: 6px;
+}
+.ground-editor h4 small {
+    font-family: var(--body);
+    font-size: 11px;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
+}
+.g-preview {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 14px;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--well);
+    border: 1px solid var(--line);
+}
+.g-pitch {
+    position: relative;
+    width: 150px;
+    aspect-ratio: 50 / 30;
+    box-shadow:
+        0 0 0 2px #0006,
+        3px 3px 0 1px #0008;
+}
+/* touchlines, halfway line and centre circle in pitch-white */
+.g-lines {
+    position: absolute;
+    inset: 6px;
+    border: 2px solid #ffffffb8;
+    background: linear-gradient(90deg, transparent calc(50% - 1px), #ffffffb8 calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px));
+}
+.g-circle {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 22%;
+    aspect-ratio: 1;
+    border: 2px solid #ffffffb8;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+.g-flag {
+    position: absolute;
+    width: 6px;
+    height: 5px;
+    box-shadow: 0 0 0 1px #0008;
+}
+.g-flag.tl {
+    left: 2px;
+    top: 1px;
+}
+.g-flag.tr {
+    right: 2px;
+    top: 1px;
+}
+.g-flag.bl {
+    left: 2px;
+    bottom: 1px;
+}
+.g-flag.br {
+    right: 2px;
+    bottom: 1px;
+}
+.g-caption {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+.g-caption b {
+    font-family: var(--display);
+    font-size: 18px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.g-caption span {
+    color: var(--muted);
+    font-size: 13px;
+}
+.g-name input {
+    width: 100%;
+    min-width: 0;
+}
+.ground-seg {
+    margin: 0;
+}
+.ground-seg button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.g-sw {
+    display: inline-block;
+    width: 12px;
+    height: 9px;
+    box-shadow: 0 0 0 1px #000a;
+}
+.g-bands {
+    display: grid;
+    grid-template-columns: auto 1fr 28px;
+    align-items: center;
+    gap: 10px;
+}
+.g-sizes {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+}
+button.g-size {
+    display: grid;
+    gap: 2px;
+    padding: 6px 8px;
+    text-align: left;
+}
+.g-size b {
+    font-size: 14px;
+}
+.g-size small,
+.g-size em {
+    font-family: var(--body);
+    font-size: 11px;
+    font-style: normal;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--muted);
+}
+.g-size.on {
+    border-image-source: var(--f-gold);
+    color: var(--on-accent);
+}
+.g-size.on small,
+.g-size.on em {
+    color: var(--on-accent);
+}
+.g-size.locked {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.nc-division-note {
+    margin: 2px 0 6px;
+    font-size: 13px;
+}
+
+.ground-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+.modal-body .ground-editor {
+    width: min(560px, 100%);
+}
+
+.nc-divisions {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    margin: 0;
+}
+
+.g-caption .g-name {
+    display: grid;
+    gap: 2px;
+}
+.g-row {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: start;
+    gap: 6px 18px;
+}
+.g-row h4 {
+    margin-bottom: 4px;
+}

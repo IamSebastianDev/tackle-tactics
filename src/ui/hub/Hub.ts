@@ -3,6 +3,7 @@
  * `changed()`, which publishes the new version of the model and autosaves.
  */
 import { combined, derived, grain, type WritableGrain } from '@grainular/grains';
+import { GroundEditor } from '../GroundEditor';
 import { NATION_IDS, NATIONS, nationOf, type NationId } from '../../world/nations';
 import { flag } from '../flag';
 import type { Confirm } from '../confirm';
@@ -51,13 +52,16 @@ import {
     marketEntries,
     marketEntry,
     marketPrice,
+    expandGround,
+    groundUpgrade,
+    setGroundLook,
 } from '../../meta/career';
 import { CUP_NAME, INTL_CUP_NAME, cupWinner, isCupFixture, penaltyScore } from '../../meta/cup';
 import { avgRating, moraleLabel, rivalOf, seasonLine, story } from '../../meta/story';
 import { COUNTERS, isDerby, opponentOf, planEdge, prepFor, TALKS, type TeamTalk } from '../../meta/prep';
 import { styleOf } from '../../ai/brain';
 import { audio } from '../audio';
-import { conditionsLabel, sizeLabel } from '../../world/stadium';
+import { conditionsLabel, sizeLabel, type GroundLook, type StadiumSize } from '../../world/stadium';
 import { fitFor, levelsReady, levelUpOptions, money, ovr, playerValue, potentialStars, wage, xpToNext } from '../../meta/player';
 import { TRAINING_FOCUSES, TRAINING_FOCUS_IDS, trainingGain } from '../../meta/training';
 import type { Player } from '../../types';
@@ -129,6 +133,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     const marketSource = grain<'all' | 'free' | 'listed'>('all');
     const slotPick = grain<number | null>(null);
     const letterOpen = grain(false);
+    const groundOpen = grain(false);
     const ceremony = grain<SeasonCeremony | null>(null);
     /** The level-up prompt: open for a given player, or for whoever is next in line (id null). */
     const levelUp = grain<{ id: string | null } | null>(null);
@@ -906,6 +911,54 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     };
 
     // ------------------------------------------------------------ finances
+    /** The manager's ground: what it is, what it brings in, edit its look, build the next size. */
+    const groundCard = () => {
+        const cl = u();
+        const st = stadiumOf(c, cl);
+        const fee = cfg.career.matchFee[cl.tier]!;
+        const up = groundUpgrade(cfg, c);
+        return html`<div class="card ground-card"><h3>Your ground <small>${st.name}</small></h3><div class="kv">
+                <div><span>Size</span><b>${sizeLabel(st.size)}</b></div>
+                <div><span>Seats</span><b>${st.capacity.toLocaleString('en')}</b></div>
+                <div><span>Gate / home match</span><b>${money(Math.round(fee * cfg.career.ground[st.size].gate))}</b></div>
+            </div>
+            <div class="ground-actions">
+                <button class="ghost" ${on('click', () => groundOpen.set(true))}>Edit ground</button>
+                ${
+                    up
+                        ? html`<button class="primary" ${attr({ disabled: !!up.blocked })} ${on('click', () => {
+                              const err = expandGround(cfg, c);
+                              if (err) return toast(err);
+                              audio.play('coin');
+                              toast(`${st.name} expanded!`);
+                              changed();
+                          })}>Expand to ${sizeLabel(up.size).toLowerCase()} · ${money(up.cost)}</button>${up.blocked ? html`<small class="muted">${up.blocked}</small>` : html``}`
+                        : html`<small class="muted">As big as grounds get.</small>`
+                }
+            </div></div>`;
+    };
+    const GroundDialog = () => {
+        const st = stadiumOf(c, u());
+        const look = grain<GroundLook>({ name: st.name, pattern: st.pattern, bands: st.bands, condition: st.condition, flag: st.flag });
+        const size = grain<StadiumSize>(st.size);
+        return Dialog({
+            label: 'Your ground',
+            dismiss: () => groundOpen.set(false),
+            className: 'modal ground-modal',
+            children: html`<div class="modal-body"><header><h2>Your ground</h2></header>
+                <div class="modal-scroll">${GroundEditor(cfg, look, size)}</div>
+                <footer><button class="ghost" ${on('click', () => groundOpen.set(false))}>Cancel</button><button class="primary" ${on(
+                    'click',
+                    () => {
+                        setGroundLook(c, look());
+                        groundOpen.set(false);
+                        toast('Ground updated.');
+                        changed();
+                    },
+                )}>Save</button></footer></div>`,
+        });
+    };
+
     const Finances = () => html`<div class="grid-2">
         <div class="col">${modelRegion(() => {
             const cl = u();
@@ -924,7 +977,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                     <li>Avoid relegation: ${money(fee * cfg.career.goalSurvive)}</li>
                 </ul><p class="muted">Higher divisions pay far more per match, and so do their players.</p></div>
             `;
-        })}</div>
+        })}${modelRegion(groundCard)}</div>
         <div class="card fill"><h3>Ledger</h3><div class="scroll"><table class="tbl ledger"><tbody>${$each(read(() => c.ledger.slice(0, 60))).$as((l) => html`<tr><td class="muted">S${String(l.season)} D${String(l.day)}</td><td>${l.label}</td><td class="num ${l.amount < 0 ? 'neg' : 'pos'}">${money(l.amount)}</td></tr>`)}</tbody></table></div></div>
     </div>`;
 
@@ -1291,7 +1344,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         <main class="hub-main">${topbar}<section class="hub-content">${screen}</section></main>
         ${$render(drawer)}
         ${$if(preview).$then(PreviewDialog)}${$if(derived(modal, Boolean)).$then(NoticeDialog)}
-        ${$if(letterOpen).$then(LetterDialog)}${$if(derived(ceremony, Boolean)).$then(CeremonyDialog)}${$if(derived(levelUp, Boolean)).$then(LevelUpDialog)}
+        ${$if(letterOpen).$then(LetterDialog)}${$if(derived(ceremony, Boolean)).$then(CeremonyDialog)}${$if(derived(levelUp, Boolean)).$then(LevelUpDialog)}${$if(groundOpen).$then(GroundDialog)}
         <div class="hub-overlays">${$render(hubTip)}</div>
         ${$if(derived(flash, (f) => !!f)).$then(() => html`<div class="toast">${derived(flash, (f) => f ?? '')}</div>`)}
     </div>`;
