@@ -1,0 +1,93 @@
+/**
+ * The player's own songs on the radio, next to the station's.
+ *
+ * Desktop: every audio file in a "Tackle Tactics" folder in the system Music folder
+ * (src-tauri/src/lib.rs: music_folder, list_music, read_song, open_music_folder). The folder is
+ * scanned at startup and on Rescan; a song's bytes are read only when it plays.
+ *
+ * Browser: songs added with a file picker, kept in the game's IndexedDB (this browser and site only).
+ */
+import { grain } from '@grainular/grains';
+import { idb, SONGS } from '../meta/storage';
+import { isDesktop } from './desktop';
+import type { Track } from './radio';
+
+/** Files the radio tries to play. What actually plays depends on the platform's web engine. */
+export const SONG_EXTS = ['mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac', 'aif', 'aiff'];
+
+/** The player's songs (empty until `initMyMusic` ran). */
+export const myTracks = grain<Track[]>([]);
+/** Desktop: where the folder is, for the settings screen. */
+export const musicFolder = grain('');
+
+const invoke = async <T>(cmd: string, args?: Record<string, unknown>) => (await import('@tauri-apps/api/core')).invoke<T>(cmd, args);
+
+/** "03 - Artist - Title.mp3" → the title and artist, like the station's songs. */
+const parseName = (file: string) => {
+    const name = file
+        .replace(/\.[^.]+$/, '')
+        .replace(/_/g, ' ')
+        .replace(/^\d{1,3}\s*[-.)]?\s+/, '')
+        .trim();
+    const parts = name.split(/\s+[-–—]\s+/);
+    return parts.length >= 2 ? { artist: parts[0]!.trim(), title: parts.slice(1).join(' - ').trim() } : { artist: null, title: name };
+};
+
+const toTrack = (id: string, file: string): Track => ({ url: '', ...parseName(file), mine: id });
+
+/** Read the folder (desktop) or the stored songs (browser). */
+export const initMyMusic = async () => {
+    try {
+        if (isDesktop) {
+            musicFolder.set(await invoke<string>('music_folder'));
+            const names = await invoke<string[]>('list_music');
+            myTracks.set(names.map((n) => toTrack(n, n)));
+        } else if (typeof indexedDB !== 'undefined') {
+            const keys = (await idb<IDBValidKey[]>('readonly', (s) => s.getAllKeys(), SONGS)) as string[];
+            myTracks.set(keys.sort().map((k) => toTrack(k, k)));
+        }
+    } catch (e) {
+        console.error('Could not read your songs', e);
+    }
+};
+
+export const rescan = initMyMusic;
+
+/** Desktop: show the folder in Finder / Explorer. */
+export const openMusicFolder = () => invoke('open_music_folder');
+
+/** Browser: keep picked files (same name replaces). Returns the names it skipped. */
+export const addSongs = async (files: FileList | File[]) => {
+    const skipped: string[] = [];
+    for (const f of Array.from(files)) {
+        const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+        if (!SONG_EXTS.includes(ext)) {
+            skipped.push(f.name);
+            continue;
+        }
+        await idb('readwrite', (s) => s.put(f.slice(0, f.size, f.type), f.name), SONGS);
+    }
+    await initMyMusic();
+    return skipped;
+};
+
+/** Browser: forget a stored song. */
+export const removeSong = async (t: Track) => {
+    if (!t.mine || isDesktop) return;
+    await idb('readwrite', (s) => s.delete(t.mine!), SONGS);
+    await initMyMusic();
+};
+
+// one object URL at a time: a song is a few MB
+let current: string | null = null;
+
+/** Where to play one of the player's songs from (loads it now). */
+export const songUrl = async (t: Track): Promise<string> => {
+    const blob = isDesktop
+        ? new Blob([await invoke<ArrayBuffer>('read_song', { name: t.mine })])
+        : await idb<Blob | undefined>('readonly', (s) => s.get(t.mine!), SONGS);
+    if (!blob) throw new Error(`song not found: ${t.mine}`);
+    if (current) URL.revokeObjectURL(current);
+    current = URL.createObjectURL(blob);
+    return current;
+};

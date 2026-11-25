@@ -108,6 +108,13 @@ order, and the first song opens the station while the rest shuffle. WAV/AIFF are
 has playback controls, and the match toolbar has a Music button. **N** skips to the next song and **R** toggles the radio.
 Settings → Sound has volume, the in-match level and per-song switches.
 
+**Your own songs.** Players can add music to the station without rebuilding anything: the desktop app plays every
+audio file in a `Tackle Tactics` folder in the system Music folder (`~/Music/Tackle Tactics`, `Music\Tackle Tactics` on
+Windows), created on first launch; Settings → Sound has **Open music folder** and **Rescan**. The browser build has
+**Add songs…** instead, keeping the files in the browser's storage. Songs are named like the station's ("Artist -
+Title"); MP3 and M4A play everywhere, other formats depend on the platform. See `src/ui/myMusic.ts` and the
+`*_music*` / `read_song` commands in `src-tauri/src/lib.rs`.
+
 ## Look
 
 Matchday-broadcast style: warm graphite neutrals, one trophy-gold accent (`--accent`) for primary actions and

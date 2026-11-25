@@ -6477,3 +6477,22 @@ button.g-size {
 .credits-list a:hover {
     color: var(--gold);
 }
+
+/* Settings → Sound: your own songs */
+.your-songs code {
+    display: block;
+    margin-top: 2px;
+    font: 11px var(--body);
+    color: var(--dim);
+    word-break: break-all;
+    user-select: text;
+}
+.your-songs-buttons {
+    display: flex;
+    gap: 6px;
+}
+.songs li .song-remove {
+    flex: none;
+    padding: 0 6px;
+    font-size: 11px;
+}

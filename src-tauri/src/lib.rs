@@ -79,6 +79,80 @@ fn save_path(app: tauri::AppHandle) -> Result<String, String> {
     Ok(save_file(&app)?.display().to_string())
 }
 
+// ------------------------------------------------------------------ your music folder
+
+/// Audio the radio plays from the player's own folder.
+const SONG_EXTS: &[&str] = &["mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "flac", "aif", "aiff"];
+
+/// `<Music>/Tackle Tactics` (the app data folder if the system has no Music folder), created on demand.
+fn music_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let base = app
+        .path()
+        .audio_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(|e| e.to_string())?;
+    let dir = base.join("Tackle Tactics");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn is_song(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| SONG_EXTS.contains(&e.to_ascii_lowercase().as_str()))
+}
+
+/// A file name inside the folder: no separators or parent steps, so nothing outside can be read.
+fn song_path(dir: &Path, name: &str) -> Result<PathBuf, String> {
+    if name.is_empty() || name.contains(['/', '\\']) || name == ".." || name == "." {
+        return Err("not a song in the music folder".into());
+    }
+    let path = dir.join(name);
+    if !is_song(&path) {
+        return Err("not a song in the music folder".into());
+    }
+    Ok(path)
+}
+
+#[tauri::command]
+fn music_folder(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(music_dir(&app)?.display().to_string())
+}
+
+/// The song files in the folder, by name.
+#[tauri::command]
+fn list_music(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let dir = music_dir(&app)?;
+    let mut names: Vec<String> = fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok())
+        .filter(|e| is_song(&e.path()))
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| !n.starts_with('.'))
+        .collect();
+    names.sort();
+    Ok(names)
+}
+
+/// One song's bytes (sent raw, not as JSON), for the radio to play.
+#[tauri::command]
+fn read_song(app: tauri::AppHandle, name: String) -> Result<tauri::ipc::Response, String> {
+    let path = song_path(&music_dir(&app)?, &name)?;
+    Ok(tauri::ipc::Response::new(fs::read(path).map_err(|e| e.to_string())?))
+}
+
+/// Show the folder in Finder / Explorer / the file manager.
+#[tauri::command]
+fn open_music_folder(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = music_dir(&app)?;
+    app.opener()
+        .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 /// Size the window to the screen it opens on: up to 1600×900, at most 92% of the usable area
 /// (menu bar and Dock excluded), kept at 16:9 and centred. The window starts hidden so it never
 /// flashes at the wrong size or half off-screen.
@@ -126,7 +200,16 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![read_save, write_save, delete_save, save_path])
+        .invoke_handler(tauri::generate_handler![
+            read_save,
+            write_save,
+            delete_save,
+            save_path,
+            music_folder,
+            list_music,
+            read_song,
+            open_music_folder
+        ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
 }
@@ -151,6 +234,21 @@ mod tests {
         assert_eq!(read_at(&p).as_deref(), Some(r#"{"day":2}"#));
         assert_eq!(fs::read_to_string(backup_of(&p)).unwrap(), r#"{"day":1}"#);
         assert!(!p.with_extension("json.tmp").exists());
+    }
+
+    #[test]
+    fn song_names_cannot_leave_the_music_folder() {
+        let dir = std::env::temp_dir().join(format!("tt-music-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("Band - Song.mp3"), b"id3").unwrap();
+        fs::write(dir.join("notes.txt"), b"hi").unwrap();
+        assert!(song_path(&dir, "Band - Song.mp3").is_ok());
+        assert!(song_path(&dir, "notes.txt").is_err());
+        assert!(song_path(&dir, "missing.mp3").is_err());
+        for evil in ["../career.json", "..", "a/b.mp3", "a\\b.mp3", ""] {
+            assert!(song_path(&dir, evil).is_err(), "{evil}");
+        }
     }
 
     #[test]

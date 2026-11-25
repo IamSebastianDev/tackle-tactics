@@ -3,7 +3,7 @@ import { combined, derived, grain, type Grain } from '@grainular/grains';
 import { COIN } from '../meta/player';
 import type { Confirm } from './confirm';
 import { fullscreen, isDesktop, openExternal, setFullscreen } from './desktop';
-import { $switch, attr, html, on } from '@grainular/nord';
+import { $render, $switch, attr, html, on } from '@grainular/nord';
 import { controlValue, distinct } from './value';
 import { Dialog } from './Dialog';
 import type { Difficulty, TimeoutPolicy } from '../config';
@@ -11,6 +11,7 @@ import type { CareerSettings } from '../meta/career';
 import { saveLocation, whenSaved } from '../meta/storage';
 import { careerBackup, restoreCareer } from '../meta/career';
 import { allTracks, nowPlaying, radio, STATION, trackKey } from './radio';
+import { addSongs, musicFolder, myTracks, openMusicFolder, removeSong, rescan, SONG_EXTS } from './myMusic';
 import { audio } from './audio';
 import { CONTROL_MODES, FONTS, prefs, setPref, UI_SCALES, type AiSpeed } from './prefs';
 
@@ -87,10 +88,46 @@ const matchOptions = (get: () => MatchOpts, set: (o: MatchOpts) => void) => {
     </div>`;
 };
 
+/** Where your own songs come from: the folder on desktop, a file picker in the browser. */
+const YourSongs = () => {
+    const note = grain('');
+    const count = derived(myTracks, (list) =>
+        list.length ? `${String(list.length)} song${list.length === 1 ? '' : 's'} of yours on the station` : 'none yet',
+    );
+    if (isDesktop)
+        return html`<div class="set-row your-songs"><span>Your songs<small>Put audio files in this folder and they join the station (named "Artist - Title" for the credits). <code>${musicFolder}</code></small></span>
+            <div class="set-reset">
+                <div class="your-songs-buttons">
+                    <button class="ghost" ${on('click', () => void openMusicFolder().catch((e: unknown) => note.set(String(e))))}>Open music folder</button>
+                    <button class="ghost" ${on('click', async () => {
+                        await rescan();
+                        note.set('Folder read again.');
+                    })}>Rescan</button>
+                </div>
+                <small role="status">${derived(combined([count, note]), ([n, msg]) => msg || n)}</small>
+            </div></div>`;
+    return html`<div class="set-row your-songs"><span>Your songs<small>Add audio files from your computer (MP3 or M4A play everywhere). They stay in this browser only.</small></span>
+        <div class="set-reset">
+            <label class="button ghost file-pick">Add songs…<input type="file" multiple accept="audio/*,${SONG_EXTS.map((e) => `.${e}`).join(',')}" hidden ${on(
+                'change',
+                async (e) => {
+                    const input = e.target as HTMLInputElement;
+                    const files = [...(input.files ?? [])];
+                    input.value = '';
+                    if (!files.length) return;
+                    note.set('Adding…');
+                    const skipped = await addSongs(files);
+                    note.set(skipped.length ? `Not audio: ${skipped.join(', ')}` : '');
+                },
+            )} /></label>
+            <small role="status">${derived(combined([count, note]), ([n, msg]) => msg || n)}</small>
+        </div></div>`;
+};
+
 /** Every song on the station with an on/off switch; clicking a title plays it now. */
 const SongList = () => {
     const tracks = allTracks();
-    if (!tracks.length) return html`<p class="muted">No songs yet: drop audio files into assets/music (named "Artist - Title").</p>`;
+    if (!tracks.length) return html`<p class="muted">No songs yet: add some of your own above.</p>`;
     const disabled = derived(prefs, (p) => p.radioDisabled);
     const onCount = derived(disabled, (off) => String(tracks.filter((t) => !off.includes(trackKey(t))).length));
     return html`<div class="songs">
@@ -99,7 +136,7 @@ const SongList = () => {
         <ul>${tracks.map((t) => {
             const k = trackKey(t);
             const enabled = derived(disabled, (off) => !off.includes(k));
-            const now = derived(nowPlaying, (playing) => playing?.url === t.url);
+            const now = derived(nowPlaying, (playing) => !!playing && trackKey(playing) === k);
             const cls = derived(combined([enabled, now]), ([isEnabled, playing]) => `${isEnabled ? '' : 'off'} ${playing ? 'now' : ''}`);
             const toggle = (value: 'on' | 'off') => {
                 if ((value === 'on') === enabled()) return;
@@ -108,7 +145,8 @@ const SongList = () => {
                 radio.checkCurrent();
             };
             return html`<li ${attr({ class: cls })}>
-                <button class="song-play" title="Play now" ${on('click', () => radio.playNow(t))}><i>${derived(now, (playing) => (playing ? '♫' : '▶'))}</i><b>${t.title}</b><span>${t.artist ?? STATION}</span></button>
+                <button class="song-play" title="Play now" ${on('click', () => radio.playNow(t))}><i>${derived(now, (playing) => (playing ? '♫' : '▶'))}</i><b>${t.title}</b><span>${t.artist ?? (t.mine ? 'Your song' : STATION)}</span></button>
+                ${t.mine && !isDesktop ? html`<button class="ghost song-remove" title="Remove from this browser" ${on('click', () => void removeSong(t))}>Remove</button>` : html``}
                 ${seg(
                     derived(enabled, (value) => (value ? 'on' : 'off')),
                     [
@@ -207,7 +245,7 @@ export const SettingsModal = (props: SettingsProps) => {
                 )}</div>
                 ${vol('sfxVolume', 'Effects', 'Kicks, tackles, whistles, UI.')}
                 ${vol('crowdVolume', 'Crowd', 'The ambience that swells as the ball nears goal.')}
-                <h4>Radio <small>songs from assets/music · N next song · R on/off</small></h4>
+                <h4>Radio <small>the station's songs and yours · N next song · R on/off</small></h4>
                 <div class="set-row"><span>Radio</span>${seg(
                     toggle('radioOn'),
                     [
@@ -233,7 +271,8 @@ export const SettingsModal = (props: SettingsProps) => {
                     ] as Array<['on' | 'quiet' | 'off', string]>,
                     (v) => setPref('radioInMatch', v),
                 )}</div>
-                ${SongList()}
+                ${YourSongs()}
+                ${$render(derived(myTracks, () => SongList()))}
             </div>`;
     };
     const Gameplay = () => {

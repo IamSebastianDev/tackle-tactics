@@ -24,21 +24,26 @@ const invoke = async <T>(cmd: string, args?: Record<string, unknown>) => (await 
 
 const DB = 'tackle-tactics';
 const STORE = 'saves';
+/** The player's own radio songs in the browser build (src/ui/myMusic.ts). */
+export const SONGS = 'songs';
 
 const openDb = () =>
     new Promise<IDBDatabase>((resolve, reject) => {
-        const req = indexedDB.open(DB, 1);
-        req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+        const req = indexedDB.open(DB, 2);
+        req.onupgradeneeded = () => {
+            for (const name of [STORE, SONGS]) if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name);
+        };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
     });
 
-const idb = async <T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T>) => {
+/** One request in its own transaction on a store of the game's database. */
+export const idb = async <T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T>, store = STORE) => {
     const db = await openDb();
     try {
         return await new Promise<T>((resolve, reject) => {
-            const tx = db.transaction(STORE, mode);
-            const req = run(tx.objectStore(STORE));
+            const tx = db.transaction(store, mode);
+            const req = run(tx.objectStore(store));
             tx.oncomplete = () => resolve(req.result);
             tx.onerror = tx.onabort = () => reject(tx.error ?? req.error);
         });

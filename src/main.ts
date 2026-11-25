@@ -4,13 +4,14 @@ import './ui/frames.css';
 import './styles.css';
 import { initStorage } from './meta/storage';
 import { loadCastPack } from './ui/castPack';
+import { initMyMusic } from './ui/myMusic';
 import { App } from './ui/App';
 import { installDesktopKeys } from './ui/desktop';
 import { installRadioKeys } from './ui/RadioUI';
 import { fitStage } from './ui/stage';
 
-// the save and the sprite pack are read before the first screen renders
-await Promise.all([initStorage(), loadCastPack()]);
+// the save, the sprite pack and the player's songs are read before the first screen renders
+await Promise.all([initStorage(), loadCastPack(), initMyMusic()]);
 const stage = document.querySelector<HTMLElement>('#app')!;
 fitStage(stage);
 mount(App, { to: stage });

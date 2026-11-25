@@ -6,15 +6,17 @@
  */
 import { grain } from '@grainular/grains';
 import playlist from 'virtual:playlist';
+import { myTracks, songUrl } from './myMusic';
 import { prefs, setPref } from './prefs';
 
-export type Track = { url: string; title: string; artist: string | null };
+/** A song: the station's (a URL in the build) or one of the player's own (`mine`: its file name). */
+export type Track = { url: string; title: string; artist: string | null; mine?: string };
 export const STATION = 'Tackle Tactics Radio';
 /** Stable identity for a song, used for the per-song on/off setting. */
 export const trackKey = (t: Track) => `${t.artist ?? STATION} - ${t.title}`;
 const enabled = (t: Track) => !prefs().radioDisabled.includes(trackKey(t));
-/** Every song in the folder, in station order (for the settings list). */
-export const allTracks = (): Track[] => [...playlist];
+/** Every song: the station's in order, then the player's own (for the settings list). */
+export const allTracks = (): Track[] => [...playlist, ...myTracks()];
 
 export const nowPlaying = grain<Track | null>(null);
 /** Shown for a few seconds when a song starts. */
@@ -31,7 +33,15 @@ class Radio {
     private announceTimer = 0;
 
     private async load() {
-        if (!this.tracks.length) this.tracks = [...playlist];
+        if (!this.tracks.length) this.tracks = allTracks();
+    }
+
+    /** The player's songs changed (added, removed, rescanned): the station follows. */
+    refreshTracks() {
+        if (!this.started) return;
+        this.tracks = allTracks();
+        const keys = new Set(this.tracks.map(trackKey));
+        this.queue = this.queue.filter((t) => keys.has(trackKey(t)));
     }
 
     private refill() {
@@ -84,9 +94,20 @@ class Radio {
             });
         }
         nowPlaying.set(t);
-        this.el.src = t.url;
-        this.applyVolume();
-        if (this.volume() > 0 && radioPlaying()) void this.el.play().catch(() => undefined);
+        const el = this.el;
+        const start = (url: string) => {
+            if (nowPlaying() !== t) return; // skipped while it loaded
+            el.src = url;
+            this.applyVolume();
+            if (this.volume() > 0 && radioPlaying()) void el.play().catch(() => undefined);
+        };
+        if (t.mine)
+            songUrl(t).then(start, () => {
+                // gone from the folder, or unreadable: drop it and move on
+                this.tracks = this.tracks.filter((x) => x !== t);
+                if (nowPlaying() === t) this.next();
+            });
+        else start(t.url);
         announce.set(t);
         clearTimeout(this.announceTimer);
         this.announceTimer = window.setTimeout(() => announce.set(null), 5000);
@@ -172,8 +193,9 @@ class Radio {
         this.applyVolume();
     }
 
-    hasTracks = () => playlist.length > 0;
+    hasTracks = () => playlist.length > 0 || myTracks().length > 0;
 }
 
 export const radio = new Radio();
+myTracks.subscribe(() => radio.refreshTracks());
 prefs.subscribe(() => radio.applyVolume());
