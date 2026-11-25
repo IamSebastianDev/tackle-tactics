@@ -5,6 +5,7 @@
 import { combined, derived, grain, type WritableGrain } from '@grainular/grains';
 import { GroundEditor } from '../GroundEditor';
 import { NATION_IDS, NATIONS, nationOf, type NationId } from '../../world/nations';
+import { leagueName, leagueShort } from '../../world/leagues';
 import { flag } from '../flag';
 import type { Confirm } from '../confirm';
 import { $each, $if, $render, $switch, attr, html, mounted, on, type Fragment } from '@grainular/nord';
@@ -279,7 +280,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     const miniTable = () => {
         const d = divisionOf(c, u().id);
         const rows = table(d);
-        return html`<div class="card"><h3>Division ${String(d.tier + 1)}</h3>${leagueTable(rows, d.tier, true)}</div>`;
+        return html`<div class="card"><h3>${leagueName(c.nation, d.tier)}</h3>${leagueTable(rows, d.tier, true)}</div>`;
     };
 
     const alerts = () => {
@@ -380,7 +381,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     const historyCard = () =>
         html`<div class="card"><h3>Club history</h3>${
             c.history.length
-                ? html`<ul class="hist">${c.history.map((h) => html`<li>Season ${String(h.season)}: ${ordinal(h.position)} in division ${String(h.tier + 1)}</li>`)}
+                ? html`<ul class="hist">${c.history.map((h) => html`<li>Season ${String(h.season)}: ${ordinal(h.position)} in the ${leagueName(c.nation, h.tier)}</li>`)}
             ${story(c)
                 .awards.slice(-4)
                 .map((a) => html`<li class="award">★ S${String(a.season)} ${a.title}: ${a.who}</li>`)}</ul>`
@@ -547,7 +548,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
             const home = n === c.nation;
             const rounds = Array.from({ length: roundsPerSeason(c) }, (_, r) => d.fixtures.filter((f) => f.round === r));
             return html`            <div class="grid-2 wide-left">
-                <div class="col"><div class="card"><h3>${flag(n)} ${NATIONS[n].name} · Division ${String(d.tier + 1)}</h3>${leagueTable(table(d), d.tier)}<p class="muted legend-line">${d.tier === 0 ? html`<i class="intl"></i>${INTL_CUP_NAME} ` : html``}<i class="up"></i>Promotion <i class="down"></i>Relegation</p></div>${home ? goldenBoot(d) : html``}</div>
+                <div class="col"><div class="card"><h3>${flag(n)} ${NATIONS[n].name} · ${leagueName(n, d.tier)}</h3>${leagueTable(table(d), d.tier)}<p class="muted legend-line">${d.tier === 0 ? html`<i class="intl"></i>${INTL_CUP_NAME} ` : html``}<i class="up"></i>Promotion <i class="down"></i>Relegation</p></div>${home ? goldenBoot(d) : html``}</div>
                 <div class="card fixtures fill"><h3>Fixtures</h3><div class="scroll">${rounds.map(
                     (fs, r) =>
                         html`<div class="round"><h4>Matchday ${String(r + 1)}</h4>${fs.map(
@@ -565,7 +566,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
             <div class="seg nation-seg">${[c.nation, ...NATION_IDS.filter((n) => n !== c.nation)].map(nationButton)}</div>
             <div class="seg">${c.divisions.map((division) => {
                 const active = derived(leagueTier, (tier) => tier === division.tier);
-                return html`<button ${attr({ class: derived(active, (isActive) => (isActive ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => leagueTier.set(division.tier))}>Division ${String(division.tier + 1)}${read(() => (division.tier === u().tier ? ' ★' : ''))}</button>`;
+                return html`<button ${attr({ class: derived(active, (isActive) => (isActive ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => leagueTier.set(division.tier))}>${derived(leagueNation, (n) => leagueName(n, division.tier))}${derived(combined([leagueNation, version]), ([n]) => (n === c.nation && division.tier === u().tier ? ' ★' : ''))}</button>`;
             })}</div>
             ${$render(entries)}
         </div>`;
@@ -594,7 +595,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                         const away = club(fixture.away);
                         const winner = cupWinner(fixture);
                         const where = (cl: CareerClub) =>
-                            which() === 'intl' ? flag(cl.nation) : html`<small>Div ${String(cl.tier + 1)}</small>`;
+                            which() === 'intl' ? flag(cl.nation) : html`<small>${leagueShort(cl.nation, cl.tier)}</small>`;
                         return html`<tr class="${home.id === c.userClubId || away.id === c.userClubId ? 'me' : ''}">
                             <td class="${winner === home.id ? 'cup-winner' : ''}">${crest(home)} ${home.name} ${where(home)}</td>
                             <td>${fixture.result ? `${fixture.result[0]}–${fixture.result[1]}` : 'vs'} <small>${penaltyScore(fixture)}</small></td>
@@ -1183,7 +1184,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                             <div class="kv">
                                 <div><span>Style</span><b>${cfg.ai.styles[oppStyle].label}</b></div>
                                 <div><span>Formation</span><b>${opp.formationId}</b></div>
-                                <div><span>Division ${String(opp.tier + 1)}</span><b>${pos ? ordinal(pos) : '–'}</b></div>
+                                <div><span>${leagueName(opp.nation, opp.tier)}</span><b>${pos ? ordinal(pos) : '–'}</b></div>
                                 <div><span>Form</span><b class="form">${form.length ? form.map((r) => html`<i class="r${r}">${r}</i>`) : '–'}</b></div>
                                 <div><span>Strength</span><b>${squadOvr(cfg, opp).toFixed(0)} vs your ${squadOvr(cfg, u()).toFixed(0)}</b></div>
                             </div>
@@ -1264,7 +1265,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
             children: html`<div class="modal-body ceremony ${r.champion || r.promoted ? 'glory' : r.relegated ? 'gloom' : ''}">
             ${r.champion || r.promoted ? html`<div class="confetti">${Array.from({ length: 40 }, (_, i) => html`<i style="left:${String((i * 37) % 100)}%;animation-delay:${String((i % 10) * 120)}ms;--c:${['#f2bf2f', '#56b4e9', '#ffffff', '#cc79a7'][i % 4]!}"></i>`)}</div>` : html``}
             <div class="modal-scroll">
-                <small>Season ${String(r.season)} · Division ${String(r.tier + 1)}</small>
+                <small>Season ${String(r.season)} · ${leagueName(c.nation, r.tier)}</small>
                 <h2>${headline}</h2>
                 ${trophy ? html`<img class="trophy" src="assets/props/${trophy}.png" alt="" />` : html``}
                 <p class="placing">Finished ${ordinal(r.position)} of ${String(cfg.career.clubsPerDivision)}</p>
@@ -1371,7 +1372,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         .$default(Overview);
 
     const sidebar = html`<nav class="hub-side">
-        <div class="club-id" ${attr({ style: read(() => `--kit:${kitColor(u().kit)}`) })}><span class="crest big">${read(() => u().short)}</span><div><b>${read(() => u().name)}</b><small>Division ${read(() => String(u().tier + 1))}</small></div></div>
+        <div class="club-id" ${attr({ style: read(() => `--kit:${kitColor(u().kit)}`) })}><span class="crest big">${read(() => u().short)}</span><div><b>${read(() => u().name)}</b><small>${read(() => leagueName(u().nation, u().tier))}</small></div></div>
         ${TABS.map(([id, label, icon]) => {
             const active = derived(tab, (current) => current === id);
             return html`<button ${attr({ class: derived(active, (isActive) => (isActive ? 'on' : '')), 'aria-current': derived(active, (isActive) => (isActive ? 'page' : undefined)) })} ${on(

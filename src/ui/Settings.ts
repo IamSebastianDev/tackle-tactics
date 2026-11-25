@@ -156,7 +156,7 @@ export const SettingsModal = (props: SettingsProps) => {
                         (
                             f,
                         ) => html`<button ${attr({ class: derived(pref('font'), (font) => `font-opt ${font === f.id ? 'on' : ''}`) })} data-font="${f.id}" ${on('click', () => setPref('font', f.id))}>
-                        <b>${f.label}</b><span class="sample">Division 5 of 5 · 128k${COIN} · Run in behind</span><small>${f.note}</small></button>`,
+                        <b>${f.label}</b><span class="sample">National League · 128k${COIN} · Run in behind</span><small>${f.note}</small></button>`,
                     )}</div></div>
                 <div class="set-row"><span>Auto zoom<small>The camera leans in when players crowd the ball. Wheel or +/− zoom by hand, 0 resets.</small></span>
                     ${seg(

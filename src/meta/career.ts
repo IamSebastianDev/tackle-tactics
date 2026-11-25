@@ -10,6 +10,7 @@ import { createRng, type Rng } from '../rng';
 import type { Club, Player, TeamSide } from '../types';
 import { generatePlayer } from '../world/generate';
 import { DEFAULT_NATION, NATION_IDS, NATIONS, pickNationality, shortCode, type NationId } from '../world/nations';
+import { leagueName } from '../world/leagues';
 import {
     STADIUM_SIZES,
     customStadium,
@@ -394,7 +395,7 @@ export const newCareer = (
                 ? `You take charge of ${user.name}, bottom of the pyramid. Promotion is the goal.`
                 : startTier === 0
                   ? `You take charge of ${user.name} in the top flight. Stay up, then aim for the Champions Cup.`
-                  : `You take charge of ${user.name} in Division ${startTier + 1}. Promotion is the goal.`,
+                  : `You take charge of ${user.name} in the ${leagueName(nation.id, startTier)}. Promotion is the goal.`,
     });
     saveRng(c, rng);
     return c;
@@ -915,7 +916,7 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
     c.history.push({ season: c.season, tier: u.tier, position: pos });
     if (pos === 1) {
         book(c, 'Season goal: champions', fee * cfg.career.goalTitle);
-        summary.push(`Champions of division ${u.tier + 1}!`);
+        summary.push(`Champions of the ${leagueName(u.nation, u.tier)}!`);
     } else if (pos <= 4) {
         book(c, 'Season goal: top four', fee * cfg.career.goalTop4);
         summary.push(`Finished ${ordinal(pos)}: top-four bonus.`);
@@ -940,7 +941,11 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
             pyramid[mv.to]!.clubs.push(mv.id);
             c.clubs[mv.id]!.tier = mv.to;
             if (mv.id === u.id) {
-                summary.push(mv.to < mv.from ? `PROMOTED to division ${mv.to + 1}!` : `Relegated to division ${mv.to + 1}.`);
+                summary.push(
+                    mv.to < mv.from
+                        ? `PROMOTED to the ${leagueName(u.nation, mv.to)}!`
+                        : `Relegated to the ${leagueName(u.nation, mv.to)}.`,
+                );
                 if (mv.to < mv.from) ceremony.promoted = true;
                 else ceremony.relegated = true;
             }
@@ -1309,7 +1314,7 @@ export const groundUpgrade = (cfg: GameConfig, c: Career) => {
     if (!next) return null;
     const rule = cfg.career.ground[next];
     const blocked = !groundAllowed(cfg, next, u.tier)
-        ? `Reach Division ${rule.minTier + 1} first`
+        ? `Reach the ${leagueName(u.nation, rule.minTier)} first`
         : u.budget < rule.cost
           ? `Needs ${money(rule.cost)}`
           : null;

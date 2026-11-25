@@ -4,6 +4,7 @@ import { money } from '../meta/player';
 import { SimView } from './SimView';
 import { Dropdown } from './Dropdown';
 import { DEFAULT_NATION, NATION_IDS, NATIONS, type NationId } from '../world/nations';
+import { leagueName, leagueShort } from '../world/leagues';
 import { flag } from './flag';
 import { createConfirmation } from './confirm';
 import { controlValue, distinct } from './value';
@@ -539,7 +540,7 @@ export const App = () => {
                       {
                           id: 'continue',
                           label: 'Continue career',
-                          desc: `${userClub(c).name} · Season ${String(c.season)} · Division ${String(userClub(c).tier + 1)}`,
+                          desc: `${userClub(c).name} · Season ${String(c.season)} · ${leagueName(c.nation, userClub(c).tier)}`,
                           go: () => screen.set('hub'),
                           cls: 'primary',
                       },
@@ -620,21 +621,21 @@ export const App = () => {
         };
         const divisionPicker = html`<div class="seg nc-divisions">${Array.from({ length: cc.divisions }, (_, t) => {
             const active = derived(startTier, (cur) => cur === t);
-            return html`<button type="button" ${attr({ class: derived(active, (x) => (x ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => pickTier(t))}>Div ${String(t + 1)}</button>`;
+            return html`<button type="button" ${attr({ class: derived(active, (x) => (x ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => pickTier(t))}>${derived(nation, (n) => leagueShort(n, t))}</button>`;
         })}</div>
-        <p class="muted nc-division-note">${derived(startTier, (t) => {
+        <p class="muted nc-division-note">${derived(combined([startTier, nation]), ([t, n]) => {
             const where =
                 t === cc.divisions - 1
                     ? 'The bottom of the pyramid: the long climb.'
                     : t === 0
                       ? 'The top flight: stay up and chase the Champions Cup.'
                       : 'Mid-pyramid: promotion is the goal.';
-            return `${where} Budget ${money(cc.startingBudget[t]!)}, squad of Division ${t + 1} quality, grounds up to ${sizeLabel(startingGroundSize(defaultConfig, t)).toLowerCase()}.`;
+            return `${leagueName(n, t)}. ${where} Budget ${money(cc.startingBudget[t]!)}, squad of tier ${t + 1} quality, grounds up to ${sizeLabel(startingGroundSize(defaultConfig, t)).toLowerCase()}.`;
         })}</p>`;
         const groundEditor = GroundEditor(defaultConfig, groundLook, groundSize, {
             allowed: (sz) => groundAllowed(defaultConfig, sz, startTier()),
-            lockedNote: (sz) => `Division ${String(cc.ground[sz].minTier + 1)}+`,
-            watch: startTier,
+            lockedNote: (sz) => `${leagueShort(nation(), cc.ground[sz].minTier)}+`,
+            watch: combined([startTier, nation]),
         });
         const kit = grain('blue');
         const keeperKit = grain(defaultConfig.kits.keepers[0]!);
@@ -748,7 +749,7 @@ export const App = () => {
             hubNotice.set({
                 title: `Welcome to ${userClub(next).name}`,
                 lines: [
-                    `You start in division ${userClub(next).tier + 1} of 5 of the ${NATIONS[next.nation].adjective} pyramid. The top 2 clubs are promoted each season.`,
+                    `You start in the ${leagueName(next.nation, userClub(next).tier)}, tier ${userClub(next).tier + 1} of 5 of the ${NATIONS[next.nation].adjective} pyramid. The top 2 clubs are promoted each season.`,
                     `The ${seasonDays(defaultConfig, next)}-day season includes home and away league fixtures and the all-division ${CUP_NAME}.`,
                     'Pick two drills in Training: players whose class fits them earn the most XP. Set your XI in Tactics and buy or sell players in the Market.',
                     'Press the yellow button at the top right to move the calendar on.',

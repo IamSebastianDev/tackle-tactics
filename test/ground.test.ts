@@ -57,8 +57,8 @@ describe('starting division and the ground', () => {
     it('expanding needs the division and the money, then costs it', () => {
         const c = newCareer(cfg, 44, settings);
         const u = userClub(c);
-        expect(groundUpgrade(cfg, c)).toMatchObject({ size: 'town', blocked: 'Reach Division 4 first' });
-        expect(expandGround(cfg, c)).toBe('Reach Division 4 first');
+        expect(groundUpgrade(cfg, c)).toMatchObject({ size: 'town', blocked: 'Reach the League Two first' });
+        expect(expandGround(cfg, c)).toBe('Reach the League Two first');
         u.tier = 3;
         u.budget = 100_000;
         expect(groundUpgrade(cfg, c)!.blocked).toMatch(/Needs/);

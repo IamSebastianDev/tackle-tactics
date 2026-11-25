@@ -6,6 +6,7 @@
  */
 import type { GameConfig, TeamStyle } from '../config';
 import { NATIONS } from '../world/nations';
+import { leagueName } from '../world/leagues';
 import { styleOf } from '../ai/brain';
 import { pickReferee } from '../engine/match';
 import { createRng } from '../rng';
@@ -115,7 +116,7 @@ export const storyLines = (cfg: GameConfig, c: Career, f: Fixture, p: Prep): str
         const where =
             cup?.key === 'intl'
                 ? `${opp.name} are ${NATIONS[opp.nation].adjective} top-flight opposition.`
-                : `${opp.name} play in Division ${opp.tier + 1}.`;
+                : `${opp.name} play in the ${leagueName(opp.nation, opp.tier)}.`;
         lines.push(`${cup?.name ?? CUP_NAME}${round ? ` · ${round.label}` : ''}. ${where} A draw goes to penalties.`);
     } else if (div) {
         const rows = table(div);
