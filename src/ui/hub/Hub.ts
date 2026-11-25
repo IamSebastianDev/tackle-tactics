@@ -63,7 +63,7 @@ import { styleOf } from '../../ai/brain';
 import { audio } from '../audio';
 import { conditionsLabel, sizeLabel, type GroundLook, type StadiumSize } from '../../world/stadium';
 import { fitFor, levelsReady, levelUpOptions, money, ovr, playerValue, potentialStars, wage, xpToNext } from '../../meta/player';
-import { TRAINING_FOCUSES, TRAINING_FOCUS_IDS, trainingGain } from '../../meta/training';
+import { DRILLS, DRILL_IDS, drillClasses, drillsLabel, pickDrill, trainingGain } from '../../meta/training';
 import type { Player } from '../../types';
 import { kitColor } from '../MatchView';
 import { Playbook } from '../Playbook';
@@ -209,7 +209,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         }
         return {
             label: t.cup ? `${cupOf(c, t.cup).name} day · Training` : 'Training day',
-            sub: TRAINING_FOCUSES[c.trainingFocus].label,
+            sub: drillsLabel(c.drills),
             kind: t.kind,
         };
     };
@@ -267,7 +267,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         if (t.kind === 'training') {
             const next = seasonSchedule(cfg, c).find((date) => date.day > c.day && scheduledFixture(c, date));
             const note = t.cup ? `${cupOf(c, t.cup).name} ${t.cup.label.toLowerCase()} today. Your squad trains.` : '';
-            return html`<div class="card next"><h3>Training day · ${TRAINING_FOCUSES[c.trainingFocus].label}</h3>
+            return html`<div class="card next"><h3>Training day · ${drillsLabel(c.drills)}</h3>
                 ${note ? html`<p>${note}</p>` : html``}
                 <p>${next ? `Next match on Day ${next.day}.` : 'Season review follows the last training day.'}</p>
                 <button class="ghost" ${on('click', () => tab.set('training'))}>View training</button>
@@ -449,7 +449,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                 ${item.cupNote ? html`<p>${item.cupNote}</p>` : html``}
                 ${item.kind === 'cup' ? html`<p><button class="ghost" ${on('click', () => tab.set('cup'))}>View cups</button></p>` : html``}
                 ${item.kind === 'review' ? html`<p>Promotion, relegation and awards</p>` : html``}
-                ${item.trains && day === cal.today ? html`<p>Squad focus · ${TRAINING_FOCUSES[c.trainingFocus].label}</p>` : html``}
+                ${item.trains && day === cal.today ? html`<p>Drills · ${drillsLabel(c.drills)}</p>` : html``}
                 ${item.trains && day < cal.today && !item.news.length ? html`<p class="muted">Training completed</p>` : html``}
                 ${letter ? html`<p><button class="ghost" ${on('click', () => letterOpen.set(true))}>Read letter</button> ${letter.title} · ${letter.from}</p>` : html``}
                 ${item.news.length ? html`<ul class="alerts">${item.news.map((event) => html`<li class="${event.tone}">${event.text}</li>`)}</ul>` : html``}
@@ -862,22 +862,23 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
 
     // ------------------------------------------------------------ training
     const Training = () => {
-        const focus = read(() => c.trainingFocus);
+        const drills = read(() => c.drills);
         const rows = read(() => [...u().squad].sort((a, b) => ovr(cfg, b) - ovr(cfg, a)));
-        const focusButtons = TRAINING_FOCUS_IDS.map((id) => {
-            const active = derived(focus, (value) => value === id);
-            const drill = TRAINING_FOCUSES[id];
+        const drillButtons = DRILL_IDS.map((id) => {
+            const active = derived(drills, (d) => d.includes(id));
             return html`<button ${attr({ class: derived(active, (isActive) => (isActive ? 'on' : '')), 'aria-pressed': derived(active, String) })}
                 ${on('click', () => {
-                    if (c.trainingFocus === id) return;
-                    c.trainingFocus = id;
+                    if (c.drills.includes(id)) return;
+                    c.drills = pickDrill(c.drills, id);
                     changed();
                 })}>
-                <b>${drill.label}</b><small>${cfg.classes[drill.cls].label}</small>
+                <b>${DRILLS[id].label}</b><small>${DRILLS[id].note}</small>
+                <span class="drill-cls">${drillClasses(cfg, id).map((cls) => html`<i>${cfg.classes[cls].short}</i>`)}</span>
             </button>`;
         });
+        const fitDots = (fit: number) => [0, 1].map((i) => (fit >= i + 1 ? '●' : fit > i ? '◐' : '○')).join('');
         const row = (p: Player) => {
-            const gain = read(() => trainingGain(cfg, p, c.trainingFocus));
+            const gain = read(() => trainingGain(cfg, p, c.drills));
             const injury = read(() => (p.injury ? `✚ ${p.injury}d` : ''));
             const progress = read(() =>
                 isReady(p)
@@ -897,6 +898,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                 <td class="name">${flag(p.nation)}<b>${p.name}</b>${$if(derived(injury, Boolean)).$then(() => html`<em class="inj">${injury}</em>`)}</td>
                 <td>${modelRegion(() => classChips(p))}</td>
                 <td>${modelRegion(() => stars(p))}</td>
+                <td><span class="fit" ${attr({ title: derived(gain, (r) => (r ? `${String(r.fit)} of 2 drills fit` : '')) })}>${derived(gain, (r) => (r ? fitDots(r.fit) : ''))}</span></td>
                 <td><span ${attr({ class: derived(gain, (result) => (result ? 'training-xp' : 'muted')) })}>${derived(gain, (result) =>
                     result ? `+${result.amount} XP` : 'Recovering',
                 )}</span></td>
@@ -906,10 +908,10 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         };
 
         return html`<div class="card fill">
-            <h3>Squad training <small>One focus per training day</small></h3>
-            <div class="training-focus" role="group" aria-label="Training focus">${focusButtons}</div>
-            <p class="muted training-note">Players suited to the drill (class, ${derived(focus, (id) => TRAINING_FOCUSES[id].stats.join(' and '))}) earn more XP. You choose the class each level goes into. Injured players recover.</p>
-            <div class="scroll"><table class="tbl training"><thead><tr><th></th><th>Player</th><th>Classes</th><th>Potential</th><th>Session XP</th><th>Next level</th><th>Next choice</th></tr></thead>
+            <h3>Squad training <small>Pick two drills per training day</small></h3>
+            <div class="training-focus" role="group" aria-label="Drills">${drillButtons}</div>
+            <p class="muted training-note">Each class trains three attributes best. Players earn more XP the more of today's drills fit their class (●● strong, ●○ normal, ○○ off-role), and a drill can lift its attribute by a point. You choose the class each level goes into. Injured players recover.</p>
+            <div class="scroll"><table class="tbl training"><thead><tr><th></th><th>Player</th><th>Classes</th><th>Potential</th><th>Fit</th><th>Session XP</th><th>Next level</th><th>Next choice</th></tr></thead>
             <tbody>${$each(rows)
                 .$withKey((p) => p.id)
                 .$as(row)}</tbody></table></div>

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { defaultConfig, withOverrides } from '../src/config';
+import { defaultConfig, withOverrides, type StatId } from '../src/config';
+import { createRng } from '../src/rng';
 import {
     autoLineup,
     buy,
@@ -28,7 +29,7 @@ import {
 import { CUP_NAME, cupWinner, isCupFixture, type CupFixture } from '../src/meta/cup';
 import { ovr, playerValue, wage, autoLevel } from '../src/meta/player';
 import { story } from '../src/meta/story';
-import { trainingGain } from '../src/meta/training';
+import { drillStats, trainingGain } from '../src/meta/training';
 
 const cfg = defaultConfig;
 const settings = { timerSeconds: 10, rounds: 30, difficulty: 'normal' as const, timeoutPolicy: 'lose' as const };
@@ -159,19 +160,21 @@ describe('career', () => {
         const c = newCareer(cfg, 42, settings);
         const squad = userClub(c).squad;
         const injured = squad[0]!;
-        c.trainingFocus = 'tackling';
+        c.drills = ['tackling', 'reflexes'];
         expect(trainingDay(cfg, c)).toBeUndefined();
         playMatchday(cfg, c, { score: [0, 0], knocks: {}, played: [] });
         injured.injury = cfg.training.heal;
         c.news = Array.from({ length: 80 }, (_, i) => ({ season: c.season, day: 1, text: `Entry ${i}`, tone: 'info' }));
 
         const day = c.day;
-        const expectedGains = squad.slice(1).map((p) => trainingGain(cfg, p, c.trainingFocus)!);
+        const expectedGains = squad.slice(1).map((p) => trainingGain(cfg, p, c.drills)!);
         const expectedXp = expectedGains.reduce((total, gain) => total + gain.amount, 0);
         const injuredXp = injured.xp;
         const before = squad.map((p) => ({ xp: p.xp, levels: { ...p.levels } }));
         const report = trainingDay(cfg, c)!;
-        expect(report.summary).toBe(`Tackling · 15 trained · ${expectedXp} XP earned · 1 recovering.`);
+        expect(report.summary).toMatch(
+            new RegExp(`^Tackling \\+ Reflexes · 15 trained · ${expectedXp} XP earned( · \\d+ attribute gains?)? · 1 recovering\\.$`),
+        );
         expect(injured.injury).toBeUndefined();
         expect(injured.xp).toEqual(injuredXp);
         expect(report.updates).toContain(`${injured.name} is fit again.`);
@@ -190,21 +193,37 @@ describe('career', () => {
         expect(c.news).toHaveLength(83);
     });
 
-    it('uses drill aptitude and class experience to scale XP', () => {
+    it('scales XP by how well the two drills fit the class, and by aptitude', () => {
         const c = newCareer(cfg, 42, settings);
         const p = userClub(c).squad.find((player) => player.cls === 'defender')!;
-        const stats = { ...p.stats, passing: 45, composure: 60 };
-        const rookie = { ...p, stats, levels: { defender: 2 } };
-        const skilled = { ...rookie, stats: { ...stats, passing: 90 } };
-        const secondary = { ...rookie, levels: { defender: 2, midfielder: 1 } };
-        const specialist = { ...secondary, cls: 'midfielder' as const };
-        const gain = (player: typeof p) => trainingGain(cfg, player, 'passing')!;
+        const stats = { ...p.stats, tackling: 50, reflexes: 50, passing: 50, shooting: 50 };
+        const df = { ...p, stats, levels: { defender: 2 } };
+        const gain = (player: typeof p, d: [StatId, StatId]) => trainingGain(cfg, player, d)!;
 
-        expect(gain(rookie).cls).toBe('midfielder');
-        expect(gain(skilled).amount).toBeGreaterThan(gain(rookie).amount);
-        expect(gain(secondary).amount).toBeGreaterThan(gain(rookie).amount);
-        expect(gain(specialist).amount).toBeGreaterThan(gain(secondary).amount);
-        expect(trainingGain(cfg, p, 'goalkeeping')).toEqual({ cls: 'defender', amount: cfg.training.xp.base });
+        const both = gain(df, ['tackling', 'reflexes']);
+        const one = gain(df, ['tackling', 'shooting']);
+        const none = gain(df, ['shooting', 'speed']);
+        expect([both.fit, one.fit, none.fit]).toEqual([2, 1, 0]);
+        expect(both.amount).toBeGreaterThan(one.amount);
+        expect(one.amount).toBeGreaterThan(none.amount);
+        expect(none.amount).toBeGreaterThan(0);
+        // better at the drilled attributes, more XP
+        expect(gain({ ...df, stats: { ...stats, tackling: 90 } }, ['tackling', 'reflexes']).amount).toBeGreaterThan(both.amount);
+        // a second class counts at half: midfield levels make passing + dribbling worth something
+        expect(gain(df, ['passing', 'dribbling']).fit).toBe(0);
+        expect(gain({ ...df, levels: { defender: 2, midfielder: 1 } }, ['passing', 'dribbling']).fit).toBe(1);
+        expect(trainingGain(cfg, { ...df, injury: 2 }, ['tackling', 'reflexes'])).toBeNull();
+    });
+
+    it('drills can lift their attributes, never past the ceiling', () => {
+        const p = { ...userClub(newCareer(cfg, 42, settings)).squad[0]! };
+        p.stats = { ...p.stats, passing: 40, shooting: cfg.world.statCeil };
+        const rng = createRng(3);
+        let ups = 0;
+        for (let i = 0; i < 400; i++) ups += drillStats(cfg, rng, p, ['passing', 'shooting']).length;
+        expect(ups).toBeGreaterThan(0);
+        expect(p.stats.passing).toBe(40 + ups);
+        expect(p.stats.shooting).toBe(cfg.world.statCeil);
     });
 
     it('saves round-trip intact; an older save format is not loaded (no migrations)', () => {
@@ -216,7 +235,7 @@ describe('career', () => {
                 raw = data;
             },
         });
-        c.trainingFocus = 'goalkeeping';
+        c.drills = ['reflexes', 'speed'];
         saveCareer(c);
         const reloaded = loadCareer();
         raw = JSON.stringify({ ...c, version: SAVE_VERSION - 1 });

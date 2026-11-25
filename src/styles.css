@@ -1937,10 +1937,11 @@ dialog.drawer-wrap:not([open]) {
 }
 .training-focus {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
 }
 .training-focus button {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -1957,8 +1958,25 @@ dialog.drawer-wrap:not([open]) {
     color: var(--on-accent);
     text-shadow: none;
 }
+.training-focus .drill-cls {
+    position: absolute;
+    top: 5px;
+    right: 7px;
+    display: flex;
+    gap: 3px;
+}
+.training-focus .drill-cls i {
+    font: 10px var(--body);
+    font-style: normal;
+    opacity: 0.75;
+}
 .training-note {
     margin: 8px 0 10px;
+}
+.tbl.training .fit {
+    color: var(--gold-hi);
+    letter-spacing: 1px;
+    white-space: nowrap;
 }
 .training-xp {
     color: var(--gold-hi);

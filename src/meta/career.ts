@@ -49,7 +49,7 @@ import {
     type PlayerMatchLine,
     type Trainee,
 } from './story';
-import { DEFAULT_TRAINING_FOCUS, TRAINING_FOCUS_IDS, TRAINING_FOCUSES, trainingGain, type TrainingFocus } from './training';
+import { DEFAULT_DRILLS, DRILL_IDS, DRILLS, drillStats, drillsLabel, trainingGain, type Drills } from './training';
 
 export type Fixture = { id: string; round: number; home: string; away: string; result?: [number, number] };
 export type Division = { tier: number; clubs: string[]; fixtures: Fixture[] };
@@ -73,7 +73,7 @@ export type CareerClub = Club & {
  * Save format version. Breaking changes bump it; an older save is simply not loaded (no
  * migrations: the manager starts a new career).
  */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 export type Career = {
     version: typeof SAVE_VERSION;
@@ -101,7 +101,8 @@ export type Career = {
     news: News[];
     ledger: Ledger[];
     /** Squad drill to run each training day until the manager changes it. */
-    trainingFocus: TrainingFocus;
+    /** The two drills the squad runs on training days. */
+    drills: Drills;
     settings: CareerSettings;
     history: Array<{ season: number; tier: number; position: number }>;
     nextId: number;
@@ -345,7 +346,7 @@ export const newCareer = (
         listed: [],
         news: [],
         ledger: [],
-        trainingFocus: DEFAULT_TRAINING_FOCUS,
+        drills: [...DEFAULT_DRILLS],
         settings,
         history: [],
         nextId: 1,
@@ -810,6 +811,12 @@ export const choosePerk = (cfg: GameConfig, c: Career, playerId: string, perk: P
 };
 
 /** Run one drill per club and rest injured players. */
+/** Two different drills at random (what AI clubs run). */
+const randomDrills = (rng: Rng): Drills => {
+    const a = rng.pick(DRILL_IDS);
+    return [a, rng.pick(DRILL_IDS.filter((s) => s !== a))];
+};
+
 export const trainingDay = (cfg: GameConfig, c: Career) => {
     const t = today(cfg, c);
     if (t.kind !== 'training') return;
@@ -823,13 +830,14 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
     };
     let recovering = 0;
     let xp = 0;
+    let gains = 0;
     const cupClubs = new Set(t.cup?.fixtures.flatMap((f) => [f.home, f.away]));
     for (const club of Object.values(c.clubs)) {
         if (cupClubs.has(club.id)) continue;
         const isUser = club === u;
-        const focus = isUser ? c.trainingFocus : rng.pick(TRAINING_FOCUS_IDS);
+        const drills: Drills = isUser ? c.drills : randomDrills(rng);
         for (const p of club.squad) {
-            const gain = trainingGain(cfg, p, focus);
+            const gain = trainingGain(cfg, p, drills);
             if (!gain) {
                 if (isUser) recovering++;
                 p.injury = (p.injury ?? 0) - cfg.training.heal;
@@ -841,6 +849,7 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
             }
             const { cls, amount } = gain;
             const ready = gainXp(cfg, p, amount);
+            const up = drillStats(cfg, rng, p, drills);
             // AI clubs level up on the spot; the manager chooses the class for their own players
             if (!isUser) {
                 autoLevel(cfg, rng, p);
@@ -848,6 +857,10 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
             }
             trainees.push({ player: p, cls });
             xp += amount;
+            for (const st of up) {
+                gains++;
+                updates.push(`${p.name} +1 ${DRILLS[st].label}.`);
+            }
             if (ready) announce(`${p.name} is ready to level up: choose their class.`, 'good');
         }
     }
@@ -862,7 +875,7 @@ export const trainingDay = (cfg: GameConfig, c: Career) => {
         updates.unshift(`New letter · ${letter.title}`);
     }
     const summary = trainees.length
-        ? `${TRAINING_FOCUSES[c.trainingFocus].label} · ${trainees.length} trained · ${xp} XP earned${recovering ? ` · ${recovering} recovering` : ''}.`
+        ? `${drillsLabel(c.drills)} · ${trainees.length} trained · ${xp} XP earned${gains ? ` · ${gains} attribute ${gains === 1 ? 'gain' : 'gains'}` : ''}${recovering ? ` · ${recovering} recovering` : ''}.`
         : 'Recovery day. The squad rested.';
     news(c, summary);
     saveRng(c, rng);

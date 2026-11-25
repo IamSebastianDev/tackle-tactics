@@ -770,8 +770,20 @@ export const defaultConfig = {
         value: { base: 60_000, ovrExp: 4.2, wageRate: 0.0075 },
     },
     training: {
-        /** Base XP for every fit player, plus bonuses for the drill's attributes and role. */
-        xp: { base: 10, attributes: 18, primary: 18, secondary: 9 },
+        /** Session XP: base plus a bonus for the player's rating in the two drilled attributes, × fit. */
+        xp: { base: 24, attributes: 18 },
+        /** XP multiplier when 0, 1 or 2 of the day's drills are in the player's class core. */
+        fit: [0.6, 1, 1.4] as [number, number, number],
+        /** The three attributes each class trains best. */
+        core: {
+            keeper: ['reflexes', 'composure', 'passing'],
+            defender: ['tackling', 'reflexes', 'composure'],
+            midfielder: ['passing', 'composure', 'dribbling'],
+            winger: ['speed', 'pace', 'dribbling'],
+            striker: ['shooting', 'composure', 'pace'],
+        } as Record<ClassId, StatId[]>,
+        /** Chance per session that a drill lifts its attribute by one point. */
+        statChance: 0.025,
         /** Injury days healed while sitting out a squad session. */
         heal: 2,
         /** Injury chance per heavy knock taken in a match, and length range (days). */

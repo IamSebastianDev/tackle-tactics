@@ -56,7 +56,7 @@ describe('stories and match prep', () => {
                         c.rngState = rng.state();
                         playMatchday(cfg, c, { score, knocks: {}, played: userClub(c).lineup });
                     } else {
-                        trainingClasses = new Map(userClub(c).squad.map((p) => [p.id, trainingGain(cfg, p, c.trainingFocus)?.cls]));
+                        trainingClasses = new Map(userClub(c).squad.map((p) => [p.id, trainingGain(cfg, p, c.drills)?.cls]));
                         trainingDay(cfg, c);
                     }
                     const m = story(c).morale;

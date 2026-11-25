@@ -1,32 +1,69 @@
+/**
+ * Squad training: eight drills, one per attribute. The manager picks two a day. Every class has
+ * three core attributes; a player's fit is how many of the two drills hit their class's core,
+ * and fit scales the XP. Each drill also has a small chance to lift its attribute directly.
+ */
 import type { ClassId, GameConfig, StatId } from '../config';
 import { classLevel } from '../engine/abilities';
+import type { Rng } from '../rng';
 import type { Player } from '../types';
 
-type Focus = { label: string; cls: ClassId; stats: readonly [StatId, StatId] };
+export const DRILLS: Record<StatId, { label: string; note: string }> = {
+    speed: { label: 'Speed', note: 'Sprint starts' },
+    pace: { label: 'Pace', note: 'Distance runs' },
+    passing: { label: 'Passing', note: 'Rondos' },
+    shooting: { label: 'Shooting', note: 'Finishing' },
+    dribbling: { label: 'Dribbling', note: 'Cone work' },
+    tackling: { label: 'Tackling', note: 'Tackle boxes' },
+    reflexes: { label: 'Reflexes', note: 'Reaction saves' },
+    composure: { label: 'Composure', note: 'Pressure games' },
+};
+export const DRILL_IDS = Object.keys(DRILLS) as StatId[];
 
-export const TRAINING_FOCUSES = {
-    passing: { label: 'Passing', cls: 'midfielder', stats: ['passing', 'composure'] },
-    tackling: { label: 'Tackling', cls: 'defender', stats: ['tackling', 'reflexes'] },
-    dribbling: { label: 'Dribbling', cls: 'winger', stats: ['dribbling', 'pace'] },
-    finishing: { label: 'Finishing', cls: 'striker', stats: ['shooting', 'composure'] },
-    goalkeeping: { label: 'Goalkeeping', cls: 'keeper', stats: ['reflexes', 'composure'] },
-} as const satisfies Record<string, Focus>;
+/** The two drills of a training day. */
+export type Drills = [StatId, StatId];
+export const DEFAULT_DRILLS: Drills = ['passing', 'composure'];
 
-export type TrainingFocus = keyof typeof TRAINING_FOCUSES;
-export const TRAINING_FOCUS_IDS = Object.keys(TRAINING_FOCUSES) as TrainingFocus[];
-export const DEFAULT_TRAINING_FOCUS: TrainingFocus = 'passing';
+export const drillsLabel = (d: Drills) => `${DRILLS[d[0]].label} + ${DRILLS[d[1]].label}`;
+
+/** Pick a drill: it replaces the older of the two (picking one already chosen changes nothing). */
+export const pickDrill = (d: Drills, s: StatId): Drills => (d.includes(s) ? d : [d[1], s]);
+
+/** The classes a drill belongs to (its attribute is in their core). */
+export const drillClasses = (cfg: GameConfig, s: StatId) =>
+    (Object.keys(cfg.training.core) as ClassId[]).filter((cls) => cfg.training.core[cls].includes(s));
+
+const hits = (cfg: GameConfig, cls: ClassId, d: Drills) => d.filter((s) => cfg.training.core[cls].includes(s)).length;
+
+/**
+ * How well the drills fit a player, 0..2: hits in their main class's core, or half the hits of
+ * another class they have levels in, whichever is better.
+ */
+export const drillFit = (cfg: GameConfig, p: Player, d: Drills) => {
+    let fit = hits(cfg, p.cls, d);
+    for (const cls of Object.keys(p.levels) as ClassId[])
+        if (cls !== p.cls && classLevel(p, cls) > 0) fit = Math.max(fit, hits(cfg, cls, d) / 2);
+    return fit;
+};
 
 /** The same forecast drives the squad preview and the session itself. */
-export const trainingGain = (cfg: GameConfig, p: Player, focus: TrainingFocus) => {
+export const trainingGain = (cfg: GameConfig, p: Player, d: Drills) => {
     if (p.injury) return null;
-    const {
-        cls,
-        stats: [main, support],
-    } = TRAINING_FOCUSES[focus];
-    const xp = cfg.training.xp;
-    // A player can learn another outfield role, while keepers and outfielders run separate drills.
-    if ((p.cls === 'keeper') !== (cls === 'keeper')) return { cls: p.cls, amount: xp.base };
-    const aptitude = Math.max(0, Math.min(1, (2 * p.stats[main] + p.stats[support]) / 300));
-    const roleBonus = p.cls === cls ? xp.primary : classLevel(p, cls) > 0 ? xp.secondary : 0;
-    return { cls, amount: Math.round(xp.base + aptitude * xp.attributes + roleBonus) };
+    const { xp, fit: mult } = cfg.training;
+    const fit = drillFit(cfg, p, d);
+    const aptitude = Math.max(0, Math.min(1, (p.stats[d[0]] + p.stats[d[1]]) / 200));
+    // fit 0 → low, 1 → normal, 2 → high, halves in between
+    const m = fit <= 1 ? mult[0] + (mult[1] - mult[0]) * fit : mult[1] + (mult[2] - mult[1]) * (fit - 1);
+    return { cls: p.cls, fit, amount: Math.round((xp.base + aptitude * xp.attributes) * m) };
+};
+
+/** The drills' direct effect: each may lift its attribute by one point. Returns what went up. */
+export const drillStats = (cfg: GameConfig, rng: Rng, p: Player, d: Drills): StatId[] => {
+    const up: StatId[] = [];
+    for (const s of d) {
+        if (p.stats[s] >= cfg.world.statCeil || rng() >= cfg.training.statChance) continue;
+        p.stats[s] += 1;
+        up.push(s);
+    }
+    return up;
 };

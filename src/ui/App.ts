@@ -750,7 +750,7 @@ export const App = () => {
                 lines: [
                     `You start in division ${userClub(next).tier + 1} of 5 of the ${NATIONS[next.nation].adjective} pyramid. The top 2 clubs are promoted each season.`,
                     `The ${seasonDays(defaultConfig, next)}-day season includes home and away league fixtures and the all-division ${CUP_NAME}.`,
-                    'Choose a squad focus in Training to develop class skills. Set your XI in Tactics and buy or sell players in the Market.',
+                    'Pick two drills in Training: players whose class fits them earn the most XP. Set your XI in Tactics and buy or sell players in the Market.',
                     'Press the yellow button at the top right to move the calendar on.',
                 ],
             });
