@@ -6376,3 +6376,11 @@ button.g-size {
 .credits-list dd {
     margin: 0;
 }
+.credits-list a {
+    color: var(--gold-hi);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.credits-list a:hover {
+    color: var(--gold);
+}

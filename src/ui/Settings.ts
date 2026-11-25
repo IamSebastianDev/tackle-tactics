@@ -2,7 +2,7 @@
 import { combined, derived, grain, type Grain } from '@grainular/grains';
 import { COIN } from '../meta/player';
 import type { Confirm } from './confirm';
-import { fullscreen, isDesktop, setFullscreen } from './desktop';
+import { fullscreen, isDesktop, openExternal, setFullscreen } from './desktop';
 import { $switch, attr, html, on } from '@grainular/nord';
 import { controlValue, distinct } from './value';
 import { Dialog } from './Dialog';
@@ -313,6 +313,8 @@ export const SettingsModal = (props: SettingsProps) => {
             }
         </div>`;
     };
+    const link = (href: string, text: string) =>
+        html`<a href="${href}" target="_blank" rel="noopener" ${on('click', openExternal)}>${text}</a>`;
     const About = () => html`<div class="about">
         <h4>A vibe-coded game</h4>
         <p>Tackle Tactics is a hobby project, built by directing AI coding assistants (Claude Opus 5.5 and GPT 6.2 Sol) rather than writing every
@@ -322,11 +324,11 @@ export const SettingsModal = (props: SettingsProps) => {
         <dl class="credits-list">
             <dt>Design & direction</dt><dd>Sebastian Heinz</dd>
             <dt>Code</dt><dd>Written with Claude Opus 5.5 (Claude Code) and GPT 6.2 Sol</dd>
-            <dt>Players, pitch & stadium art</dt><dd><i>Soccer Match – Top Down Football Tileset & Players</i> by bubbabba (bubbabba.itch.io)</dd>
-            <dt>Radio</dt><dd>Songs made with Suno</dd>
-            <dt>Fonts</dt><dd>Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323 (SIL Open Font License, via Fontsource)</dd>
-            <dt>Source</dt><dd>github.com/IamSebastianDev/tackle-tactics</dd>
-            <dt>Built with</dt><dd>Nørd & Grains, TypeScript, Vite, Tauri</dd>
+            <dt>Players, pitch & stadium art</dt><dd><i>Soccer Match – Top Down Football Tileset & Players</i> by ${link('https://bubbabba.itch.io', 'bubbabba')}</dd>
+            <dt>Radio</dt><dd>Songs made with ${link('https://suno.com', 'Suno')}</dd>
+            <dt>Fonts</dt><dd>Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323 (SIL Open Font License, via ${link('https://fontsource.org', 'Fontsource')})</dd>
+            <dt>Source</dt><dd>${link('https://github.com/IamSebastianDev/tackle-tactics', 'github.com/IamSebastianDev/tackle-tactics')}</dd>
+            <dt>Built with</dt><dd>${link('https://www.npmjs.com/package/@grainular/nord', 'Nørd & Grains')}, TypeScript, Vite, ${link('https://tauri.app', 'Tauri')}</dd>
         </dl>
         <p class="muted">Clubs, players, nations and leagues are invented. Any resemblance to real ones is a nod, not a claim.</p>
     </div>`;

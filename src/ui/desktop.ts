@@ -24,6 +24,17 @@ export const setFullscreen = async (on: boolean) => {
     fullscreen.set(await w.isFullscreen());
 };
 
+/**
+ * A link that leaves the game: the desktop app hands it to the system browser (opener plugin);
+ * the web build opens it in a new tab.
+ */
+export const openExternal = (e: Event) => {
+    if (!isDesktop) return; // the <a target="_blank"> does it
+    e.preventDefault();
+    const href = (e.currentTarget as HTMLAnchorElement).href;
+    void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(href));
+};
+
 export const toggleFullscreen = () => setFullscreen(!fullscreen());
 
 /** Desktop only: let pending save writes finish, then close the window (which quits the app). */
