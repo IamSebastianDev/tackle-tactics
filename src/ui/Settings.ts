@@ -315,17 +315,17 @@ export const SettingsModal = (props: SettingsProps) => {
     };
     const About = () => html`<div class="about">
         <h4>A vibe-coded game</h4>
-        <p>Tackle Tactics is a hobby project, built by directing AI coding assistants (mostly Claude) rather than writing every
+        <p>Tackle Tactics is a hobby project, built by directing AI coding assistants (Claude Opus 5.5 and GPT 6.2 Sol) rather than writing every
         line by hand. The design, the decisions and the playtesting are human; much of the code is not. Expect rough edges,
         odd balance and the occasional bug, and please report what you find.</p>
         <h4>Credits</h4>
         <dl class="credits-list">
             <dt>Design & direction</dt><dd>Sebastian Heinz</dd>
-            <dt>Code</dt><dd>Written with AI coding assistants (Claude Code)</dd>
+            <dt>Code</dt><dd>Written with Claude Opus 5.5 (Claude Code) and GPT 6.2 Sol</dd>
             <dt>Players, pitch & stadium art</dt><dd><i>Soccer Match – Top Down Football Tileset & Players</i> by bubbabba (bubbabba.itch.io)</dd>
-            <dt>Additional art</dt><dd><i>Goals in Pixels</i></dd>
-            <dt>Radio</dt><dd>Each song is credited to its artist in the player</dd>
+            <dt>Radio</dt><dd>Songs made with Suno</dd>
             <dt>Fonts</dt><dd>Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323 (SIL Open Font License, via Fontsource)</dd>
+            <dt>Source</dt><dd>github.com/IamSebastianDev/tackle-tactics</dd>
             <dt>Built with</dt><dd>Nørd & Grains, TypeScript, Vite, Tauri</dd>
         </dl>
         <p class="muted">Clubs, players, nations and leagues are invented. Any resemblance to real ones is a nod, not a claim.</p>

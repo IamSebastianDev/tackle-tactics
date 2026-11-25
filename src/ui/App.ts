@@ -602,7 +602,7 @@ export const App = () => {
             <h1>Tackle <span>Tactics</span></h1>
             <nav class="title-menu">${menu}</nav>
             <p class="title-desc">${desc}</p>
-            <p class="credits">Art by bubbabba · Goals in Pixels</p>
+            <p class="credits">Art by bubbabba</p>
         </div></div>`;
     };
 

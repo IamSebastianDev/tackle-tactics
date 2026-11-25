@@ -10,10 +10,10 @@ desktop shell. The whole UI renders onto a fixed **1600×900 stage** scaled to t
 screens are laid out once like a game; only long lists scroll inside their own panels.
 
 > [!NOTE]
-> **This game is vibe-coded.** It's a hobby project built by directing AI coding assistants (mostly Claude, via
-> Claude Code) rather than writing every line by hand. The design, the decisions and the playtesting are human; much
-> of the code is not. Expect rough edges, odd balance and the occasional bug, and treat the code accordingly before
-> reusing it.
+> **This game is vibe-coded.** It's a hobby project built by directing AI coding assistants (Claude Opus 5.5 via
+> Claude Code, and GPT 6.2 Sol) rather than writing every line by hand. The design, the decisions and the
+> playtesting are human; much of the code is not. Expect rough edges, odd balance and the occasional bug, and treat
+> the code accordingly before reusing it.
 
 ## Building the game
 
@@ -33,8 +33,6 @@ assets/
 │   └── license.txt
 └── music/             ← optional: songs for the in-game radio
 ```
-
-The _Goals in Pixels_ pack is credited in the game but not needed to build it.
 
 **2. Install and run.**
 
@@ -203,19 +201,18 @@ TT_VARIANTS='{"base":{},"bolder":{"ai":{"xtLinear":0.12}}}' npx vitest run test/
 | Role                         | Credit                                                                                                                       |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | Design & direction           | Sebastian Heinz                                                                                                              |
-| Code                         | Written with AI coding assistants (Claude Code)                                                                              |
+| Code                         | Written with Claude Opus 5.5 (Claude Code) and GPT 6.2 Sol                                                                   |
 | Players, pitch & stadium art | _Soccer Match – Top Down Football Tileset & Players [32x32]_ by [bubbabba](https://bubbabba.itch.io) (licensed, not in repo) |
-| Additional art               | _Goals in Pixels_ (licensed, not in repo)                                                                                    |
-| Radio                        | Songs are credited to their artists in the in-game player (not in repo)                                                      |
+| Radio                        | Songs made with [Suno](https://suno.com) (not in repo)                                                                       |
 | Fonts                        | Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323 (SIL Open Font License, via [Fontsource](https://fontsource.org))  |
+| Source                       | [github.com/IamSebastianDev/tackle-tactics](https://github.com/IamSebastianDev/tackle-tactics)                               |
 | Built with                   | [Nørd & Grains](https://www.npmjs.com/package/@grainular/nord), TypeScript, Vite, [Tauri](https://tauri.app)                 |
 
 Clubs, players, nations and leagues are invented; any resemblance to real ones is a nod, not a claim. The same
 disclaimer and credits are in the game under Settings → About.
 
 **About the art.** Players, keepers, goals, ball and grass come from the bubbabba pack's 64px set (per-kit,
-4-direction strips). The _Goals in Pixels_ layered sheet (`character1-Sheet.png`) is the better long-term fit for the
-layered body/skin/hair compositing in the concept, but needs a row map first.
+4-direction strips).
 
 ## Match controls
 
