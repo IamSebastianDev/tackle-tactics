@@ -273,14 +273,20 @@ It uploads the current art and songs to R2 (`assets:upload`), bumps the version 
 `v…` tag), and pushes both. The tag starts `.github/workflows/release.yml`, which builds on GitHub's runners and
 publishes a GitHub Release once every build succeeded:
 
-| File                                      |                                                            |
-| ----------------------------------------- | ---------------------------------------------------------- |
-| `…_macos-universal.dmg` / `.app.zip`      | Apple silicon + Intel                                      |
-| `…_windows-x64-setup.exe`                 | installer (built natively, so NSIS works)                  |
-| `…_windows-x64-portable.exe`              | runs without installing (needs WebView2, in Windows 10/11) |
-| `…_linux-x86_64.AppImage` / `…_amd64.deb` | Linux (built on Ubuntu 22.04)                              |
-| `…_web.zip`                               | the browser build, for itch.io                             |
-| `SHA256SUMS.txt`                          | checksums of all of the above                              |
+| File                                      |                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| `…_macos-universal.dmg` / `.app.zip`      | Apple silicon + Intel                                               |
+| `…_windows-x64-setup.exe`                 | installer (built natively, so NSIS works)                           |
+| `…_windows-x64-portable.exe`              | runs without installing (needs WebView2, in Windows 10/11)          |
+| `…_linux-x86_64.AppImage` / `…_amd64.deb` | Linux (built on Ubuntu 22.04)                                       |
+| `…_web.zip`                               | the browser build, for itch.io                                      |
+| `SHA256SUMS.txt`                          | checksums of all of the above                                       |
+| `THIRD-PARTY-NOTICES.txt`                 | licenses of the bundled open-source packages, fonts and Rust crates |
+
+Every build also carries `THIRD-PARTY-NOTICES.txt` (shown in Settings → About): the license texts of the bundled
+JavaScript packages and fonts, plus, in desktop builds, every Rust crate (made with
+[cargo-about](https://github.com/EmbarkStudios/cargo-about) from `src-tauri/about.toml`, which accepts permissive
+licenses only). `scripts/notices.mjs` writes it; `npm run desktop:build` adds the crates when cargo-about is installed.
 
 The workflow needs the repository secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` (the same
 read-only R2 token as the Cloudflare build). A failed platform leaves the release as a draft; re-run the failed job

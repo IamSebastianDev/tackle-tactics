@@ -110,6 +110,14 @@ jobs:
               if: matrix.platform == 'windows'
               run: npm config set script-shell "$(cygpath -w "$(command -v bash)")"
             - run: npm ci
+            # the Rust crates' licences, folded into THIRD-PARTY-NOTICES.txt by the build (scripts/notices.mjs)
+            - uses: taiki-e/install-action@v2
+              with:
+                  tool: cargo-about
+            - name: Rust licences for the notices
+              run: |
+                  cargo about generate -c src-tauri/about.toml -m src-tauri/Cargo.toml -o "$RUNNER_TEMP/rust-notices.txt" src-tauri/about.hbs
+                  echo "TT_RUST_NOTICES=$RUNNER_TEMP/rust-notices.txt" >> "$GITHUB_ENV"
             - name: Build
               run: |
                   # a release is named by its tag; a test build by the version and commit
@@ -136,6 +144,8 @@ jobs:
                       npx tauri build --bundles appimage,deb
                       cp src-tauri/target/release/bundle/appimage/*.AppImage "out/${NAME}_linux-x86_64.AppImage"
                       cp src-tauri/target/release/bundle/deb/*.deb "out/${NAME}_linux-amd64.deb"
+                      # the notices next to the downloads too (the Rust crate list covers every desktop platform)
+                      cp dist/THIRD-PARTY-NOTICES.txt out/THIRD-PARTY-NOTICES.txt
                       ;;
                   esac
                   ls -l out

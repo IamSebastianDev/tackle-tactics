@@ -3,7 +3,7 @@ import { combined, derived, grain, type Grain } from '@grainular/grains';
 import { COIN } from '../meta/player';
 import type { Confirm } from './confirm';
 import { fullscreen, isDesktop, openExternal, setFullscreen } from './desktop';
-import { $render, $switch, attr, html, on } from '@grainular/nord';
+import { $if, $render, $switch, attr, html, on } from '@grainular/nord';
 import { controlValue, distinct } from './value';
 import { Dialog } from './Dialog';
 import type { Difficulty, TimeoutPolicy } from '../config';
@@ -398,6 +398,8 @@ export const SettingsModal = (props: SettingsProps) => {
     };
     const link = (href: string, text: string) =>
         html`<a href="${href}" target="_blank" rel="noopener" ${on('click', openExternal)}>${text}</a>`;
+    /** THIRD-PARTY-NOTICES.txt (made by the build, scripts/notices.mjs), loaded when asked for. */
+    const notices = grain('');
     const About = () => html`<div class="about">
         <h4>A vibe-coded game</h4>
         <p>Tackle Tactics is a hobby project, built by directing AI coding assistants (Claude Opus 5.5 and GPT 6.2 Sol) rather than writing every
@@ -414,6 +416,24 @@ export const SettingsModal = (props: SettingsProps) => {
             <dt>Built with</dt><dd>${link('https://www.npmjs.com/package/@grainular/nord', 'Nørd & Grains')}, TypeScript, Vite, ${link('https://tauri.app', 'Tauri')}</dd>
         </dl>
         <p class="muted">Clubs, players, nations and leagues are invented. Any resemblance to real ones is a nod, not a claim.</p>
+        <h4>Licenses <small>the game's code is MIT</small></h4>
+        <p>Open-source software and fonts are part of the game too. Their licenses:</p>
+        ${$if(derived(notices, Boolean))
+            .$then(() => html`<pre class="notices">${notices}</pre>`)
+            .$else(
+                () =>
+                    html`<button class="ghost" ${on('click', () =>
+                        fetch('THIRD-PARTY-NOTICES.txt')
+                            // a dev server answers a missing file with the game's index.html: only real text counts
+                            .then((r) =>
+                                r.ok && !r.headers.get('content-type')?.includes('html')
+                                    ? r.text()
+                                    : Promise.reject(new Error(String(r.status))),
+                            )
+                            .catch(() => 'The license list is part of release builds; this build has none.')
+                            .then((t) => notices.set(t)),
+                    )}>Show third-party licenses</button>`,
+            )}
     </div>`;
     const tabs: Tab[] = ['display', 'sound', 'gameplay'];
     if (props.career) tabs.push('career');

@@ -53,6 +53,15 @@ if [ -n "$missing" ]; then
   exit 1
 fi
 
+# the Rust crates' licences for THIRD-PARTY-NOTICES.txt (scripts/notices.mjs), when cargo-about is installed
+if command -v cargo-about >/dev/null 2>&1; then
+  TT_RUST_NOTICES="$(mktemp)"
+  cargo about generate -c src-tauri/about.toml -m src-tauri/Cargo.toml -o "$TT_RUST_NOTICES" src-tauri/about.hbs
+  export TT_RUST_NOTICES
+else
+  echo "⚠ cargo-about isn't installed: the notices list the JavaScript packages only (cargo install cargo-about --features cli)"
+fi
+
 rm -rf "$OUT"
 mkdir -p "$OUT"
 BUILT_FRONTEND=0

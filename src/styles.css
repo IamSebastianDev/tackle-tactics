@@ -6496,3 +6496,20 @@ button.g-size {
     padding: 0 6px;
     font-size: 11px;
 }
+
+/* Settings → About: the third-party licenses */
+.about pre.notices {
+    max-height: 260px;
+    overflow: auto;
+    margin: 0;
+    padding: 8px 10px;
+    background: #0006;
+    font:
+        11px/1.45 ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        monospace;
+    color: var(--muted);
+    white-space: pre-wrap;
+    user-select: text;
+}

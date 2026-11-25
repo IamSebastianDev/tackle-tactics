@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import { castPackPlugin } from './scripts/cast-pack-plugin.ts';
 import { musicPlugin } from './scripts/music-plugin.ts';
+import { noticesPlugin } from './scripts/notices-plugin.ts';
 
 // package.json is the one place the version lives (tauri.conf.json reads it too)
 const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')) as { version: string };
@@ -31,6 +32,8 @@ export default defineConfig({
         musicPlugin(resolve(import.meta.dirname, 'assets/music'), resolve(import.meta.dirname, 'node_modules/.cache/tt-music')),
         // the ~1,400 sprite strips become one file in a build (web hosts cap the file count)
         castPackPlugin(),
+        // THIRD-PARTY-NOTICES.txt: the licences of the bundled packages, fonts and (desktop) Rust crates
+        noticesPlugin(),
     ],
     server: {
         // the Rust build tree is huge and changes constantly while cargo runs
