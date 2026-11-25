@@ -838,14 +838,18 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
             const injury = read(() => (p.injury ? `✚ ${p.injury}d` : ''));
             const progress = read(() =>
                 isReady(p)
-                    ? html`<button class="lvl-ready" ${on('click', () => levelUp.set({ id: p.id }))}>▲ Level up</button>`
+                    ? html`<button class="lvl-ready" ${on('click', (e) => {
+                          e.stopPropagation(); // the level-up prompt, not the player panel
+                          levelUp.set({ id: p.id });
+                      })}>▲ Level up</button>`
                     : html`<span class="prog">Lv ${String(p.level)} ${xpBar(p)}</span>`,
             );
             const nextUnlock = read(() => {
                 const t = nextPerkTier(cfg, p, p.cls);
                 return t ? `${cfg.classes[t.cls].short} ${t.level}: ${t.options.map((o) => perkDef(cfg, o).label).join(' or ')}` : '';
             });
-            return html`<tr ${attr({ class: read(() => (p.injury ? 'injured' : '')) })}>
+            // a click opens the same player panel as the squad list
+            return html`<tr ${attr({ class: read(() => (p.injury ? 'injured' : '')) })} ${on('click', () => selected.set({ id: p.id, from: 'squad' }))}>
                 <td>${portrait(u(), p, 28)}</td>
                 <td class="name">${flag(p.nation)}<b>${p.name}</b>${$if(derived(injury, Boolean)).$then(() => html`<em class="inj">${injury}</em>`)}</td>
                 <td>${modelRegion(() => classChips(p))}</td>

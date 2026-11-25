@@ -2000,7 +2000,8 @@ dialog.drawer-wrap:not([open]) {
     font-family: var(--display);
     font-size: 12px;
 }
-.tbl.players tbody tr {
+.tbl.players tbody tr,
+.tbl.training tbody tr {
     cursor: pointer;
 }
 .tbl tr.injured td {
