@@ -565,7 +565,7 @@ export class MatchController {
             }
             for (const e of ev) {
                 if (e.t === 'bonus') {
-                    this.popup(m.piece(e.id).pos, e.reason === 'beat' ? '⚡ Beat the tackle' : '⚡ Extra turn', 'good');
+                    this.popup(m.piece(e.id).pos, e.reason === 'beat' ? 'Beat the tackle' : 'Extra turn', 'good');
                     audio.play('ability');
                     await sleep(450);
                 }
@@ -1111,7 +1111,7 @@ export class MatchController {
                     this.bump();
                     await sleep(e.penalty ? 1100 : 700);
                     if (!e.penalty && m.piece(e.on).status.fouled) {
-                        this.popup(m.piece(e.on).pos, '✋ Free kick', 'good');
+                        this.popup(m.piece(e.on).pos, 'Free kick', 'good');
                         await sleep(500);
                     }
                     break;

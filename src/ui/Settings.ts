@@ -411,7 +411,7 @@ export const SettingsModal = (props: SettingsProps) => {
             <dt>Code</dt><dd>Written with Claude Opus 5.5 (Claude Code) and GPT 6.2 Sol</dd>
             <dt>Players, pitch & stadium art</dt><dd><i>Soccer Match – Top Down Football Tileset & Players</i> by ${link('https://bubbabba.itch.io', 'bubbabba')}</dd>
             <dt>Radio</dt><dd>Songs made with ${link('https://suno.com', 'Suno')}</dd>
-            <dt>Fonts</dt><dd>Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323 (SIL Open Font License, via ${link('https://fontsource.org', 'Fontsource')})</dd>
+            <dt>Fonts</dt><dd>Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323, Noto Sans Symbols (SIL Open Font License, via ${link('https://fontsource.org', 'Fontsource')})</dd>
             <dt>Source</dt><dd>${link('https://github.com/IamSebastianDev/tackle-tactics', 'github.com/IamSebastianDev/tackle-tactics')}</dd>
             <dt>Built with</dt><dd>${link('https://www.npmjs.com/package/@grainular/nord', 'Nørd & Grains')}, TypeScript, Vite, ${link('https://tauri.app', 'Tauri')}</dd>
         </dl>

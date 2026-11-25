@@ -214,15 +214,15 @@ can't be pulled out of a build and reused under the MIT terms.
 
 ## Credits
 
-| Role                         | Credit                                                                                                                       |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Design & direction           | Sebastian Heinz                                                                                                              |
-| Code                         | Written with Claude Opus 5.5 (Claude Code) and GPT 6.2 Sol                                                                   |
-| Players, pitch & stadium art | _Soccer Match – Top Down Football Tileset & Players [32x32]_ by [bubbabba](https://bubbabba.itch.io) (licensed, not in repo) |
-| Radio                        | Songs made with [Suno](https://suno.com) (not in repo)                                                                       |
-| Fonts                        | Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323 (SIL Open Font License, via [Fontsource](https://fontsource.org))  |
-| Source                       | [github.com/IamSebastianDev/tackle-tactics](https://github.com/IamSebastianDev/tackle-tactics)                               |
-| Built with                   | [Nørd & Grains](https://www.npmjs.com/package/@grainular/nord), TypeScript, Vite, [Tauri](https://tauri.app)                 |
+| Role                         | Credit                                                                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Design & direction           | Sebastian Heinz                                                                                                                                |
+| Code                         | Written with Claude Opus 5.5 (Claude Code) and GPT 6.2 Sol                                                                                     |
+| Players, pitch & stadium art | _Soccer Match – Top Down Football Tileset & Players [32x32]_ by [bubbabba](https://bubbabba.itch.io) (licensed, not in repo)                   |
+| Radio                        | Songs made with [Suno](https://suno.com) (not in repo)                                                                                         |
+| Fonts                        | Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323, Noto Sans Symbols (SIL Open Font License, via [Fontsource](https://fontsource.org)) |
+| Source                       | [github.com/IamSebastianDev/tackle-tactics](https://github.com/IamSebastianDev/tackle-tactics)                                                 |
+| Built with                   | [Nørd & Grains](https://www.npmjs.com/package/@grainular/nord), TypeScript, Vite, [Tauri](https://tauri.app)                                   |
 
 Clubs, players, nations and leagues are invented; any resemblance to real ones is a nod, not a claim. The same
 disclaimer and credits are in the game under Settings → About.

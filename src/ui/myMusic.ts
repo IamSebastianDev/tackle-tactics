@@ -80,6 +80,23 @@ export const removeSong = async (t: Track) => {
 
 // one object URL at a time: a song is a few MB
 let current: string | null = null;
+const fromMemory = (blob: Blob) => {
+    if (current) URL.revokeObjectURL(current);
+    current = URL.createObjectURL(blob);
+    return current;
+};
+
+/**
+ * Linux desktop: WebKitGTK streams media from the app's own tauri:// URLs unreliably (the station
+ * stayed silent), so a station song is read whole and played from memory like the player's own.
+ */
+export const playFromMemory = isDesktop && /Linux/.test(navigator.userAgent);
+
+export const stationUrl = async (t: Track): Promise<string> => {
+    const res = await fetch(t.url);
+    if (!res.ok) throw new Error(`${String(res.status)} for ${t.url}`);
+    return fromMemory(await res.blob());
+};
 
 /** Where to play one of the player's songs from (loads it now). */
 export const songUrl = async (t: Track): Promise<string> => {
@@ -87,7 +104,5 @@ export const songUrl = async (t: Track): Promise<string> => {
         ? new Blob([await invoke<ArrayBuffer>('read_song', { name: t.mine })])
         : await idb<Blob | undefined>('readonly', (s) => s.get(t.mine!), SONGS);
     if (!blob) throw new Error(`song not found: ${t.mine}`);
-    if (current) URL.revokeObjectURL(current);
-    current = URL.createObjectURL(blob);
-    return current;
+    return fromMemory(blob);
 };
