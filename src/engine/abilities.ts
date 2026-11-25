@@ -44,7 +44,8 @@ export const perkDef = (cfg: GameConfig, id: PerkId): { cls: ClassId; unlock: nu
 /** Does the player have this perk: picked (or kept from older data) and the class level is there. */
 const owns = (cfg: GameConfig, p: Player, id: PerkId) => {
     const d = perkDef(cfg, id);
-    return classLevel(p, d.cls) >= d.unlock && (!p.perks || p.perks.includes(id));
+    const innate = (cfg.passives[id as PassiveId] as { innate?: boolean } | undefined)?.innate === true;
+    return classLevel(p, d.cls) >= d.unlock && (innate || !p.perks || p.perks.includes(id));
 };
 
 /** Tiers the player has reached in their classes but hasn't picked from yet. */

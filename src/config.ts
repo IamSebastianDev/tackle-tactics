@@ -616,6 +616,15 @@ export const defaultConfig = {
     },
     /** Passive traits, unlocked by class level like abilities. Applied inside rules.ts. */
     passives: {
+        /** Every keeper has it (innate: no perk pick). A reaction-ready keeper claims a loose ball this close. */
+        safeHands: {
+            cls: 'keeper',
+            unlock: 1,
+            innate: true,
+            label: 'Safe hands',
+            desc: 'Claims any loose ball within 3 cells without waiting for their turn (uses their reaction).',
+            range: 3,
+        },
         distributor: { cls: 'keeper', unlock: 2, label: 'Distributor', desc: 'Keeper kicks scatter 35% less.', passScatter: 0.65 },
         shotStopper: { cls: 'keeper', unlock: 5, label: 'Shot-stopper', desc: '+10% save chance.', save: 0.1 },
         stopper: { cls: 'defender', unlock: 5, label: 'Stopper', desc: '+8% tackle chance.', tackle: 0.08 },

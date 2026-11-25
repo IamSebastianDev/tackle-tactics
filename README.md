@@ -184,7 +184,7 @@ when the level _in its class_ reaches its `unlock`. All numbers live in `config.
 | Keeper     | Command (3)                       | act      | Teammates within 5 regain reactions and react better until their next turn                            |
 |            | Rush out (5)                      | move     | +3 move, ignores marking, tackle bonus                                                                |
 
-Passives: Distributor (GK 1), Vision (MF 5), Aerial threat (ST 6), Shot-stopper (GK 8), Stopper (DF 8),
+Passives: Safe hands (every keeper: claims a loose ball within 3 cells between turns, using the reaction), Distributor (GK 1), Vision (MF 5), Aerial threat (ST 6), Shot-stopper (GK 8), Stopper (DF 8),
 Elusive (WG 8), Reader (MF 9), Clinical (ST 10).
 
 ## AI tuning

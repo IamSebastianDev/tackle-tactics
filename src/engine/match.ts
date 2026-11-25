@@ -7,7 +7,7 @@
 import type { GameConfig } from '../config';
 import { createRng, type Rng } from '../rng';
 import type { BallState, Cell, Club, MatchEvent, MatchState, Piece, Referee, RefStyle, SetPiece, SetPieceKind, TeamSide } from '../types';
-import { abilityDef, hasAbility, type AbilityId } from './abilities';
+import { abilityDef, hasAbility, hasPassive, type AbilityId } from './abilities';
 import { attackGoalX, cheb, clampToPitch, dist, eq, facingFor, forward, goalRows, inPitch, key, line, neighbours8, ownGoalX } from './grid';
 import { interceptChance, movePoints, saveChance, scatterRadius, tackleChance, trickChance, type KickMods } from './rules';
 
@@ -516,8 +516,49 @@ export class Match {
                 s.order.splice(s.turnIndex, 0, sp.taker);
             }
         }
+        events.push(...this.keeperClaims());
         this.beginTurn();
         return events;
+    };
+
+    /**
+     * Safe hands: between turns, a keeper within range of a loose ball he may take walks onto it
+     * and holds it. It costs his reaction, unless it is his turn that starts now (it refreshes anyway).
+     */
+    keeperClaims = (): MatchEvent[] => {
+        const s = this.state;
+        const ball = s.ball;
+        if (ball.kind !== 'loose' || s.setPiece || s.over) return [];
+        const next = s.bonusTurn ?? s.order[s.turnIndex];
+        const range = (this.cfg.passives.safeHands as { range: number }).range;
+        const keeper = s.pieces
+            .filter(
+                (k) =>
+                    hasPassive(this.cfg, k.player, 'safeHands') &&
+                    (ball.restrictedTo === null || ball.restrictedTo === k.team) &&
+                    cheb(k.pos, ball.at) <= range &&
+                    (k.reactionReady || k.id === next) &&
+                    !k.staggered &&
+                    !k.status.grounded,
+            )
+            .sort((a, b) => cheb(a.pos, ball.at) - cheb(b.pos, ball.at))[0];
+        const occupant = keeper && this.pieceAt(ball.at);
+        if (!keeper || (occupant && occupant !== keeper)) return [];
+        const from = { ...keeper.pos };
+        const path: Cell[] = [from];
+        while (!eq(path.at(-1)!, ball.at)) {
+            const c = path.at(-1)!;
+            path.push({ x: c.x + Math.sign(ball.at.x - c.x), y: c.y + Math.sign(ball.at.y - c.y) });
+        }
+        keeper.pos = { ...ball.at };
+        keeper.facing = facingFor(from, ball.at, keeper.facing);
+        if (keeper.id !== next) keeper.reactionReady = false;
+        s.ball = { kind: 'held', by: keeper.id };
+        this.log(`${keeper.player.name} comes off the line and claims it.`, keeper.team);
+        return [
+            { t: 'move', id: keeper.id, path, dribble: false },
+            { t: 'pickup', by: keeper.id, at: { ...ball.at } },
+        ];
     };
 
     // ---------------------------------------------------------------- basic actions

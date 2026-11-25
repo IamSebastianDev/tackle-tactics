@@ -45,7 +45,7 @@ export const Playbook = (cfg: GameConfig, player?: Player) => {
                         const d = cfg.passives[id];
                         return html`<li class="passive ${state(id, d.unlock)} ${tierSize(d.unlock) > 1 ? 'pick' : ''}">
                         <span class="lv">${String(d.unlock)}</span><span class="ic">◆</span>
-                        <div><b>${d.label}</b> <em>Passive · always on</em><p>${d.desc}</p></div>
+                        <div><b>${d.label}</b> <em>Passive · ${'innate' in d && d.innate ? `every ${cfg.classes[cls].label.toLowerCase()}` : 'always on'}</em><p>${d.desc}</p></div>
                     </li>`;
                     },
                 })),
