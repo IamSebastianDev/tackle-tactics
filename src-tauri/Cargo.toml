@@ -2,8 +2,8 @@
 name = "tackle-tactics"
 version = "0.1.2"
 description = "Tackle Tactics: turn-based football tactics"
-authors = []
-license = ""
+authors = ["Sebastian Heinz"]
+license = "MIT"
 repository = ""
 edition = "2024"
 rust-version = "1.90"

@@ -206,6 +206,12 @@ ball by who can reach and tackle you _before your next turn_ (turn-order aware).
 TT_VARIANTS='{"base":{},"bolder":{"ai":{"xtLinear":0.12}}}' npx vitest run test/tune.test.ts --silent=false
 ```
 
+## License
+
+The code is [MIT](LICENSE). The art and music are not part of this repository and are not covered by it: the release
+builds bundle bubbabba's art, the radio's songs and the fonts under their own licenses (see Credits below), so they
+can't be pulled out of a build and reused under the MIT terms.
+
 ## Credits
 
 | Role                         | Credit                                                                                                                       |
