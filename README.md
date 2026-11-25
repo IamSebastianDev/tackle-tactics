@@ -55,16 +55,17 @@ allows: it's the game, not the pack.
 
 ## Development
 
-| Command                 |                                                             |
-| ----------------------- | ----------------------------------------------------------- |
-| `npm run dev`           | browser dev server (http://localhost:5173)                  |
-| `npm run desktop`       | desktop app (Tauri) on the dev server, hot reload           |
-| `npm test`              | vitest                                                      |
-| `npm run fix`           | oxlint autofixes, then oxfmt formatting                     |
-| `npm run build`         | web build into `dist/`                                      |
-| `npm run desktop:build` | macOS + Windows builds into `releases/<version>/`           |
-| `npm run web:build`     | browser build zipped for itch.io into `releases/<version>/` |
-| `npm run assets`        | copy the used art out of the pack again                     |
+| Command                 |                                                               |
+| ----------------------- | ------------------------------------------------------------- |
+| `npm run dev`           | browser dev server (http://localhost:5173)                    |
+| `npm run desktop`       | desktop app (Tauri) on the dev server, hot reload             |
+| `npm test`              | vitest                                                        |
+| `npm run fix`           | oxlint autofixes, then oxfmt formatting                       |
+| `npm run build`         | web build into `dist/`                                        |
+| `npm run desktop:build` | macOS + Windows builds into `releases/<version>/`             |
+| `npm run web:build`     | browser build zipped for itch.io into `releases/<version>/`   |
+| `npm run assets`        | copy the used art out of the pack again                       |
+| `npm run assets:upload` | pack the art and songs and upload them to R2 for cloud builds |
 
 **Checks run as a git pre-commit hook** ([lefthook](https://lefthook.dev), installed by `npm install`): typecheck,
 oxlint, oxfmt `--check` and vitest when TypeScript changes; `cargo fmt --check`, clippy `-D warnings` and the Rust
