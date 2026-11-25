@@ -331,18 +331,18 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                     ? `${String(-s.streak)} without a win`
                     : '';
         const drift = m > 62 ? 'Cools off on training days.' : m < 58 ? 'Recovers a little on training days.' : 'Steady.';
-        return html`<div class="card morale m-${tone}">
+        const edgeText = `${edge > 0 ? '+' : ''}${String(edge)}%`;
+        return html`<div class="card squad-status m-${tone}">
             <h3>Squad status</h3>
-            <div class="morale-top">
-                <span class="morale-mood"><b>${moraleLabel(m)}</b> morale <small>${String(m)}/100</small></span>
-                <span class="morale-edge" title="Morale shifts shot accuracy, tackles and interceptions in every match"><b>${edge > 0 ? `+${String(edge)}` : String(edge)}%</b> match edge</span>
-            </div>
-            <div class="morale-meter" title="Morale ${String(m)}/100">${cells}<span class="mid"></span></div>
-            <div class="morale-foot">
-                <span>Form <b class="form">${form.length ? form.map((r) => html`<i class="r${r}">${r}</i>`) : '–'}</b></span>
-                <span class="muted">${run ? `${run}. ` : ''}${drift}</span>
-            </div>
-            <ul class="alerts">${alerts()}</ul>
+            <dl class="ss-rows">
+                <dt>Morale</dt>
+                <dd><span class="morale-meter" title="Morale ${String(m)}/100">${cells}<span class="mid"></span></span><span class="ss-mood">${moraleLabel(m)} · ${String(m)}</span></dd>
+                <dt>Match edge</dt>
+                <dd title="Morale shifts shot accuracy, tackles and interceptions in every match">${edgeText} <span class="muted">on shots, tackles, interceptions</span></dd>
+                <dt>Form</dt>
+                <dd><span class="form">${form.length ? form.map((r) => html`<i class="r${r}">${r}</i>`) : '–'}</span> <span class="muted">${run || drift}</span></dd>
+            </dl>
+            <ul class="ss-alerts">${alerts()}</ul>
         </div>`;
     };
 

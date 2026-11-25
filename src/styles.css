@@ -6250,55 +6250,53 @@ button.g-size {
     margin-bottom: 4px;
 }
 
-/* the dressing room: morale on the overview */
-.morale {
+/* Squad status on the overview: morale, match edge and form as rows, then what needs attention */
+.squad-status {
     --m: var(--gold);
 }
-.morale.m-hi {
+.squad-status.m-hi {
     --m: var(--good);
 }
-.morale.m-meh {
+.squad-status.m-meh {
     --m: #e8964a;
 }
-.morale.m-lo {
+.squad-status.m-lo {
     --m: var(--bad);
 }
-.morale-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-    font-size: 13px;
+.ss-rows {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 5px 12px;
+    margin: 0;
+    font-size: 14px;
+    align-items: center;
+}
+.ss-rows dt {
     color: var(--muted);
 }
-.morale-top b {
+.ss-rows dd {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.ss-mood {
     color: var(--m);
-    font-size: 14px;
-}
-.morale-edge b {
-    color: var(--text, #fff);
-}
-.morale-top small {
-    font-size: 12px;
+    white-space: nowrap;
 }
 .morale-meter {
     position: relative;
+    flex: 1;
     display: grid;
     grid-template-columns: repeat(10, 1fr);
-    gap: 3px;
-    margin: 4px 0 6px;
+    gap: 2px;
     padding: 2px;
     background: #0006;
-    box-shadow: inset 0 0 0 2px #0008;
 }
 .morale-meter i {
     height: 6px;
     background: #ffffff14;
-}
-.morale-meter i.on {
-    box-shadow:
-        inset 0 -3px #0004,
-        inset 0 2px #fff3;
 }
 .morale-meter i.m-lo {
     background: var(--bad);
@@ -6319,15 +6317,24 @@ button.g-size {
     top: -2px;
     bottom: -2px;
     width: 2px;
-    background: var(--text, #fff);
-    opacity: 0.7;
+    background: #fff;
+    opacity: 0.6;
 }
-.morale-foot {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    font-size: 13px;
-    margin-bottom: 8px;
+.ss-alerts {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 6px 0 0;
+    border-top: 1px solid #ffffff1a;
+    display: grid;
+    gap: 4px;
+    font-size: 14px;
+}
+.ss-alerts li.bad::before {
+    content: '! ';
+    color: var(--bad);
+    font-family: var(--display);
+}
+.ss-alerts li.good::before {
+    content: '✓ ';
+    color: var(--good);
 }
