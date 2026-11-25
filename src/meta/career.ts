@@ -62,7 +62,7 @@ export type CareerClub = Club & {
  * Save format version. Breaking changes bump it; an older save is simply not loaded (no
  * migrations: the manager starts a new career).
  */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export type Career = {
     version: typeof SAVE_VERSION;
@@ -83,7 +83,10 @@ export type Career = {
     cup?: Cup;
     /** The international cup ({@link INTL_CUP_NAME}): the best two of every top flight. */
     intl?: Cup;
+    /** Free agents: players without a club (released, or this season's youth crop). */
     market: Player[];
+    /** The transfer list: players clubs are willing to sell (day = absolute day it was listed). */
+    listed: Array<{ id: string; club: string; day: number }>;
     news: News[];
     ledger: Ledger[];
     /** Squad drill to run each training day until the manager changes it. */
@@ -317,6 +320,7 @@ export const newCareer = (
         divisions: [],
         world: {},
         market: [],
+        listed: [],
         news: [],
         ledger: [],
         trainingFocus: DEFAULT_TRAINING_FOCUS,
@@ -946,17 +950,63 @@ export const endSeason = (cfg: GameConfig, c: Career): SeasonCeremony => {
     c.season++;
     c.day = 1;
     buildSeason(cfg, c, rng, qualifiers);
-    c.market = buildMarket(cfg, rng, c);
+    // free agents carry over: the old ones hang up their boots, a youth crop joins, the pool stays a sane size
+    for (const p of c.market) ageOneSeason(cfg, rng, p);
+    c.market = c.market.filter((p) => p.age < cfg.career.retireFrom);
+    c.market.push(...buildMarket(cfg, rng, c, cfg.career.market.size, cfg.career.market.foreignShare, 0.75));
+    if (c.market.length > cfg.career.market.maxFreeAgents)
+        c.market = c.market.sort((a, b) => playerValue(cfg, b) - playerValue(cfg, a)).slice(0, cfg.career.market.maxFreeAgents);
+    c.listed = c.listed.filter((l) => c.clubs[l.club]?.squad.some((q) => q.id === l.id));
     for (const s of summary) news(c, s, s.includes('Relegated') || s.includes('retired') ? 'bad' : 'good');
-    news(c, `Season ${c.season} begins. A fresh crop of players is on the market.`, 'info');
+    news(c, `Season ${c.season} begins. A new crop of young free agents is on the market.`, 'info');
     resetSeason(c, rng);
     saveRng(c, rng);
     return ceremony;
 };
 
-// ------------------------------------------------------------------ transfers (AI clubs)
+// ------------------------------------------------------------------ transfers (real players moving between clubs)
 
-/** The XI slot where a club is weakest: its index, class and the fit of whoever plays there. */
+/** A day number that keeps counting across seasons (for transfer-list expiry). */
+const absDay = (c: Career) => c.season * 1000 + c.day;
+
+/** A player on the market: a free agent (club null) or transfer-listed by a club. */
+export type MarketEntry = { p: Player; club: CareerClub | null };
+
+/** Everything for sale: free agents and transfer-listed players. */
+export const marketEntries = (c: Career): MarketEntry[] => [
+    ...c.market.map((p) => ({ p, club: null })),
+    ...c.listed.flatMap((l) => {
+        const club = c.clubs[l.club];
+        const p = club?.squad.find((q) => q.id === l.id);
+        return club && p ? [{ p, club }] : [];
+    }),
+];
+export const marketEntry = (c: Career, playerId: string): MarketEntry | undefined => {
+    const free = c.market.find((p) => p.id === playerId);
+    if (free) return { p: free, club: null };
+    const l = c.listed.find((x) => x.id === playerId);
+    const club = l && c.clubs[l.club];
+    const p = club?.squad.find((q) => q.id === playerId);
+    return club && p ? { p, club } : undefined;
+};
+/** What it costs to sign: the asking price from a club, a signing-on fee for a free agent. */
+export const marketPrice = (cfg: GameConfig, e: MarketEntry) =>
+    e.club ? askingPrice(cfg, e.p) : Math.round((playerValue(cfg, e.p) * cfg.career.market.freeAgentFee) / 1000) * 1000;
+
+/** Move a player to `to` (from a club, or from the free agents) and settle the fee between AI clubs. */
+const transfer = (c: Career, p: Player, from: CareerClub | null, to: CareerClub, fee: number) => {
+    if (from) {
+        from.squad = from.squad.filter((q) => q.id !== p.id);
+        from.lineup = from.lineup.filter((id) => id !== p.id);
+        if (from.id !== c.userClubId) from.budget += fee;
+    } else c.market = c.market.filter((q) => q.id !== p.id);
+    c.listed = c.listed.filter((l) => l.id !== p.id);
+    p.number = Math.max(0, ...to.squad.map((q) => q.number)) + 1;
+    to.squad.push(p);
+    if (to.id !== c.userClubId) to.budget -= fee;
+};
+
+/** The XI slot where a club is weakest: its class and the fit of whoever plays there. */
 const weakestSlot = (cfg: GameConfig, club: CareerClub, fit: FitTable) => {
     validLineup(cfg, club);
     const formation = cfg.formations.find((f) => f.id === club.formationId) ?? cfg.formations[0]!;
@@ -970,33 +1020,65 @@ const weakestSlot = (cfg: GameConfig, club: CareerClub, fit: FitTable) => {
     return worst;
 };
 
-/** An AI club looks at the market: signs the player who most lifts its weakest slot, if it can pay. */
-const aiShop = (cfg: GameConfig, c: Career, club: CareerClub, tell: (text: string) => void) => {
+/** A club over the limit releases its least valuable spare; one under it signs a free agent or a youngster. */
+const restock = (cfg: GameConfig, c: Career, rng: Rng, club: CareerClub, fit: FitTable) => {
+    club.lineup = autoLineup(cfg, club, fit);
+    while (club.squad.length > cfg.career.squadMax) {
+        const spare = club.squad.filter((q) => !club.lineup.includes(q.id)).sort((a, b) => playerValue(cfg, a) - playerValue(cfg, b))[0];
+        if (!spare) break;
+        club.squad = club.squad.filter((q) => q.id !== spare.id);
+        c.listed = c.listed.filter((l) => l.id !== spare.id);
+        c.market.push(spare);
+    }
+    while (club.squad.length < cfg.career.squadMin) {
+        const counts = (cls: ClassId) => club.squad.filter((q) => q.cls === cls).length;
+        const need =
+            (Object.entries(cfg.career.squadMake) as Array<[ClassId, number]>).find(([cls, n]) => counts(cls) < n)?.[0] ?? 'midfielder';
+        const free = c.market
+            .filter((p) => p.cls === need && marketPrice(cfg, { p, club: null }) <= club.budget)
+            .sort((a, b) => fit(b, need) - fit(a, need))[0];
+        if (free) transfer(c, free, null, club, marketPrice(cfg, { p: free, club: null }));
+        else club.squad.push(clubPlayer(cfg, rng, c, club, need, club.squad.length + 1, [17, 19]));
+    }
+    club.lineup = autoLineup(cfg, club, fit);
+};
+
+/** An AI club shops: the free agent or listed player who most lifts its weakest slot, if it can pay. */
+const aiShop = (
+    cfg: GameConfig,
+    c: Career,
+    rng: Rng,
+    club: CareerClub,
+    fit: FitTable,
+    tell: (text: string, seller: CareerClub | null) => void,
+) => {
     const tr = cfg.career.transfers;
-    const fit = fitTable(cfg);
     const worst = weakestSlot(cfg, club, fit);
-    const pick = c.market
-        .filter((p) => askingPrice(cfg, p) <= club.budget * tr.spendShare)
-        .map((p) => ({ p, gain: fit(p, worst.cls) - worst.value }))
+    const pick = marketEntries(c)
+        .filter((e) => e.club?.id !== club.id && e.club?.id !== c.userClubId && marketPrice(cfg, e) <= club.budget * tr.spendShare)
+        .map((e) => ({ e, gain: fit(e.p, worst.cls) - worst.value }))
         .filter((x) => x.gain >= tr.minGain)
         .sort((a, b) => b.gain - a.gain)[0];
     if (!pick) return;
-    const p = pick.p;
-    const price = askingPrice(cfg, p);
-    club.budget -= price;
-    c.market = c.market.filter((q) => q.id !== p.id);
-    p.number = Math.max(0, ...club.squad.map((q) => q.number)) + 1;
-    club.squad.push(p);
-    // over the limit: the least valuable player outside the XI is released to the market
-    club.lineup = autoLineup(cfg, club, fit);
-    if (club.squad.length > cfg.career.squadMax) {
-        const spare = club.squad.filter((q) => !club.lineup.includes(q.id)).sort((a, b) => playerValue(cfg, a) - playerValue(cfg, b))[0];
-        if (spare) {
-            club.squad = club.squad.filter((q) => q.id !== spare.id);
-            c.market.push(spare);
-        }
-    }
-    tell(`${club.name} sign ${p.name} (${cfg.classes[p.cls].short}) for ${money(price)}.`);
+    const { p, club: seller } = pick.e;
+    const price = marketPrice(cfg, pick.e);
+    transfer(c, p, seller, club, price);
+    restock(cfg, c, rng, club, fit);
+    if (seller) restock(cfg, c, rng, seller, fit);
+    tell(
+        `${club.name} sign ${p.name} (${cfg.classes[p.cls].short}) ${seller ? `from ${seller.name}` : 'as a free agent'} for ${money(price)}.`,
+        seller,
+    );
+};
+
+/** An AI club with a spare player puts him on the transfer list. */
+const aiList = (cfg: GameConfig, c: Career, club: CareerClub) => {
+    if (club.squad.length <= cfg.career.squadMin + 1 || c.listed.length >= cfg.career.transfers.maxListed) return;
+    validLineup(cfg, club);
+    const spare = club.squad
+        .filter((q) => !club.lineup.includes(q.id) && !c.listed.some((l) => l.id === q.id))
+        .sort((a, b) => playerValue(cfg, a) - playerValue(cfg, b))[0];
+    if (spare) c.listed.push({ id: spare.id, club: club.id, day: absDay(c) });
 };
 
 /** Maybe a club makes an offer for one of the manager's better players (it arrives as a letter). */
@@ -1011,38 +1093,48 @@ const maybeBid = (cfg: GameConfig, c: Career, rng: Rng) => {
     if (!targets.length) return;
     const p = rng.pick(targets);
     const amount = Math.round((playerValue(cfg, p) * (tr.bidPremium[0] + rng() * (tr.bidPremium[1] - tr.bidPremium[0]))) / 1000) * 1000;
-    // a club at the manager's level or above, anywhere, that can pay and would start him
-    const fit = fitTable(cfg);
-    const suitors = Object.values(c.clubs)
-        .filter((cl) => cl.id !== u.id && cl.tier <= u.tier && cl.budget >= amount)
-        .sort(() => rng() - 0.5)
-        .slice(0, 120)
-        .filter((cl) => {
-            const worst = weakestSlot(cfg, cl, fit);
-            return worst.cls === p.cls && fit(p, p.cls) > worst.value + tr.minGain;
-        });
-    const buyer = suitors[0];
+    // clubs at your level or one division up, where he'd really start
+    const buyer = suitorFor(cfg, c, rng, p, amount, [Math.max(0, u.tier - 1), u.tier]);
     if (!buyer) return;
     const abroad = buyer.nation !== c.nation ? ` (${NATIONS[buyer.nation].name})` : '';
     deliverBid(c, { buyer: buyer.id, buyerName: `${buyer.name}${abroad}`, player: p, amount });
 };
 
-/** A training day on the market: AI clubs shop, the market refills, and maybe an offer comes in. */
+/** A club (any nation, between `tiers`) that can pay `fee` and would put `p` in its XI. */
+const suitorFor = (cfg: GameConfig, c: Career, rng: Rng, p: Player, fee: number, tiers: [number, number]): CareerClub | undefined => {
+    const fit = fitTable(cfg);
+    return Object.values(c.clubs)
+        .filter((cl) => cl.id !== c.userClubId && cl.tier >= tiers[0] && cl.tier <= tiers[1] && cl.budget >= fee && !cl.squad.includes(p))
+        .sort(() => rng() - 0.5)
+        .slice(0, 120)
+        .find((cl) => {
+            // he'd replace their weakest starter in his own position
+            validLineup(cfg, cl);
+            const formation = cfg.formations.find((f) => f.id === cl.formationId) ?? cfg.formations[0]!;
+            const starters = cl.lineup.flatMap((id, i) => {
+                const q = cl.squad.find((x) => x.id === id);
+                return q && formation.slots[i]!.cls === p.cls ? [fit(q, p.cls)] : [];
+            });
+            return starters.length > 0 && fit(p, p.cls) > Math.min(...starters) + cfg.career.transfers.bidMinGain;
+        });
+};
+
+/** A training day on the market: clubs list spares and shop, old listings lapse, and maybe an offer comes in. */
 const transferDay = (cfg: GameConfig, c: Career, rng: Rng, announce: (text: string, tone: News['tone']) => void) => {
     const tr = cfg.career.transfers;
     const u = userClub(c);
     const ids = Object.keys(c.clubs).filter((id) => id !== u.id);
-    // news only for moves in the manager's own division
+    const fit = fitTable(cfg);
+    c.listed = c.listed.filter((l) => absDay(c) - l.day <= tr.listDays && c.clubs[l.club]?.squad.some((q) => q.id === l.id));
+    for (let i = 0; i < tr.listPerDay; i++) aiList(cfg, c, c.clubs[rng.pick(ids)]!);
+    // news only for moves that touch the manager's division
     const myDivision = new Set(divisionOf(c, u.id).clubs);
     for (let i = 0; i < tr.clubsPerDay; i++) {
         const club = c.clubs[rng.pick(ids)]!;
-        aiShop(cfg, c, club, (text) => {
-            if (myDivision.has(club.id)) announce(text, 'info');
+        aiShop(cfg, c, rng, club, fit, (text, seller) => {
+            if (myDivision.has(club.id) || (seller && myDivision.has(seller.id))) announce(text, 'info');
         });
     }
-    // fresh faces keep arriving through the season; released players wait as free agents
-    if (c.market.length < cfg.career.market.size) c.market.push(...buildMarket(cfg, rng, c, tr.marketRefill));
-    if (c.market.length > cfg.career.market.size * 1.5) c.market = c.market.slice(-Math.round(cfg.career.market.size * 1.5));
     maybeBid(cfg, c, rng);
 };
 
@@ -1055,6 +1147,7 @@ const buildMarket = (
     c: Career,
     count = cfg.career.market.size,
     foreignShare = cfg.career.market.foreignShare,
+    youngShare = 0.4,
 ): Player[] => {
     const tier = userClub(c).tier;
     const classes = Object.keys(cfg.career.squadMake) as ClassId[];
@@ -1062,7 +1155,7 @@ const buildMarket = (
     for (let i = 0; i < count; i++) {
         // mostly around the user's tier, sometimes a tier above or below
         const t = Math.max(0, Math.min(cfg.career.divisions - 1, tier + rng.int(-1, 1)));
-        const young = rng.chance(0.4);
+        const young = rng.chance(youngShare);
         const from = pickNationality(rng, c.nation, foreignShare);
         const p = newPlayer(cfg, rng, c, rng.pick(classes), t, 0, young ? [17, 21] : [21, 32], from);
         out.push(p);
@@ -1075,16 +1168,20 @@ export const salePrice = (cfg: GameConfig, p: Player) => Math.round((playerValue
 
 export const buy = (cfg: GameConfig, c: Career, playerId: string): string | null => {
     const u = userClub(c);
-    const p = c.market.find((q) => q.id === playerId);
-    if (!p) return 'No longer available.';
+    const e = marketEntry(c, playerId);
+    if (!e) return 'No longer available.';
     if (u.squad.length >= cfg.career.squadMax) return `Squad is full (${cfg.career.squadMax}).`;
-    const price = askingPrice(cfg, p);
+    const price = marketPrice(cfg, e);
     if (u.budget < price) return 'Not enough money.';
-    c.market = c.market.filter((q) => q.id !== p.id);
-    p.number = Math.max(0, ...u.squad.map((q) => q.number)) + 1;
-    u.squad.push(p);
+    const { p, club: seller } = e;
+    transfer(c, p, seller, u, price);
+    if (seller) {
+        const rng = careerRng(c);
+        restock(cfg, c, rng, seller, fitTable(cfg));
+        saveRng(c, rng);
+    }
     book(c, `Signed ${p.name}`, -price);
-    news(c, `${p.name} signs for ${money(price)}.`, 'good');
+    news(c, `${p.name} signs ${seller ? `from ${seller.name}` : 'as a free agent'} for ${money(price)}.`, 'good');
     return null;
 };
 
@@ -1095,11 +1192,20 @@ export const sell = (cfg: GameConfig, c: Career, playerId: string): string | nul
     if (u.squad.length <= cfg.career.squadMin) return `Squad can't go below ${cfg.career.squadMin}.`;
     if (p.cls === 'keeper' && u.squad.filter((q) => q.cls === 'keeper').length <= 1) return 'You need at least one keeper.';
     const price = salePrice(cfg, p);
-    u.squad = u.squad.filter((q) => q.id !== p.id);
-    u.lineup = u.lineup.filter((id) => id !== p.id);
+    // a real buyer: any club (any level, any nation) that can pay and would play him
+    const rng = careerRng(c);
+    const buyer = suitorFor(cfg, c, rng, p, price, [0, cfg.career.divisions - 1]);
+    saveRng(c, rng);
+    if (!buyer) return `No club wants ${p.name} at ${money(price)} right now. Try again after a few days.`;
+    transfer(c, p, u, buyer, price);
+    buyer.lineup = autoLineup(cfg, buyer);
     validLineup(cfg, u);
     book(c, `Sold ${p.name}`, price);
-    news(c, `${p.name} sold for ${money(price)}.`, 'info');
+    news(
+        c,
+        `${p.name} joins ${buyer.name}${buyer.nation !== c.nation ? ` (${NATIONS[buyer.nation].name})` : ''} for ${money(price)}.`,
+        'info',
+    );
     return null;
 };
 

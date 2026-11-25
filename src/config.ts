@@ -685,13 +685,19 @@ export const defaultConfig = {
         /** AI transfer activity (training days) and offers for the manager's players. */
         transfers: {
             /** Clubs (random, any nation) that look at the market each training day. */
-            clubsPerDay: 24,
+            clubsPerDay: 3,
             /** A signing has to lift the weakest XI slot by at least this much fit. */
-            minGain: 4,
+            minGain: 8,
+            /** Clubs bidding for the manager's players settle for less: he just has to beat their weakest starter there. */
+            bidMinGain: 2,
             /** Share of its budget a club will spend on one player. */
             spendShare: 0.7,
-            /** New players reaching the market per training day (until it's full). */
-            marketRefill: 2,
+            /** Clubs (random) that consider transfer-listing a spare player each training day. */
+            listPerDay: 20,
+            /** Days a player stays on the transfer list before the club takes him off. */
+            listDays: 40,
+            /** Most players on the transfer list at once. */
+            maxListed: 260,
             /** Chance per training day of an offer for one of the manager's players. */
             bidChance: 0.11,
             /** Offer = player value × this range. */
@@ -745,6 +751,10 @@ export const defaultConfig = {
             saleCut: 0.85,
             /** Share of the market scouted from abroad (players from every nation can be signed). */
             foreignShare: 0.55,
+            /** A free agent costs no transfer fee, just a signing-on fee (× his value). */
+            freeAgentFee: 0.3,
+            /** Unsigned free agents kept around (the least valuable drift away beyond this). */
+            maxFreeAgents: 160,
         },
         /** Player value: base × (ovr/50)^ovrExp × age & growth factors. Wages are value × wageRate per matchday. */
         value: { base: 60_000, ovrExp: 4.2, wageRate: 0.0075 },

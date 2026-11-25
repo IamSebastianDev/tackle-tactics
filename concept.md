@@ -119,8 +119,9 @@ Token rendering: a 128×64 viewport with `overflow:hidden` shows one frame; the 
 - **Level-ups are explicit.** When a player has enough XP, the manager chooses which class the level goes into: one they have, or a new outfield class (keepers stay keepers). AI clubs level in their main class.
 - **Perk choices.** At certain class levels (2, 5, 8) the player picks one of two perks, an active ability or a passive, and the other is gone for good, so players of the same class differ. AI and generated players pick at random. See `config.perkTiers`.
 - **Injured players** sit out training and recover automatically.
-- The market is refreshed at season start and topped up through the season, with players from every nation; released players wait there as free agents.
-- **AI transfers:** on training days AI clubs (any nation) sign the market player who most improves their weakest XI slot, if they can afford him, releasing a surplus player when the squad is full. AI clubs earn a yearly income by division (capped).
+- **The market is real players.** Clubs put spare players on a transfer list (for a while); released players and each season's youth crop are free agents (no fee, a signing-on fee). New players only enter the world through the youth intakes; old unsigned free agents retire.
+- **AI transfers:** on training days a few AI clubs (any nation) sign the listed player or free agent who clearly improves their weakest XI slot, if they can afford him; the seller gets the fee and restocks if it drops below the minimum, the buyer releases a spare if it's over the limit. About 120 moves a season across the world. AI clubs earn a yearly income by division (capped).
+- **Your deals:** buying a listed player pays his club; selling finds a real club that wants him (or is refused).
 - **Offers for your players:** now and then a club at your level or above, anywhere, that can pay and would start him, bids for one of your best players (a premium on his value). It arrives as a letter: sell (he joins them, the fee is yours) or keep him.
 
 ### Aging

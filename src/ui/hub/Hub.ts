@@ -21,7 +21,6 @@ import {
     type AbilityId,
 } from '../../engine/abilities';
 import {
-    askingPrice,
     autoLineup,
     buy,
     divisionOf,
@@ -49,6 +48,9 @@ import {
     choosePerk,
     cupOf,
     pyramidOf,
+    marketEntries,
+    marketEntry,
+    marketPrice,
 } from '../../meta/career';
 import { CUP_NAME, INTL_CUP_NAME, cupWinner, isCupFixture, penaltyScore } from '../../meta/cup';
 import { avgRating, moraleLabel, rivalOf, seasonLine, story } from '../../meta/story';
@@ -124,6 +126,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     const planDay = grain<number | null>(null);
     const marketFilter = grain<ClassId | 'all'>('all');
     const marketNation = grain<NationId | 'all'>('all');
+    const marketSource = grain<'all' | 'free' | 'listed'>('all');
     const slotPick = grain<number | null>(null);
     const letterOpen = grain(false);
     const ceremony = grain<SeasonCeremony | null>(null);
@@ -644,7 +647,8 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     const drawer = derived(selected, (sel) => {
         if (!sel) return html``;
         const fromMarket = sel.from === 'market';
-        const p = (fromMarket ? c.market : u().squad).find((q) => q.id === sel.id);
+        const entry = fromMarket ? marketEntry(c, sel.id) : undefined;
+        const p = fromMarket ? entry?.p : u().squad.find((q) => q.id === sel.id);
         if (!p) return html``;
         const cl = u();
         const owned = abilitiesOf(cfg, p);
@@ -663,12 +667,12 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
                   selected.set(null);
                   toast(`Signed ${p.name}!`);
                   changed();
-              })}>Sign for ${money(askingPrice(cfg, p))}</button>`
+              })}>Sign for ${money(marketPrice(cfg, entry!))}${entry!.club ? html` <small>from ${entry!.club.name}</small>` : html` <small>free agent</small>`}</button>`
             : html`<button class="warn" ${on('click', async () => {
                   if (
                       !(await actions.confirm({
                           title: `Sell ${p.name}?`,
-                          body: `They leave for ${money(salePrice(cfg, p))}.`,
+                          body: `A club that wants him pays ${money(salePrice(cfg, p))} and he joins them.`,
                           action: 'Sell player',
                       }))
                   )
@@ -862,29 +866,39 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
 
     // ------------------------------------------------------------ market
     const Market = () => {
-        const list = derived(combined([marketFilter, marketNation, version]), ([filter, from]) =>
-            c.market
-                .filter((p) => (filter === 'all' || p.cls === filter) && (from === 'all' || nationOf(p.nation).id === from))
-                .sort((a, b) => ovr(cfg, b) - ovr(cfg, a)),
+        const list = derived(combined([marketFilter, marketNation, marketSource, version]), ([filter, from, source]) =>
+            marketEntries(c)
+                .filter(
+                    (e) =>
+                        (filter === 'all' || e.p.cls === filter) &&
+                        (from === 'all' || nationOf(e.p.nation).id === from) &&
+                        (source === 'all' || (source === 'free') === !e.club),
+                )
+                .sort((a, b) => ovr(cfg, b.p) - ovr(cfg, a.p)),
         );
+        const sourceButton = (k: 'all' | 'free' | 'listed', label: string) => {
+            const active = derived(marketSource, (cur) => cur === k);
+            return html`<button ${attr({ class: derived(active, (isOn) => (isOn ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => marketSource.set(k))}>${label}</button>`;
+        };
         const nationButton = (k: NationId | 'all') => {
             const active = derived(marketNation, (cur) => cur === k);
             return html`<button title="${k === 'all' ? 'Every country' : NATIONS[k].name}" ${attr({ class: derived(active, (isOn) => `nation-filter${isOn ? ' on' : ''}`), 'aria-pressed': derived(active, String) })} ${on('click', () => marketNation.set(k))}>${k === 'all' ? 'All' : flag(k)}</button>`;
         };
         return html`<div class="card fill">
-            <h3>Transfer market <small>${read(() => String(c.market.length))} players · refreshed each season · budget ${read(() => money(u().budget))}</small></h3>
+            <h3>Transfer market <small>${read(() => `${c.market.length} free agents · ${c.listed.length} on clubs' transfer lists`)} · budget ${read(() => money(u().budget))}</small></h3>
+            <div class="seg">${sourceButton('all', 'Everyone')}${sourceButton('listed', 'Transfer list')}${sourceButton('free', 'Free agents')}</div>
             <div class="seg">${(['all', ...CLASSES] as const).map((k) => {
                 const active = derived(marketFilter, (filter) => filter === k);
                 return html`<button ${attr({ class: derived(active, (isActive) => (isActive ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => marketFilter.set(k))}>${k === 'all' ? 'All' : cfg.classes[k].label}</button>`;
             })}</div>
             <div class="seg nation-seg">${(['all', ...NATION_IDS] as const).map(nationButton)}</div>
-            <div class="scroll"><table class="tbl players"><thead><tr><th></th><th>Name</th><th>Classes</th><th>Age</th><th>OVR</th><th>Potential</th><th>Abilities</th><th>Price</th><th>Wage</th></tr></thead>
+            <div class="scroll"><table class="tbl players"><thead><tr><th></th><th>Name</th><th>Classes</th><th>Age</th><th>OVR</th><th>Potential</th><th>Abilities</th><th>At</th><th>Price</th><th>Wage</th></tr></thead>
             <tbody>${$each(list)
-                .$withKey((p) => p.id)
-                .$as((p) =>
+                .$withKey((e) => e.p.id)
+                .$as((e) =>
                     playerRow(
-                        p,
-                        html`<td ${attr({ class: read(() => (askingPrice(cfg, p) > u().budget ? 'num neg' : 'num')) })}>${read(() => money(askingPrice(cfg, p)))}</td><td class="num">${read(() => money(wage(cfg, p)))}</td>`,
+                        e.p,
+                        html`<td class="at">${e.club ? html`${crest(e.club)} <span>${e.club.name}</span>` : html`<span class="muted">Free agent</span>`}</td><td ${attr({ class: read(() => (marketPrice(cfg, e) > u().budget ? 'num neg' : 'num')) })}>${read(() => money(marketPrice(cfg, e)))}</td><td class="num">${read(() => money(wage(cfg, e.p)))}</td>`,
                         'market',
                     ),
                 )}</tbody></table></div>
