@@ -278,6 +278,19 @@ license for them.
 **Unsigned.** The builds aren't signed or notarised yet. On macOS (ad-hoc signed) players right-click the app →
 **Open** the first time; on Windows SmartScreen asks them to click **More info → Run anyway**.
 
+**Web deploy (Cloudflare).** The browser build is a static-assets Worker (`wrangler.jsonc`, serving `dist/`).
+Cloudflare Workers Builds deploys it on every push to `main`: build command `npm run build`, deploy command
+`npx wrangler deploy`. The art and songs aren't in git, so cloud builds download them from a private R2 bucket:
+
+1. Once, and again whenever the art or music changes: `npx wrangler login`, then `npm run assets:upload`. It packs
+   `public/assets` and the songs (converted to `.m4a`, since the build machine runs Linux) into
+   `game-assets.tar.gz` and uploads it to the `tackle-tactics-assets` bucket (created on first use).
+2. In the R2 dashboard, create an API token with **Object Read** on that bucket.
+3. In the Worker's build settings, add the build variables `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and
+   `R2_SECRET_ACCESS_KEY` (the last two as secrets).
+
+When the art is missing and those are set, `scripts/ensure-assets.sh` runs `scripts/fetch-assets.mjs` before the build.
+
 **Browser build.** `npm run web:build` writes `releases/<version>/Tackle-Tactics_<version>_web.zip` with `index.html`
 at the top. Upload it to itch.io as an HTML5 game ("This file will be played in the browser"), with a 1600×900
 viewport and the fullscreen button on. The build:

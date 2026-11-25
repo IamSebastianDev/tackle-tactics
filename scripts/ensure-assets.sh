@@ -11,6 +11,12 @@ if [ -d "$PACK/64" ]; then
   exec ./scripts/copy-assets.sh
 fi
 
+# cloud builds: the art and songs come from the private R2 bucket (npm run assets:upload)
+if [ -n "$R2_ACCESS_KEY_ID" ]; then
+  echo "public/assets is missing: downloading the art and music from R2…"
+  exec node scripts/fetch-assets.mjs
+fi
+
 cat >&2 <<'MSG'
 
   The game's art is missing.

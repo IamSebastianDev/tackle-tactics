@@ -14,6 +14,7 @@
         "test": "vitest run",
         "fix": "oxlint --fix && oxfmt",
         "assets": "sh scripts/copy-assets.sh",
+        "assets:upload": "sh scripts/assets-upload.sh",
         "desktop": "tauri dev",
         "desktop:build": "sh scripts/publish-desktop.sh",
         "web:build": "sh scripts/publish-web.sh",
@@ -33,6 +34,7 @@
     "devDependencies": {
         "@tauri-apps/cli": "^2.12.6",
         "@types/node": "^24.19.2",
+        "aws4fetch": "^1.0.20",
         "lefthook": "^2.2.2",
         "oxfmt": "^0.80.0",
         "oxlint": "^1.95.0",
