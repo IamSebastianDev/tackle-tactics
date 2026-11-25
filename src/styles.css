@@ -540,6 +540,47 @@ a {
 .token .tag .badges:empty {
     display: none;
 }
+/* the name over a hovered player (and the one whose card you opened) */
+.token .tok-name {
+    position: absolute;
+    left: 50%;
+    top: -70px;
+    transform: translateX(-50%);
+    padding: 2px 6px;
+    font: 600 12px/1.2 var(--body);
+    color: #fff;
+    background: #000c;
+    box-shadow: 0 0 0 1px #ffffff33;
+    white-space: nowrap;
+    pointer-events: none;
+    display: none;
+}
+.token.hovered .tok-name,
+.token.inspected .tok-name {
+    display: block;
+}
+.token.hovered,
+.token.inspected {
+    z-index: 9000 !important;
+}
+.token.inspected .ground {
+    box-shadow: 0 0 0 2px #fff;
+}
+/* the player card while it shows someone other than the active player */
+.inspect-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 2px 0 4px;
+    font: 700 11px/1 var(--display);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+.inspect-bar button {
+    padding: 0 6px;
+    font-size: 11px;
+}
 
 .ball {
     --ball: #2f8cff;
@@ -955,7 +996,8 @@ a {
     align-items: stretch;
     gap: 6px;
     padding: 2px 6px 4px;
-    width: max-content;
+    /* fixed: the dock never resizes as the hint or the abilities change */
+    width: 1040px;
     max-width: calc(100% - 40px);
     border-image-source: var(--f-glass);
     filter: drop-shadow(var(--shadow));
@@ -967,9 +1009,14 @@ a {
 }
 .hint {
     font-size: 14px;
+    line-height: 18px;
     color: #c9d1e3;
     flex: 1;
     min-width: 0;
+    height: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .steps {
     display: flex;
@@ -1077,25 +1124,15 @@ a {
 .aslot {
     position: relative;
     display: grid;
-    grid-template-columns: 30px 1fr;
-    grid-template-rows: auto auto auto;
-    column-gap: 8px;
+    grid-template-columns: 1fr;
     align-content: center;
-    width: 184px;
+    width: 172px;
     height: 58px;
-    padding: 0 8px 0 4px;
+    padding: 0 8px 0 16px;
     text-align: left;
     font-family: var(--body);
     text-transform: none;
     letter-spacing: 0;
-}
-.aslot .ic {
-    grid-row: 1 / span 3;
-    align-self: center;
-    font-size: 24px;
-    line-height: 1;
-    text-align: center;
-    color: var(--accent);
 }
 .aslot .nm {
     font-family: var(--display);
@@ -1172,7 +1209,8 @@ a {
     inset: 0;
     display: flex;
     align-items: center;
-    padding-left: 6px;
+    justify-content: flex-end;
+    padding-right: 12px;
     background: #000a;
     pointer-events: none;
 }
@@ -1189,11 +1227,6 @@ a {
     border-image-source: var(--f-chip);
     filter: none;
     cursor: help;
-}
-.aslot.wait .ic,
-.aslot.blocked .ic,
-.aslot.later .ic {
-    color: var(--dim);
 }
 .aslot.wait .st {
     color: #9fd0ff;
@@ -1217,13 +1250,32 @@ a {
 .aslot.later .st {
     color: var(--muted);
 }
-/* armed: gold, pulsing edge */
+/* armed: gold, with a thin marching border just outside the frame */
 .aslot.armed {
     border-image-source: var(--f-gold);
     color: var(--on-accent);
-    animation: armed-pulse 1s steps(2) infinite;
 }
-.aslot.armed .ic,
+.aslot.armed::after {
+    content: '';
+    position: absolute;
+    inset: -11px;
+    pointer-events: none;
+    background:
+        linear-gradient(90deg, var(--gold-hi) 50%, transparent 0) 0 0 / 8px 2px repeat-x,
+        linear-gradient(90deg, var(--gold-hi) 50%, transparent 0) 0 100% / 8px 2px repeat-x,
+        linear-gradient(0deg, var(--gold-hi) 50%, transparent 0) 0 0 / 2px 8px repeat-y,
+        linear-gradient(0deg, var(--gold-hi) 50%, transparent 0) 100% 0 / 2px 8px repeat-y;
+    animation: armed-march 0.6s steps(4) infinite;
+}
+@keyframes armed-march {
+    to {
+        background-position:
+            8px 0,
+            -8px 100%,
+            0 -8px,
+            100% 8px;
+    }
+}
 .aslot.armed .st,
 .aslot.armed .kind {
     color: var(--on-accent);
@@ -1231,11 +1283,6 @@ a {
 .aslot.armed .hk {
     background: var(--on-accent);
     color: var(--accent);
-}
-@keyframes armed-pulse {
-    50% {
-        filter: drop-shadow(0 0 0 var(--accent)) drop-shadow(0 0 6px var(--accent));
-    }
 }
 
 /* the turn buttons: same height as a slot, label over its key */
@@ -1314,34 +1361,6 @@ a {
 }
 
 /* the armed bar: what to click next, and a way out */
-.armed-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 4px 6px 4px 10px;
-    background: var(--accent);
-    color: var(--on-accent);
-    box-shadow: 0 0 0 2px var(--ink);
-}
-.armed-bar .ic {
-    font-size: 18px;
-}
-.armed-bar b {
-    font-family: var(--display);
-    font-weight: 700;
-    font-size: 15px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-}
-.armed-bar span {
-    flex: 1;
-    font-size: 14px;
-    font-weight: 600;
-}
-.armed-bar button {
-    color: var(--text);
-}
-
 .banner {
     position: absolute;
     left: 50%;

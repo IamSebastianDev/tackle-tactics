@@ -389,6 +389,9 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         };
     });
 
+    /** A teammate whose card you opened with a right-click (cleared when the turn moves on). */
+    const inspected = grain<string | null>(null);
+
     // ------------------------------------------------------------ tokens
     const restingAnim = (p: Piece) => {
         const holding = m.carrier()?.id === p.id;
@@ -410,12 +413,13 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             const at = ctl.shownPos(p);
             return `left:${cx(at.x)}px;top:${px(at.y) + C / 2}px;z-index:${Math.round(px(at.y) + C / 2) + 1};transition:left ${ms}ms linear, top ${ms}ms linear`;
         });
-        const cls = derived(ctl.tick, () => {
+        const cls = derived(combined([ctl.tick, ctl.hover, inspected]), ([, hover, seen]) => {
             const active = !m.state.over && m.active().id === p.id;
+            const hovered = !!hover && hover.x === p.pos.x && hover.y === p.pos.y;
             const carrier = m.carrier();
             const holds = carrier?.id === p.id;
             const crowd = !!carrier && !holds && cheb(p.pos, carrier.pos) <= 2;
-            return `token team${p.team}${active ? ' active' : ''}${p.staggered ? ' staggered' : ''}${!p.reactionReady ? ' spent' : ''}${holds ? ' carrier' : ''}${crowd ? ' crowd' : ''}`;
+            return `token team${p.team}${active ? ' active' : ''}${p.staggered ? ' staggered' : ''}${!p.reactionReady ? ' spent' : ''}${holds ? ' carrier' : ''}${crowd ? ' crowd' : ''}${hovered ? ' hovered' : ''}${seen === p.id ? ' inspected' : ''}`;
         });
         const sprite = derived(
             ctl.tick,
@@ -432,10 +436,10 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             const s = p.status;
             const b: string[] = [];
             if (p.yellows) b.push('▮');
-            if (s.commanded) b.push('⚑');
+            if (s.commanded) b.push('▲');
             if (s.markOn) b.push('⌖');
             if (s.pressured) b.push('⊳');
-            if (s.fouled) b.push('✋');
+            if (s.fouled) b.push('F');
             if (s.grounded || s.groundedNext) b.push('↓');
             return b.join('');
         });
@@ -444,6 +448,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             <div class="stand">
                 <div class="sprite" ${attr({ style: sprite })}></div>
                 <div class="tag" style="--kit:${kit}">${String(p.player.number)}<span class="badges">${badges}</span></div>
+                <div class="tok-name">${p.player.name}</div>
                 <div class="turn-mark"><i></i></div>
                 ${tokenStam}
             </div>
@@ -502,22 +507,28 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 const cd = cooldownLeft(p, id, m.state.round);
                 const passed = classLevel(p.player, a.cls) >= a.unlock;
                 const tip = `${a.label}: ${a.desc}${have ? '' : passed ? ' (not picked: they chose the other option at this level)' : ` (a choice at ${cfg.classes[a.cls].short} ${a.unlock}; has ${classLevel(p.player, a.cls)})`}`;
-                return html`<span class="chip ${have ? '' : 'locked'}" data-tip="${tip}">${a.icon} ${a.label}${have ? (cd ? html` <b>${String(cd)}</b>` : html``) : html` <i>${passed ? '—' : `${cfg.classes[a.cls].short}${String(a.unlock)}`}</i>`}</span>`;
+                return html`<span class="chip ${have ? '' : 'locked'}" data-tip="${tip}">${a.label}${have ? (cd ? html` <b>${String(cd)}</b>` : html``) : html` <i>${passed ? '—' : `${cfg.classes[a.cls].short}${String(a.unlock)}`}</i>`}</span>`;
             })}
-            ${passives.map((id) => html`<span class="chip passive" data-tip="${cfg.passives[id].label} (passive): ${cfg.passives[id].desc}">◆ ${cfg.passives[id].label}</span>`)}
+            ${passives.map((id) => html`<span class="chip passive" data-tip="${cfg.passives[id].label} (passive): ${cfg.passives[id].desc}">${cfg.passives[id].label}</span>`)}
         </div>`;
     };
 
     const activePiece = distinct(derived(ctl.tick, () => (m.state.over ? null : m.active())));
-    const activeCard = derived(activePiece, (p) => {
+    /** The player card follows the active player, or a teammate you right-clicked. */
+    const cardPiece = distinct(
+        derived(combined([activePiece, inspected]), ([active, id]) => (id ? (m.state.pieces.find((x) => x.id === id) ?? active) : active)),
+    );
+    const activeCard = derived(cardPiece, (p) => {
         if (!p) return html`<div class="card"></div>`;
+        const looking = p.id !== m.active().id;
         const s = p.player.stats;
         const kit = kitColor(club(p.team).kit);
         const human = ctl.isHuman(p.team);
         const sprite = derived(recolorVersion, () => spriteStyle(cfg, p.player.sprite, 'idle', 'down', p.player));
         const readiness = derived(ctl.tick, () => `Move ${movePoints(cfg, p)} · Reaction ${p.reactionReady ? 'ready' : 'spent'}`);
         const stamina = derived(ctl.tick, () => Math.round(p.stamina));
-        return html`<div class="card" style="--kit:${kit}">
+        return html`<div class="card${looking ? ' inspecting' : ''}" style="--kit:${kit}">
+            ${looking ? html`<div class="inspect-bar"><span>Inspecting</span><button class="ghost" ${on('click', () => inspected.set(null))}>Back <kbd>Esc</kbd></button></div>` : html``}
             <div class="card-head">
                 <div class="portrait"><div class="sprite still" ${attr({ style: sprite })}></div></div>
                 <div>
@@ -574,7 +585,12 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             if (mode) {
                 if (isCarrier && hover && m.state.phase === 'act' && m.kickKind(p, hover, mode as KickAbility) === 'shot')
                     return `${abilityDef(cfg, mode).label}: ${shotHint(p, hover, mode).replace(/^Shoot: /, '')}`;
-                return abilityDef(cfg, mode).short;
+                const what = MOVE_MODES.includes(mode)
+                    ? 'click a highlighted cell'
+                    : KICK_MODES.includes(mode)
+                      ? 'aim with the mouse, click to kick'
+                      : 'click a highlighted player';
+                return `${abilityDef(cfg, mode).label}: ${what}. Press it again to put it away.`;
             }
             if (m.state.phase === 'move') {
                 if (p.status.fouled) return 'You were fouled: free kick. Stay put (Space), then pass or shoot.';
@@ -626,21 +642,6 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 ? 'Pick a player'
                 : 'Instant';
     const infoFor = grain<AbilityId | null>(null);
-    /** While an ability is armed: what to click, and a way out. */
-    const armedBar = derived(combined([ctl.mode, ctl.awaitingHuman]), ([mode, awaiting]) => {
-        if (!mode || !awaiting) return html``;
-        const a = abilityDef(cfg, mode);
-        const what = MOVE_MODES.includes(mode)
-            ? 'Click a highlighted cell'
-            : KICK_MODES.includes(mode)
-              ? 'Aim with the mouse, click to kick'
-              : 'Click a highlighted player';
-        return html`<div class="armed-bar"><span class="ic">${a.icon}</span><b>${a.label}</b><span>${what}</span>
-            <button class="ghost" ${on('click', () => {
-                ctl.mode.set(null);
-                ctl.bump();
-            })}>Cancel <kbd>Esc</kbd></button></div>`;
-    });
 
     const phaseAbilities = (p: Piece) => {
         const phase = m.state.phase;
@@ -704,7 +705,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 const status = mode === id ? 'armed' : !inLane ? 'later' : cooldown > 0 ? 'wait' : reason ? 'blocked' : 'ready';
                 const label =
                     status === 'armed'
-                        ? 'Armed · click to aim'
+                        ? 'Armed'
                         : status === 'later'
                           ? phase === 'move'
                               ? 'After you move'
@@ -727,12 +728,11 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             });
             // the cost, always visible: how long it recharges after use
             const cost = a.cooldown
-                ? html`<span class="cost" title="Recharges for ${String(a.cooldown)} round${a.cooldown > 1 ? 's' : ''} after use">⟳ ${String(a.cooldown)}</span>`
-                : html`<span class="cost free" title="No cooldown: usable every turn">∞</span>`;
+                ? html`<span class="cost" title="Recharges for ${String(a.cooldown)} round${a.cooldown > 1 ? 's' : ''} after use">CD ${String(a.cooldown)}</span>`
+                : html`<span class="cost free" title="No cooldown: usable every turn">Free</span>`;
             const keyLabel = derived(state, (s) => s.key);
             return html`<button ${attr({ class: derived(state, (s) => `aslot ${s.state}`) })} ${enter} ${leave} ${on('click', () => ctl.useAbility(id))}>
                 <span class="hk" ${attr({ hidden: derived(keyLabel, (k) => !k) })}>${keyLabel}</span>
-                <span class="ic">${a.icon}</span>
                 <b class="nm">${a.label}</b>
                 <span class="kind"><span>${kindOf(id)}${derived(state, (s) => s.odds)}</span>${cost}</span>
                 <span class="st">${derived(state, (s) => s.label)}</span>
@@ -758,7 +758,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             ${$if(derived(owned, (list) => !list.length)).$then(() => html`<div class="dock-group"><span class="dock-label">Abilities</span><span class="no-abilities">None yet. They unlock as this player levels up.</span></div>`)}
             ${$if(derived(passives, (list) => list.length > 0)).$then(
                 () =>
-                    html`<div class="dock-group passives"><span class="dock-label">Always on</span><div class="passive-list">${$each(passives).$as((id) => html`<span class="passive" title="${cfg.passives[id].desc}">◆ ${cfg.passives[id].label}</span>`)}</div></div>`,
+                    html`<div class="dock-group passives"><span class="dock-label">Always on</span><div class="passive-list">${$each(passives).$as((id) => html`<span class="passive" title="${cfg.passives[id].desc}">${cfg.passives[id].label}</span>`)}</div></div>`,
             )}
             <div class="dock-group core">
                 <span class="dock-label">Turn</span>
@@ -776,18 +776,19 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         .$default(() => html`<div class="dock-row"></div>`);
 
     /** Explains the hovered or armed ability, above the dock (instead of a tiny tooltip). */
-    const abilityInfo = derived(combined([infoFor, ctl.mode, ctl.awaitingHuman, ctl.tick]), ([hovered, armed, awaiting]) => {
+    const abilityInfo = derived(combined([infoFor, ctl.mode, ctl.awaitingHuman, ctl.tick]), ([hovered, , awaiting]) => {
         if (!awaiting || m.state.over) return html``;
         const p = m.active();
         // a card can be re-rendered away under the mouse (new turn): only explain this player's abilities
         const owned = abilitiesOf(cfg, p.player);
-        const id = hovered && owned.includes(hovered) ? hovered : armed;
+        // hover only: once armed, the slot and the hint line say what to do
+        const id = hovered && owned.includes(hovered) ? hovered : null;
         if (!id) return html``;
         const a = abilityDef(cfg, id);
         const reason = m.blockReason(p, id);
         const cd = cooldownLeft(p, id, m.state.round);
         return html`<div class="ab-info">
-            <div class="ab-head"><span class="ic">${a.icon}</span><div><b>${a.label}</b><small>${laneOf(id) === 'before' ? 'Before moving' : 'After moving'} · ${kindOf(id)}${a.cooldown ? ` · recharges for ${a.cooldown} round${a.cooldown > 1 ? 's' : ''}` : ''}</small></div></div>
+            <div class="ab-head"><div><b>${a.label}</b><small>${laneOf(id) === 'before' ? 'Before moving' : 'After moving'} · ${kindOf(id)}${a.cooldown ? ` · recharges for ${a.cooldown} round${a.cooldown > 1 ? 's' : ''}` : ''}</small></div></div>
             <p>${a.desc}</p>
             <p class="how"><b>How:</b> ${a.how}</p>
             ${id === 'slide' && m.carrier() && m.carrier()!.team !== p.team ? html`<p class="odds">Chance to win the ball: <b>${String(odds(p, m.carrier()!, true))}%</b>${m.canTackle(p) ? ` (a standing tackle: ${String(odds(p, m.carrier()!))}%)` : ''}</p>` : html``}
@@ -1225,6 +1226,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             } else if (e.key === 't' || e.key === 'T') ctl.input({ t: 'act', d: { kind: 'tackle' } });
             else if (e.key === 'a' || e.key === 'A') ctl.input({ t: 'auto' });
             else if (e.key === 'Escape') {
+                if (inspected()) return inspected.set(null);
                 ctl.mode.set(null);
                 showPlaybook.set(false);
                 showBench.set(false);
@@ -1260,6 +1262,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         const unRecolor = recolorVersion.subscribe(() => ctl.bump());
         const unwatchTurn = ctl.tick.subscribe(recenterOnTurn);
         const unwatchInput = ctl.awaitingHuman.subscribe(() => infoFor.set(null));
+        const unwatchInspect = activePiece.subscribe(() => inspected.set(null));
         for (const p of m.state.pieces) prewarmPlayer(p.player.sprite, p.player, p.player.cls === 'keeper');
         const wheel = (e: WheelEvent) => {
             if (!(e.target as HTMLElement).closest('.viewport')) return;
@@ -1293,7 +1296,12 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 pan.set(clampPan(drag.px + dx / sc, drag.py + dy / sc));
             }
         };
-        const up = () => {
+        const up = (e: PointerEvent) => {
+            if (drag?.button === 2 && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) <= 6) {
+                const t = e.target as HTMLElement;
+                const at = t.dataset?.x !== undefined ? m.pieceAt({ x: Number(t.dataset.x), y: Number(t.dataset.y) }) : undefined;
+                inspected.set(at && ctl.isHuman(at.team) ? (inspected() === at.id ? null : at.id) : null);
+            }
             if (drag?.moved && drag.button === 0) swallowClick = true;
             drag = null;
             dragging.set(false);
@@ -1326,6 +1334,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             unRecolor();
             unwatchTurn();
             unwatchInput();
+            unwatchInspect();
             ctl.stop();
         };
     });
@@ -1415,8 +1424,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             ${minimap}${queue}${log}</aside>
         <footer class="hud-bottom">
             ${$render(abilityInfo)}
-            ${$render(armedBar)}
-            <div class="dock-head">${phaseStep}<div class="hint">${hint}</div></div>
+            <div class="dock-head">${phaseStep}<div class="hint" ${attr({ title: hint })}>${hint}</div></div>
             ${actions}
         </footer>
 

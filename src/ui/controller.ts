@@ -479,6 +479,28 @@ export class MatchController {
                 } else m.stageTurn(actor.id);
                 await this.playTurn();
                 if (this.stopped) return;
+                // a tackle duel owes an extra turn: play it here too, so the lesson shows what a tackle buys
+                if (m.state.bonusNext && !m.state.over) {
+                    const owed = m.piece(m.state.bonusNext);
+                    m.nextTurn();
+                    if (m.state.bonusTurn === owed.id) {
+                        this.lesson.set({
+                            i,
+                            n: lessons.length,
+                            title: 'Extra turn',
+                            text:
+                                owed.team === 0
+                                    ? `Won it! A tackle winner goes again straight away: ${owed.player.name} gets an extra turn. Carry it clear of the scrum or pass it on (no shooting on an extra turn).`
+                                    : `Missed. A failed challenge hands ${owed.player.name} a free turn to escape. Watch them get away.`,
+                            retry: null,
+                            praise: null,
+                            info: false,
+                        });
+                        this.bump();
+                        await this.playTurn();
+                        if (this.stopped) return;
+                    }
+                }
                 const r = L.done ? L.done(this.tutEvents, m, k) : true;
                 if (r === true) {
                     this.lesson.set({
@@ -1055,7 +1077,7 @@ export class MatchController {
                 case 'ability': {
                     const by = m.piece(e.by);
                     const def = abilityDef(this.cfg, e.ability as AbilityId);
-                    this.popup(by.pos, `${def.icon} ${def.label}`, 'neutral');
+                    this.popup(by.pos, def.label, 'neutral');
                     audio.play('ability');
                     if (e.ability === 'command' || e.ability === 'tempo') this.setAnim(e.by, 'clap', 700);
                     if (e.ability === 'mark' && e.target) this.popup(m.piece(e.target).pos, 'Marked', 'bad');
