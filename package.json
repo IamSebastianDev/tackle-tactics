@@ -16,6 +16,7 @@
         "assets": "sh scripts/copy-assets.sh",
         "desktop": "tauri dev",
         "desktop:build": "sh scripts/publish-desktop.sh",
+        "web:build": "sh scripts/publish-web.sh",
         "version": "node scripts/sync-version.mjs && git add src-tauri/Cargo.toml src-tauri/Cargo.lock"
     },
     "dependencies": {

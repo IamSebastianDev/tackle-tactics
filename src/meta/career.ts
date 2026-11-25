@@ -1277,6 +1277,22 @@ export const loadCareer = (): Career | null => {
 };
 export const deleteCareer = () => deleteSave();
 
+/** The save as it is stored, for a backup file (null without a career). */
+export const careerBackup = (): string | null => readSave();
+/** Replace the save with a backup file's contents. Returns why not, or null when it was taken. */
+export const restoreCareer = (raw: string): string | null => {
+    let c: Partial<Career>;
+    try {
+        c = JSON.parse(raw) as Partial<Career>;
+    } catch {
+        return "That file isn't a Tackle Tactics backup.";
+    }
+    if (!c || typeof c !== 'object' || !c.clubs || !c.userClubId) return "That file isn't a Tackle Tactics backup.";
+    if (c.version !== SAVE_VERSION) return 'That backup is from an older version of the game and can no longer be loaded.';
+    writeSave(raw);
+    return null;
+};
+
 export const userSide = (c: Career, f: Fixture): TeamSide => (f.home === c.userClubId ? 0 : 1);
 
 /** Answer the pending inbox letter with choice `idx`; returns the outcome line (also in the news). */

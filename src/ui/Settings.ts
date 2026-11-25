@@ -8,7 +8,8 @@ import { controlValue, distinct } from './value';
 import { Dialog } from './Dialog';
 import type { Difficulty, TimeoutPolicy } from '../config';
 import type { CareerSettings } from '../meta/career';
-import { saveLocation } from '../meta/storage';
+import { saveLocation, whenSaved } from '../meta/storage';
+import { careerBackup, restoreCareer } from '../meta/career';
 import { allTracks, nowPlaying, radio, STATION, trackKey } from './radio';
 import { audio } from './audio';
 import { CONTROL_MODES, FONTS, prefs, setPref, UI_SCALES, type AiSpeed } from './prefs';
@@ -280,8 +281,51 @@ export const SettingsModal = (props: SettingsProps) => {
                 </div>
                 <h4>Match defaults <small>quick matches & new careers</small></h4>
                 ${matchOptions(props.defaults.get, props.defaults.set)}
+                ${isDesktop ? html`` : Backup()}
             </div>`;
     };
+    /** Browser saves live in this browser only: a file backup to keep, and the way back. */
+    const backupNote = grain('');
+    const Backup = () => html`<h4>Career backup <small>the save lives in this browser only</small></h4>
+        <div class="set-rows">
+            <div class="set-row"><span>Export<small>Download the career as a file. Keep one in case the browser's data gets cleared.</small></span>
+                <div class="set-reset"><button class="ghost" ${attr({ disabled: !careerBackup() })} ${on('click', () => {
+                    const raw = careerBackup();
+                    if (!raw) return;
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
+                    a.download = `tackle-tactics-${(props.career?.name ?? 'career').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.json`;
+                    a.click();
+                    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+                })}>Export backup</button></div></div>
+            <div class="set-row"><span>Import<small>Load a backup file. It replaces the career in this browser.</small></span>
+                <div class="set-reset">
+                    <label class="button ghost file-pick">Import backup<input type="file" accept=".json,application/json" hidden ${on(
+                        'change',
+                        async (e) => {
+                            const input = e.target as HTMLInputElement;
+                            const file = input.files?.[0];
+                            input.value = '';
+                            if (!file) return;
+                            if (
+                                careerBackup() &&
+                                !(await props.confirm({
+                                    title: 'Replace this career?',
+                                    body: 'The career in this browser will be replaced by the backup.',
+                                    action: 'Import backup',
+                                }))
+                            )
+                                return;
+                            const why = restoreCareer(await file.text());
+                            if (why) return backupNote.set(why);
+                            backupNote.set('Loaded. Restarting…');
+                            await whenSaved();
+                            location.reload();
+                        },
+                    )} /></label>
+                    <small role="status">${backupNote}</small>
+                </div></div>
+        </div>`;
     const Career = () => {
         const c = props.career;
         if (!c) return html`<p class="muted">No career loaded.</p>`;

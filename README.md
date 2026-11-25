@@ -49,21 +49,22 @@ stops with these instructions. After updating the pack, run `npm run assets` to 
 **3. Music (optional).** Drop audio files into `assets/music/` (see [Radio](#radio)). Without them the radio simply
 doesn't appear.
 
-**4. Release builds.** `npm run build` (web, into `dist/`) or `npm run publish:desktop` (macOS + Windows, into
+**4. Release builds.** `npm run web:build` (browser, a zip for itch.io) or `npm run desktop:build` (macOS + Windows, into
 `releases/<version>/`, see [Releases](#releases)). The art and songs are bundled into the build, which the license
 allows: it's the game, not the pack.
 
 ## Development
 
-| Command                   |                                                   |
-| ------------------------- | ------------------------------------------------- |
-| `npm run dev`             | browser dev server (http://localhost:5173)        |
-| `npm run desktop`         | desktop app (Tauri) on the dev server, hot reload |
-| `npm test`                | vitest                                            |
-| `npm run fix`             | oxlint autofixes, then oxfmt formatting           |
-| `npm run build`           | web build into `dist/`                            |
-| `npm run publish:desktop` | macOS + Windows builds into `releases/<version>/` |
-| `npm run assets`          | copy the used art out of the pack again           |
+| Command                 |                                                             |
+| ----------------------- | ----------------------------------------------------------- |
+| `npm run dev`           | browser dev server (http://localhost:5173)                  |
+| `npm run desktop`       | desktop app (Tauri) on the dev server, hot reload           |
+| `npm test`              | vitest                                                      |
+| `npm run fix`           | oxlint autofixes, then oxfmt formatting                     |
+| `npm run build`         | web build into `dist/`                                      |
+| `npm run desktop:build` | macOS + Windows builds into `releases/<version>/`           |
+| `npm run web:build`     | browser build zipped for itch.io into `releases/<version>/` |
+| `npm run assets`        | copy the used art out of the pack again                     |
 
 **Checks run as a git pre-commit hook** ([lefthook](https://lefthook.dev), installed by `npm install`): typecheck,
 oxlint, oxfmt `--check` and vitest when TypeScript changes; `cargo fmt --check`, clippy `-D warnings` and the Rust
@@ -92,7 +93,8 @@ npm run desktop          # native window on the Vite dev server (port 1420), hot
 - **Saves**: the career is a JSON file in the app data folder (macOS:
   `~/Library/Application Support/com.tackletactics.game/career.json`), written atomically with a `.bak` of the
   previous save; a damaged file falls back to the backup, starting over keeps the old career as
-  `career.previous.json`. The browser build saves to localStorage. See `src/meta/storage.ts` and `src-tauri/src/lib.rs`.
+  `career.previous.json`. The browser build saves to IndexedDB, gzip-compressed (a full-world career is ~5.5 MB of JSON, ~0.7 MB stored), with
+  an export/import backup in Settings → Gameplay. See `src/meta/storage.ts` and `src-tauri/src/lib.rs`.
 - Fonts are bundled (`src/ui/fonts.css`, from `@fontsource`), so the app needs no network.
 - App icon: `src-tauri/icon-source.svg` (`npx tauri icon src-tauri/icon-source.svg` regenerates the set).
 
@@ -252,7 +254,7 @@ Bump it with npm, which also commits and tags:
 npm version patch        # 0.1.0 → 0.1.1 (or minor / major)
 ```
 
-**Desktop builds.** `npm run publish:desktop` builds both platforms from a Mac and writes them to
+**Desktop builds.** `npm run desktop:build` builds both platforms from a Mac and writes them to
 `releases/<version>/` (git-ignored), with a `SHA256SUMS.txt`:
 
 | File                                 |                                                                                |
@@ -275,3 +277,15 @@ license for them.
 
 **Unsigned.** The builds aren't signed or notarised yet. On macOS (ad-hoc signed) players right-click the app →
 **Open** the first time; on Windows SmartScreen asks them to click **More info → Run anyway**.
+
+**Browser build.** `npm run web:build` writes `releases/<version>/Tackle-Tactics_<version>_web.zip` with `index.html`
+at the top. Upload it to itch.io as an HTML5 game ("This file will be played in the browser"), with a 1600×900
+viewport and the fullscreen button on. The build:
+
+- uses relative paths (`base: './'` in `vite.config.ts`), so it runs from whatever folder a host puts it in;
+- packs the ~1,400 player sprite strips into one file, `assets/cast.pack` (`scripts/cast-pack-plugin.ts`, read by
+  `src/ui/castPack.ts`), which keeps the zip at ~80 files (itch.io allows 1,000);
+- saves to the browser's IndexedDB, per browser and site: players can export a backup in Settings → Gameplay.
+
+It needs a desktop browser with a mouse and keyboard. To try the zip locally, unzip it into a folder and serve it,
+e.g. `npx serve <folder>`.

@@ -199,7 +199,8 @@ h4 {
 }
 
 /* ------------------------------------------------------------------ buttons */
-button {
+button,
+label.button {
     font: inherit;
     font-family: var(--display);
     font-weight: 600;
@@ -217,10 +218,12 @@ button {
     filter: drop-shadow(0 2px 0 var(--ink));
     text-shadow: none;
 }
-button:hover {
+button:hover,
+label.button:hover {
     border-image-source: var(--f-btn-hover);
 }
-button:active {
+button:active,
+label.button:active {
     border-image-source: var(--f-btn-down);
     transform: translateY(2px);
     filter: none;
@@ -245,11 +248,13 @@ button.warn {
     color: #1f0406;
     text-shadow: none;
 }
-button.ghost {
+button.ghost,
+label.button.ghost {
     border-image-source: var(--f-chip);
     color: var(--muted);
 }
-button.ghost:hover {
+button.ghost:hover,
+label.button.ghost:hover {
     color: var(--text);
     border-image-source: var(--f-btn);
 }

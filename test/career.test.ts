@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { defaultConfig, withOverrides, type StatId } from '../src/config';
 import { createRng } from '../src/rng';
+import { writeSave } from '../src/meta/storage';
 import {
     autoLineup,
     buy,
@@ -10,6 +11,8 @@ import {
     fixtureClubs,
     kitsClash,
     loadCareer,
+    careerBackup,
+    restoreCareer,
     newCareer,
     playMatchday,
     resolveLetter,
@@ -228,21 +231,21 @@ describe('career', () => {
 
     it('saves round-trip intact; an older save format is not loaded (no migrations)', () => {
         const c = newCareer(cfg, 42, settings);
-        let raw = '';
-        vi.stubGlobal('localStorage', {
-            getItem: () => raw,
-            setItem: (_key: string, data: string) => {
-                raw = data;
-            },
-        });
         c.drills = ['reflexes', 'speed'];
         saveCareer(c);
-        const reloaded = loadCareer();
-        raw = JSON.stringify({ ...c, version: SAVE_VERSION - 1 });
-        const old = loadCareer();
-        vi.unstubAllGlobals();
-        expect(reloaded).toEqual(c);
-        expect(old).toBeNull();
+        expect(loadCareer()).toEqual(c);
+        writeSave(JSON.stringify({ ...c, version: SAVE_VERSION - 1 }));
+        expect(loadCareer()).toBeNull();
+    });
+
+    it('restores a backup file, refusing junk and older versions', () => {
+        const c = newCareer(cfg, 43, settings);
+        expect(restoreCareer('not json')).toMatch(/isn't a Tackle Tactics backup/);
+        expect(restoreCareer(JSON.stringify({ hello: 1 }))).toMatch(/isn't a Tackle Tactics backup/);
+        expect(restoreCareer(JSON.stringify({ ...c, version: SAVE_VERSION - 1 }))).toMatch(/older version/);
+        expect(restoreCareer(JSON.stringify(c))).toBeNull();
+        expect(loadCareer()).toEqual(c);
+        expect(careerBackup()).toBe(JSON.stringify(c));
     });
 
     it('plays three seasons headless: money flows, players grow, promotion/relegation move clubs', () => {

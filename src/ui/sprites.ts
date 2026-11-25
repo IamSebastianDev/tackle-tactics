@@ -2,6 +2,7 @@ import type { GameConfig } from '../config';
 import type { Facing, Piece, Player } from '../types';
 import { defaultConfig } from '../config';
 import { pickHairIndex } from '../world/generate';
+import { castUrl } from './castPack';
 import { recolored } from './recolor';
 
 /** Keepers and outfielders have different strips; map requests onto what exists. */
@@ -44,7 +45,7 @@ export const lookOf = (p: Player): { skin: number; hair: number } => {
 };
 
 export const stripUrl = (sprite: string, anim: string, facing: Facing, player?: Player) => {
-    const src = `assets/cast/${sprite}/${anim}_${facing}.png`;
+    const src = castUrl(`assets/cast/${sprite}/${anim}_${facing}.png`);
     if (!player) return src;
     const l = lookOf(player);
     return recolored(src, l.skin, l.hair);

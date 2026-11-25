@@ -3,13 +3,14 @@ import './ui/fonts.css';
 import './ui/frames.css';
 import './styles.css';
 import { initStorage } from './meta/storage';
+import { loadCastPack } from './ui/castPack';
 import { App } from './ui/App';
 import { installDesktopKeys } from './ui/desktop';
 import { installRadioKeys } from './ui/RadioUI';
 import { fitStage } from './ui/stage';
 
-// the desktop save file is read before the first screen renders
-await initStorage();
+// the save and the sprite pack are read before the first screen renders
+await Promise.all([initStorage(), loadCastPack()]);
 const stage = document.querySelector<HTMLElement>('#app')!;
 fitStage(stage);
 mount(App, { to: stage });

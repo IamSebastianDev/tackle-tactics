@@ -63,6 +63,7 @@ import { AI_SPEED, prefs } from './prefs';
 import { MatchController, type Controller } from './controller';
 import { kitColor, MatchView } from './MatchView';
 import { spriteStyle } from './sprites';
+import { castUrl } from './castPack';
 
 type Mode = 'ai' | 'hotseat' | 'watch';
 type Settings = {
@@ -525,7 +526,7 @@ export const App = () => {
             ${figs.map(([kit, anim, x]) => {
                 const [name, dir] = [anim.slice(0, anim.lastIndexOf('_')), anim.slice(anim.lastIndexOf('_') + 1)];
                 const frames = defaultConfig.animFrames[name] ?? 8;
-                return html`<div class="fig" style="left:${String(x)}%"><div class="sprite" style="background-image:url(assets/cast/${kit}/${name}_${dir}.png);background-size:${String(frames * 160)}px 160px;--strip:${String(frames * 160)}px;animation-duration:${String(frames * 120)}ms;animation-timing-function:steps(${String(frames)})"></div></div>`;
+                return html`<div class="fig" style="left:${String(x)}%"><div class="sprite" style="background-image:url(${castUrl(`assets/cast/${kit}/${name}_${dir}.png`)});background-size:${String(frames * 160)}px 160px;--strip:${String(frames * 160)}px;animation-duration:${String(frames * 120)}ms;animation-timing-function:steps(${String(frames)})"></div></div>`;
             })}
             <div class="vignette"></div>
         </div>`;

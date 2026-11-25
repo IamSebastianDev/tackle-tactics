@@ -1,5 +1,5 @@
 #!/bin/sh
-# npm run publish:desktop [-- --mac | --windows]
+# npm run desktop:build [-- --mac | --windows]
 #
 # Builds the desktop game and collects the results in releases/<version>/:
 #   macOS    universal (Apple silicon + Intel): .dmg and a zipped .app
@@ -19,7 +19,7 @@ case "$1" in
   --mac) WIN=0 ;;
   --windows) MAC=0 ;;
   "") ;;
-  *) echo "usage: npm run publish:desktop [-- --mac | --windows]" >&2; exit 2 ;;
+  *) echo "usage: npm run desktop:build [-- --mac | --windows]" >&2; exit 2 ;;
 esac
 
 VERSION=$(node -p "require('./package.json').version")
