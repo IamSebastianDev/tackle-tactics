@@ -5,8 +5,8 @@
 #   macOS    universal (Apple silicon + Intel): .dmg and a zipped .app
 #   Windows  x64, cross-compiled from macOS: a portable .exe, plus an NSIS installer when makensis works
 #            (Homebrew's makensis 3.13 crashes on recent macOS; the portable exe is the full game either way)
-# Builds are unsigned (ad-hoc signed on macOS): players right-click → Open the first time on a Mac,
-# and click "More info → Run anyway" on Windows SmartScreen.
+# Builds are unsigned (ad-hoc signed on macOS): on a Mac players allow the first launch under System
+# Settings → Privacy & Security → Open Anyway; on Windows SmartScreen it's "More info → Run anyway".
 #
 # The Windows build uses Tauri's cross-compilation (cargo-xwin + NSIS + LLVM). One-time setup is
 # printed below if anything is missing.

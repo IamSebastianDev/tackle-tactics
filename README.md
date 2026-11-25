@@ -294,8 +294,15 @@ brew install llvm lld   # + nsis for the installer (optional)
 The first Windows build downloads Microsoft's CRT and Windows SDK headers (cargo-xwin), which accepts Microsoft's
 license for them.
 
-**Unsigned.** The builds aren't signed or notarised yet. On macOS (ad-hoc signed) players right-click the app →
-**Open** the first time; on Windows SmartScreen asks them to click **More info → Run anyway**.
+**Unsigned.** The builds aren't signed or notarised yet (that needs an Apple Developer account for macOS and a
+code-signing certificate for Windows), so the first launch takes an extra step:
+
+- **macOS** (ad-hoc signed): open the app once and dismiss the warning, then go to **System Settings → Privacy &
+  Security**, scroll to Security and click **Open Anyway** next to Tackle Tactics, and confirm. From macOS 15 on,
+  right-click → Open no longer skips the check. If macOS says the app "is damaged", remove the download quarantine
+  instead: `xattr -dr com.apple.quarantine "/Applications/Tackle Tactics.app"`.
+- **Windows**: SmartScreen shows "Windows protected your PC": click **More info → Run anyway**.
+- **Linux**: make the AppImage executable (`chmod +x Tackle-Tactics_*.AppImage`), or install the `.deb`.
 
 **Web deploy (Cloudflare).** The browser build is a static-assets Worker (`wrangler.jsonc`, serving `dist/`).
 Cloudflare Workers Builds deploys it on every push to `main`: build command `npm run build`, deploy command
