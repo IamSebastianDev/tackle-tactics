@@ -7,7 +7,7 @@
  * Format: "TTPK", a uint32 (little-endian) index length, the JSON index
  * { "assets/cast/<kit>/<anim>_<facing>.png": [offset, length] } (offsets into the data block), then the data.
  */
-import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Plugin } from 'vite';
 
@@ -30,9 +30,10 @@ export const castPackPlugin = (): Plugin => {
             const index: Record<string, [number, number]> = {};
             const parts: Buffer[] = [];
             let offset = 0;
-            for (const d of dirs.sort())
+            // only real kit folders and strips: skip dotfiles such as macOS "._*" metadata
+            for (const d of dirs.sort().filter((d) => !d.startsWith('.') && statSync(join(castDir, d)).isDirectory()))
                 for (const f of readdirSync(join(castDir, d)).sort()) {
-                    if (!f.endsWith('.png')) continue;
+                    if (f.startsWith('.') || !f.endsWith('.png')) continue;
                     const buf = readFileSync(join(castDir, d, f));
                     index[
                         relative(outDir, join(castDir, d, f))

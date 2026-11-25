@@ -38,7 +38,9 @@ for f in assets/music/*; do
   esac
 done
 
-tar -czf "$STAGE.tgz" -C "$STAGE" public assets
+# COPYFILE_DISABLE: macOS tar would otherwise add AppleDouble "._*" files that unpack as junk on Linux
+find "$STAGE" -name .DS_Store -delete
+COPYFILE_DISABLE=1 tar -czf "$STAGE.tgz" --exclude "._*" --exclude .DS_Store -C "$STAGE" public assets
 echo "archive: $(du -h "$STAGE.tgz" | cut -f1), $(find "$STAGE" -type f | wc -l | tr -d ' ') files"
 
 if [ "$1" = "--dry-run" ]; then

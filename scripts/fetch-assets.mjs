@@ -29,6 +29,7 @@ if (!res.ok) {
 const dir = mkdtempSync(join(tmpdir(), 'tt-assets-'));
 const file = join(dir, 'game-assets.tar.gz');
 writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-execFileSync('tar', ['-xzf', file, '-C', process.cwd()], { stdio: 'inherit' });
+// skip macOS metadata ("._*") that older archives may carry
+execFileSync('tar', ['-xzf', file, '--exclude', '._*', '--exclude', '.DS_Store', '-C', process.cwd()], { stdio: 'inherit' });
 rmSync(dir, { recursive: true });
 console.log('fetch-assets: art and music unpacked from R2');

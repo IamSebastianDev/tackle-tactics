@@ -1,10 +1,16 @@
 // Cloudflare Worker serving the browser build as static assets (no server code).
 // Workers Builds runs `npm run build` and `npx wrangler deploy` on every push to main.
 {
-    "$schema": "node_modules/wrangler/config-schema.json",
-    "name": "tackle-tactics",
-    "compatibility_date": "2026-11-01",
-    "assets": {
-        "directory": "./dist",
-    },
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "tackle-tactics",
+	"compatibility_date": "2026-11-01",
+	"assets": {
+		"directory": "./dist",
+	},
+	"r2_buckets": [
+		{
+			"bucket_name": "tackle-tactics-assets",
+			"binding": "tackle_tactics_assets"
+		}
+	],
 }
