@@ -678,19 +678,21 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     };
     const TurnActions = () => {
         const owned = derived(activePiece, (p) => (p ? abilitiesOf(cfg, p.player) : []));
-        const lane = (which: Lane) => {
+        const nowLane = derived(inputPhase, (phase): Lane => (phase === 'move' ? 'before' : 'after'));
+        /** One group per turn step; its header matches the 1 · Move / 2 · Act steps above. */
+        const group = (which: Lane) => {
             const ids = derived(owned, (list) => list.filter((id) => laneOf(id) === which));
-            const cls = derived(inputPhase, (phase) => `lane ${which === (phase === 'move' ? 'before' : 'after') ? 'now' : 'later'}`);
+            const cls = derived(nowLane, (lane) => `dock-group ${lane === which ? 'now' : 'later'}`);
             return $if(derived(ids, (list) => list.length > 0)).$then(
                 () => html`<div ${attr({ class: cls })}>
-                <span class="lane-label">${which === 'before' ? 'Before moving' : 'After moving'}</span>
-                <div class="lane-cards">${$each(ids)
+                <span class="dock-label">${which === 'before' ? '1 · Move' : '2 · Act'}</span>
+                <div class="slots">${$each(ids)
                     .$withKey((id) => id)
-                    .$as(AbilityCard)}</div>
+                    .$as(AbilitySlot)}</div>
             </div>`,
             );
         };
-        const AbilityCard = (id: AbilityId) => {
+        const AbilitySlot = (id: AbilityId) => {
             const a = abilityDef(cfg, id);
             const state = derived(combined([ctl.tick, ctl.mode]), ([, mode]) => {
                 if (m.state.over) return { state: 'later', label: '', odds: '', key: '', cooldown: 0 };
@@ -702,24 +704,18 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 const status = mode === id ? 'armed' : !inLane ? 'later' : cooldown > 0 ? 'wait' : reason ? 'blocked' : 'ready';
                 const label =
                     status === 'armed'
-                        ? 'Armed'
+                        ? 'Armed · click to aim'
                         : status === 'later'
                           ? phase === 'move'
                               ? 'After you move'
                               : 'Before moving only'
                           : status === 'wait'
-                            ? `Recharging · ${cooldown}`
+                            ? `Ready in ${String(cooldown)} round${cooldown > 1 ? 's' : ''}`
                             : status === 'blocked'
-                              ? (reason ?? '')
+                              ? (reason ?? 'Not now')
                               : 'Ready';
-                const index = phaseAbilities(p).indexOf(id) + 1;
-                return {
-                    state: status,
-                    label,
-                    odds: slideOdds(p, id, status),
-                    key: status === 'ready' && index ? String(index) : '',
-                    cooldown,
-                };
+                const index = inLane ? phaseAbilities(p).indexOf(id) + 1 : 0;
+                return { state: status, label, odds: slideOdds(p, id, status), key: index ? String(index) : '', cooldown };
             });
             const enter = on('mouseenter', () => {
                 infoFor.set(id);
@@ -729,12 +725,20 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                 infoFor.set(null);
                 ctl.preview.set(null);
             });
+            // the cost, always visible: how long it recharges after use
+            const cost = a.cooldown
+                ? html`<span class="cost" title="Recharges for ${String(a.cooldown)} round${a.cooldown > 1 ? 's' : ''} after use">⟳ ${String(a.cooldown)}</span>`
+                : html`<span class="cost free" title="No cooldown: usable every turn">∞</span>`;
             const keyLabel = derived(state, (s) => s.key);
-            return html`<button ${attr({ class: derived(state, (s) => `acard ${s.state}`) })} ${enter} ${leave} ${on('click', () => ctl.useAbility(id))}>
+            return html`<button ${attr({ class: derived(state, (s) => `aslot ${s.state}`) })} ${enter} ${leave} ${on('click', () => ctl.useAbility(id))}>
+                <span class="hk" ${attr({ hidden: derived(keyLabel, (k) => !k) })}>${keyLabel}</span>
                 <span class="ic">${a.icon}</span>
-                <span class="txt"><b>${a.label}</b><span>${kindOf(id)}${derived(state, (s) => s.odds)}</span></span>
-                <span class="state">${derived(state, (s) => s.label)}${$if(derived(keyLabel, Boolean)).$then(() => html`<kbd>${keyLabel}</kbd>`)}</span>
-                ${$if(derived(state, (s) => s.state === 'wait')).$then(() => html`<span class="cd"><i ${attr({ style: derived(state, (s) => `width:${100 - (s.cooldown / Math.max(1, a.cooldown)) * 100}%`) })}></i></span>`)}
+                <b class="nm">${a.label}</b>
+                <span class="kind"><span>${kindOf(id)}${derived(state, (s) => s.odds)}</span>${cost}</span>
+                <span class="st">${derived(state, (s) => s.label)}</span>
+                ${$if(derived(state, (s) => s.state === 'wait')).$then(
+                    () => html`<span class="cd"><b>${derived(state, (s) => String(s.cooldown))}</b></span>`,
+                )}
             </button>`;
         };
         const passives = derived(activePiece, (p) => (p ? passivesOf(cfg, p.player) : []));
@@ -749,16 +753,20 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             const p = m.active();
             return m.canTackle(p) ? odds(p, carrier) : null;
         });
-        return html`<div class="dock-row">
-            <div class="cards">
-                ${lane('before')}${lane('after')}
-                ${$if(derived(owned, (list) => !list.length)).$then(() => html`<span class="no-abilities">No abilities yet. They unlock as this player levels up.</span>`)}
-                ${$if(derived(passives, (list) => list.length > 0)).$then(() => html`<div class="passives"><span class="lane-label">Always on</span>${$each(passives).$as((id) => html`<span class="passive" title="${cfg.passives[id].desc}">◆ ${cfg.passives[id].label}</span>`)}</div>`)}
-            </div>
-            <div class="core">
-                ${$if(derived(standingOdds, (chance) => chance !== null)).$then(() => html`<button class="warn" title="Chance to win the ball" ${on('click', () => ctl.input({ t: 'act', d: { kind: 'tackle' } }))}>Tackle ${derived(standingOdds, String)}% <kbd>T</kbd></button>`)}
-                <button ${on('click', () => ctl.pass())}>${hold} <kbd>Space</kbd></button>
-                <button class="ghost" ${on('click', () => ctl.input({ t: 'auto' }))}>Auto <kbd>A</kbd></button>
+        return html`<div class="dock-row turn-dock">
+            ${group('before')}${group('after')}
+            ${$if(derived(owned, (list) => !list.length)).$then(() => html`<div class="dock-group"><span class="dock-label">Abilities</span><span class="no-abilities">None yet. They unlock as this player levels up.</span></div>`)}
+            ${$if(derived(passives, (list) => list.length > 0)).$then(
+                () =>
+                    html`<div class="dock-group passives"><span class="dock-label">Always on</span><div class="passive-list">${$each(passives).$as((id) => html`<span class="passive" title="${cfg.passives[id].desc}">◆ ${cfg.passives[id].label}</span>`)}</div></div>`,
+            )}
+            <div class="dock-group core">
+                <span class="dock-label">Turn</span>
+                <div class="slots">
+                    ${$if(derived(standingOdds, (chance) => chance !== null)).$then(() => html`<button class="tbtn warn" title="Chance to win the ball" ${on('click', () => ctl.input({ t: 'act', d: { kind: 'tackle' } }))}><b>Tackle ${derived(standingOdds, String)}%</b><kbd>T</kbd></button>`)}
+                    <button class="tbtn" ${on('click', () => ctl.pass())}><b>${hold}</b><kbd>Space</kbd></button>
+                    <button class="tbtn ghost" title="Let the AI play this action" ${on('click', () => ctl.input({ t: 'auto' }))}><b>Auto</b><kbd>A</kbd></button>
+                </div>
             </div>
         </div>`;
     };

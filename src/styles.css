@@ -1003,124 +1003,145 @@ a {
     gap: 10px;
     align-items: stretch;
 }
-.dock-row .cards {
-    display: flex;
-    gap: 6px;
-    flex: 1;
-    flex-wrap: wrap;
-}
 .dock-row .core {
     display: flex;
     gap: 6px;
     align-items: center;
     flex: none;
 }
-/* ---- ability dock: lanes per turn step, one card per ability, clear states */
-.dock-row .cards {
+/* ---- ability dock: a hotbar. Groups per turn step (headers match the 1 · Move / 2 · Act steps),
+   equal slots with the hotkey and the cost always visible, the turn buttons at the same height. */
+.turn-dock {
     display: flex;
-    gap: 14px;
-    flex: 1;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    min-width: 0;
+    align-items: stretch;
+    gap: 0;
 }
-.lane {
+.dock-group {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
+    padding: 0 12px;
     min-width: 0;
 }
-.lane-label {
+.dock-group:first-child {
+    padding-left: 2px;
+}
+.dock-group + .dock-group {
+    border-left: 1px solid #ffffff1f;
+}
+.dock-group.core {
+    margin-left: auto;
+    padding-right: 2px;
+}
+.dock-label {
+    white-space: nowrap;
     font-family: var(--display);
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--muted);
+    line-height: 14px;
 }
-.lane.now .lane-label {
+.dock-group.now .dock-label {
     color: var(--accent);
 }
-.lane.later {
-    opacity: 0.55;
-}
-.lane-cards {
+.slots {
     display: flex;
     gap: 6px;
-    flex-wrap: wrap;
+    flex: 1;
+    align-items: stretch;
 }
-.passives {
+.no-abilities {
+    display: flex;
+    align-items: center;
+    height: 58px;
+    max-width: 220px;
+    color: var(--muted);
+    font-size: 13px;
+}
+.passive-list {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    align-self: flex-end;
-}
-.passives > span:not(.lane-label) {
-    display: inline;
+    justify-content: center;
+    height: 58px;
+    gap: 2px;
 }
 .passive {
     font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
-    margin-right: 10px;
-    line-height: 1.6;
 }
-.passives {
-    display: block;
-    max-width: 150px;
-}
-.no-abilities {
-    align-self: center;
-    color: var(--muted);
-    font-size: 13px;
-}
-.acard {
+
+/* one ability slot: icon | name + cost / what it asks / state */
+.aslot {
     position: relative;
     display: grid;
     grid-template-columns: 30px 1fr;
-    gap: 0 8px;
-    align-items: center;
+    grid-template-rows: auto auto auto;
+    column-gap: 8px;
+    align-content: center;
+    width: 184px;
+    height: 58px;
+    padding: 0 8px 0 4px;
     text-align: left;
-    padding: 2px 8px 3px 4px;
-    min-width: 168px;
-    max-width: 210px;
     font-family: var(--body);
     text-transform: none;
     letter-spacing: 0;
-    font-size: 13px;
 }
-.acard .ic {
-    grid-row: 1 / span 2;
-    font-size: 22px;
+.aslot .ic {
+    grid-row: 1 / span 3;
+    align-self: center;
+    font-size: 24px;
     line-height: 1;
     text-align: center;
     color: var(--accent);
 }
-.acard .txt {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-.acard .txt b {
+.aslot .nm {
     font-family: var(--display);
     font-weight: 700;
     font-size: 14px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    line-height: 1.1;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
-.acard .txt span {
-    font-size: 11px;
-    color: var(--muted);
+/* the cost: rounds of recharge, in a chip */
+.aslot .cost {
+    margin-left: auto;
+    flex: none;
+    padding: 0 4px;
+    font: 700 11px/14px var(--display);
+    letter-spacing: 0.02em;
+    color: #9fd0ff;
+    background: #0b1d33;
+    box-shadow: inset 0 0 0 1px #3d6a99;
 }
-.acard .state {
-    grid-column: 2;
+.aslot .cost.free {
+    color: var(--good);
+    background: #0d2a1b;
+    box-shadow: inset 0 0 0 1px #2f7a52;
+}
+.aslot .kind {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: 10px;
+    font-size: 11px;
+    line-height: 14px;
+    color: var(--muted);
+    min-width: 0;
+}
+.aslot .kind > span:first-child {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+.aslot .st {
+    font: 600 10px/13px var(--display);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--good);
@@ -1128,64 +1149,112 @@ a {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.acard .state kbd {
-    margin-left: auto;
-}
-.acard .cd {
+/* hotkey badge, top-left corner over the frame */
+.aslot .hk {
     position: absolute;
-    left: 6px;
-    right: 6px;
-    bottom: -4px;
-    height: 3px;
-    background: #0008;
+    top: -7px;
+    left: -5px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    font: 700 11px/16px var(--display);
+    text-align: center;
+    color: var(--on-accent);
+    background: var(--accent);
+    box-shadow: 0 2px 0 #0008;
 }
-.acard .cd i {
-    display: block;
-    height: 100%;
-    background: var(--muted);
+.aslot .hk[hidden] {
+    display: none;
 }
-/* ready: the normal button; the rest step back */
-.acard.wait,
-.acard.blocked,
-.acard.later {
+/* recharging: the slot darkens and shows the rounds left, big */
+.aslot .cd {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding-left: 6px;
+    background: #000a;
+    pointer-events: none;
+}
+.aslot .cd b {
+    width: 26px;
+    text-align: center;
+    font: 700 22px/1 var(--display);
+    color: #9fd0ff;
+}
+/* states: ready is the normal frame; the rest step back */
+.aslot.wait,
+.aslot.blocked,
+.aslot.later {
     border-image-source: var(--f-chip);
     filter: none;
     cursor: help;
 }
-.acard.wait .ic,
-.acard.blocked .ic,
-.acard.later .ic {
+.aslot.wait .ic,
+.aslot.blocked .ic,
+.aslot.later .ic {
     color: var(--dim);
 }
-.acard.wait .state {
-    color: var(--muted);
+.aslot.wait .st {
+    color: #9fd0ff;
+    position: relative;
 }
-.acard.blocked .state {
+.aslot.blocked .st {
     color: #e59ac4;
     text-transform: none;
     letter-spacing: 0;
-    font-family: var(--body);
-    font-size: 11px;
-    font-weight: 500;
+    font: 500 11px/13px var(--body);
 }
-.acard.later .state {
-    color: var(--dim);
+.aslot.blocked .hk {
+    background: var(--dim);
+}
+.aslot.wait .hk {
+    display: none;
+}
+.aslot.later {
+    opacity: 0.5;
+}
+.aslot.later .st {
+    color: var(--muted);
 }
 /* armed: gold, pulsing edge */
-.acard.armed {
+.aslot.armed {
     border-image-source: var(--f-gold);
     color: var(--on-accent);
     animation: armed-pulse 1s steps(2) infinite;
 }
-.acard.armed .ic,
-.acard.armed .state,
-.acard.armed .txt span {
+.aslot.armed .ic,
+.aslot.armed .st,
+.aslot.armed .kind {
     color: var(--on-accent);
+}
+.aslot.armed .hk {
+    background: var(--on-accent);
+    color: var(--accent);
 }
 @keyframes armed-pulse {
     50% {
         filter: drop-shadow(0 0 0 var(--accent)) drop-shadow(0 0 6px var(--accent));
     }
+}
+
+/* the turn buttons: same height as a slot, label over its key */
+.tbtn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 58px;
+    min-width: 84px;
+    padding: 0 12px;
+}
+.tbtn b {
+    font-weight: inherit;
+    white-space: nowrap;
+}
+.tbtn kbd {
+    margin: 0;
 }
 
 /* the explanation panel above the dock */
