@@ -1,6 +1,6 @@
 [package]
 name = "tackle-tactics"
-version = "0.1.0"
+version = "0.1.1"
 description = "Tackle Tactics: turn-based football tactics"
 authors = []
 license = ""
