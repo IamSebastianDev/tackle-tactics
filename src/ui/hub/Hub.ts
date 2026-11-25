@@ -299,8 +299,52 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
         if (cl.squad.length < cfg.career.squadMin + 1)
             items.push(html`<li class="bad">Thin squad (${String(cl.squad.length)}). Check the market.</li>`);
         if (!items.length) items.push(html`<li class="good">All good. The squad is fit.</li>`);
-        const morale = story(c).morale;
-        return html`<div class="card"><h3>Squad status <small title="Team morale ${String(morale)}/100">${moraleLabel(morale)} morale</small></h3><ul class="alerts">${items}</ul></div>`;
+        return html`<div class="card"><h3>Squad status</h3><ul class="alerts">${items}</ul></div>`;
+    };
+
+    /** The dressing room: a morale meter, what it does on the pitch, and what moved it. */
+    const moraleCard = () => {
+        const s = story(c);
+        const m = s.morale;
+        const tone = m >= 70 ? 'hi' : m >= 55 ? 'ok' : m >= 40 ? 'meh' : 'lo';
+        const edge = Math.round(((m - 60) / 400) * 100);
+        const lit = Math.round(m / 10);
+        const cells = Array.from(
+            { length: 10 },
+            (_, i) => html`<i class="${i < lit ? `on m-${i < 2 ? 'lo' : i < 4 ? 'meh' : i < 6 ? 'ok' : 'hi'}` : ''}"></i>`,
+        );
+        const div = divisionOf(c, u().id);
+        const form = div.fixtures
+            .filter((x) => x.result && (x.home === u().id || x.away === u().id))
+            .slice(-5)
+            .map((x) => {
+                const [gh, ga] = x.result!;
+                const [f, ag] = x.home === u().id ? [gh, ga] : [ga, gh];
+                return f > ag ? 'W' : f === ag ? 'D' : 'L';
+            });
+        const run =
+            s.streak >= 2
+                ? `${String(s.streak)} wins in a row`
+                : (s.lossRun ?? 0) >= 2
+                  ? `${String(s.lossRun)} defeats in a row`
+                  : s.streak <= -2
+                    ? `${String(-s.streak)} without a win`
+                    : '';
+        const drift = m > 62 ? 'Cools off on training days.' : m < 58 ? 'Recovers a little on training days.' : 'Steady.';
+        return html`<div class="card morale m-${tone}">
+            <h3>Dressing room</h3>
+            <div class="morale-top">
+                <div class="morale-mood"><b>${moraleLabel(m)}</b><small>${String(m)}/100</small></div>
+                <div class="morale-edge" title="Morale shifts shot accuracy, tackles and interceptions in every match">
+                    <b>${edge > 0 ? `+${String(edge)}` : String(edge)}%</b><small>match edge</small>
+                </div>
+            </div>
+            <div class="morale-meter" title="Morale ${String(m)}/100">${cells}<span class="mid"></span></div>
+            <div class="morale-foot">
+                <span>Form <b class="form">${form.length ? form.map((r) => html`<i class="r${r}">${r}</i>`) : '–'}</b></span>
+                <span class="muted">${run ? `${run}. ` : ''}${drift}</span>
+            </div>
+        </div>`;
     };
 
     const NewsFeed = () => html`<div class="card news fill"><h3>News</h3><ul class="scroll">
@@ -322,7 +366,7 @@ export const Hub = (cfg: GameConfig, c: Career, actions: HubActions, modal: Writ
     };
 
     const Overview = () => html`<div class="grid-2">
-        <div class="col">${modelRegion(nextUp)}${modelRegion(questsCard)}${modelRegion(alerts)}${NewsFeed()}</div>
+        <div class="col">${modelRegion(nextUp)}${modelRegion(moraleCard)}${modelRegion(questsCard)}${modelRegion(alerts)}${NewsFeed()}</div>
         <div class="col">${modelRegion(miniTable)}${modelRegion(xiCard)}${modelRegion(historyCard)}</div>
     </div>`;
 
