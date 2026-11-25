@@ -126,7 +126,7 @@ export const SettingsModal = (props: SettingsProps) => {
     void saveLocation()
         .then((p) => savePath.set(p))
         .catch(() => savePath.set('Unknown'));
-    type Tab = 'display' | 'sound' | 'gameplay' | 'career';
+    type Tab = 'display' | 'sound' | 'gameplay' | 'career' | 'about';
     const tab = grain<Tab>('display');
     const pref = <K extends keyof ReturnType<typeof prefs>>(key: K) => distinct(derived(prefs, (p) => p[key]));
     /** How many coach tips have been seen (match and hub), and the confirmation after a reset. */
@@ -313,8 +313,26 @@ export const SettingsModal = (props: SettingsProps) => {
             }
         </div>`;
     };
+    const About = () => html`<div class="about">
+        <h4>A vibe-coded game</h4>
+        <p>Tackle Tactics is a hobby project, built by directing AI coding assistants (mostly Claude) rather than writing every
+        line by hand. The design, the decisions and the playtesting are human; much of the code is not. Expect rough edges,
+        odd balance and the occasional bug, and please report what you find.</p>
+        <h4>Credits</h4>
+        <dl class="credits-list">
+            <dt>Design & direction</dt><dd>Sebastian Heinz</dd>
+            <dt>Code</dt><dd>Written with AI coding assistants (Claude Code)</dd>
+            <dt>Players, pitch & stadium art</dt><dd><i>Soccer Match – Top Down Football Tileset & Players</i> by bubbabba (bubbabba.itch.io)</dd>
+            <dt>Additional art</dt><dd><i>Goals in Pixels</i></dd>
+            <dt>Radio</dt><dd>Each song is credited to its artist in the player</dd>
+            <dt>Fonts</dt><dd>Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323 (SIL Open Font License, via Fontsource)</dd>
+            <dt>Built with</dt><dd>Nørd & Grains, TypeScript, Vite, Tauri</dd>
+        </dl>
+        <p class="muted">Clubs, players, nations and leagues are invented. Any resemblance to real ones is a nod, not a claim.</p>
+    </div>`;
     const tabs: Tab[] = ['display', 'sound', 'gameplay'];
     if (props.career) tabs.push('career');
+    tabs.push('about');
     return Dialog({
         label: 'Settings',
         className: 'modal settings-modal',
@@ -325,7 +343,7 @@ export const SettingsModal = (props: SettingsProps) => {
                 const active = derived(tab, (current) => current === id);
                 return html`<button ${attr({ class: derived(active, (selected) => (selected ? 'on' : '')), 'aria-pressed': derived(active, String) })} ${on('click', () => tab.set(id))}>${id[0]!.toUpperCase() + id.slice(1)}</button>`;
             })}</div>
-            <div class="modal-scroll set-body">${$switch(tab).$case('display', Display).$case('sound', Sound).$case('gameplay', Gameplay).$default(Career)}</div>
+            <div class="modal-scroll set-body">${$switch(tab).$case('display', Display).$case('sound', Sound).$case('gameplay', Gameplay).$case('about', About).$default(Career)}</div>
             <p class="set-version" title="Include this when you report a bug">Tackle Tactics v${__APP_VERSION__}${__APP_COMMIT__ ? html` <span>· build ${__APP_COMMIT__}</span>` : html``}</p>
         </div>`,
     });
