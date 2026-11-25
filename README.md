@@ -294,8 +294,7 @@ brew install llvm lld   # + nsis for the installer (optional)
 The first Windows build downloads Microsoft's CRT and Windows SDK headers (cargo-xwin), which accepts Microsoft's
 license for them.
 
-**Unsigned.** The builds aren't signed or notarised yet (that needs an Apple Developer account for macOS and a
-code-signing certificate for Windows), so the first launch takes an extra step:
+**Unsigned.** The builds aren't signed or notarised, so the first launch takes an extra step:
 
 - **macOS** (ad-hoc signed): open the app once and dismiss the warning, then go to **System Settings → Privacy &
   Security**, scroll to Security and click **Open Anyway** next to Tackle Tactics, and confirm. From macOS 15 on,
