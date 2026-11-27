@@ -1,6 +1,6 @@
 {
     "name": "tackle-tactics",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "private": true,
     "description": "Turn-based football tactics: a positioning game in a football kit, with a career mode. Web + Tauri desktop.",
     "license": "MIT",
