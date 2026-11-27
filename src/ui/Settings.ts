@@ -420,14 +420,20 @@ export const SettingsModal = (props: SettingsProps) => {
             <dt>Design & direction</dt><dd>Sebastian Heinz</dd>
             <dt>Code</dt><dd>Written with Claude Opus 5.5 (Claude Code) and GPT 6.2 Sol</dd>
             <dt>Players, pitch & stadium art</dt><dd><i>Soccer Match – Top Down Football Tileset & Players</i> by ${link('https://bubbabba.itch.io', 'bubbabba')}</dd>
-            <dt>Radio</dt><dd>Songs made with ${link('https://suno.com', 'Suno')}</dd>
+            <dt>Radio</dt><dd>
+                ${link('https://3xblast.itch.io/3xblastfreemusic', 'Free Music Pack')} and
+                ${link('https://opengameart.org/content/7-pop-punk-chiptune-tracks', '7 Pop-Punk Chiptune tracks')}
+                by 3xBlast (${link('https://creativecommons.org/publicdomain/zero/1.0/', 'CC0 1.0')}).
+                DonutShoes contributed saxophone and additional composition to
+                ${link('https://3xblast.bandcamp.com/album/babe-you-look-poggers-tonight', '“Now This Is A Waterpark!”')}.
+            </dd>
             <dt>Fonts</dt><dd>Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323, Noto Sans Symbols (SIL Open Font License, via ${link('https://fontsource.org', 'Fontsource')})</dd>
             <dt>Source</dt><dd>${link('https://github.com/IamSebastianDev/tackle-tactics', 'github.com/IamSebastianDev/tackle-tactics')}</dd>
             <dt>Built with</dt><dd>${link('https://www.npmjs.com/package/@grainular/nord', 'Nørd & Grains')}, TypeScript, Vite, ${link('https://tauri.app', 'Tauri')}</dd>
         </dl>
         <p class="muted">Clubs, players, nations and leagues are invented. Any resemblance to real ones is a nod, not a claim.</p>
         <h4>Licenses <small>the game's code is MIT</small></h4>
-        <p>Open-source software and fonts are part of the game too. Their licenses:</p>
+        <p>See the license notices for the bundled music, software and fonts.</p>
         ${$if(derived(notices, Boolean))
             .$then(() => html`<pre class="notices">${notices}</pre>`)
             .$else(

@@ -1,4 +1,5 @@
 // THIRD-PARTY-NOTICES.txt: the licenses of everything bundled into a build that isn't ours.
+//   - the radio's soundtrack packs;
 //   - the JavaScript packages that ship in the bundle (package.json "dependencies", recursively),
 //     fonts included (Open Font License: the license text must travel with the fonts);
 //   - the Rust crates of the desktop app, when a cargo-about report is given (TT_RUST_NOTICES; the
@@ -46,10 +47,18 @@ export const buildNotices = (rustFile = process.env.TT_RUST_NOTICES) => {
     return [
         'Tackle Tactics: third-party notices',
         '',
-        "The game's own code is MIT-licensed (see LICENSE in the source repository). This file lists the",
-        'licenses of the open-source software and fonts bundled with it. The art (by bubbabba,',
-        "https://bubbabba.itch.io) and the radio's songs are used under their own licenses and are not",
-        'covered by any license below.',
+        "The game's code is MIT-licensed (see LICENSE in the source repository).",
+        "The art is used under bubbabba's asset pack license (https://bubbabba.itch.io).",
+        '',
+        '================================================================================',
+        'Radio soundtrack',
+        '================================================================================',
+        '',
+        'Free Music Pack by 3xBlast: https://3xblast.itch.io/3xblastfreemusic',
+        '7 Pop-Punk Chiptune tracks by 3xBlast: https://opengameart.org/content/7-pop-punk-chiptune-tracks',
+        'Both packs: CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)',
+        'DonutShoes contributed saxophone and additional composition to “Now This Is A Waterpark!”.',
+        'Track credits: https://3xblast.bandcamp.com/album/babe-you-look-poggers-tonight',
         '',
         '================================================================================',
         'JavaScript packages and fonts',

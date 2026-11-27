@@ -46,8 +46,8 @@ npm run desktop          # or the desktop app (Tauri)
 uses out of the pack (`scripts/copy-assets.sh`, about 6 MB of the pack's 50+), and if the pack isn't there either it
 stops with these instructions. After updating the pack, run `npm run assets` to copy it again.
 
-**3. Music (optional).** Drop audio files into `assets/music/` (see [Radio](#radio)). Without them the radio simply
-doesn't appear.
+**3. Music (optional).** Drop audio files into `assets/music/` (see [Radio](#radio)). The release soundtrack uses
+the two 3xBlast packs listed in [Credits](#credits). Without audio files the radio stays hidden.
 
 **4. Release builds.** `npm run web:build` (browser, a zip for itch.io) or `npm run desktop:build` (macOS + Windows, into
 `releases/<version>/`, see [Releases](#releases)). The art and songs are bundled into the build, which the license
@@ -208,9 +208,9 @@ TT_VARIANTS='{"base":{},"bolder":{"ai":{"xtLinear":0.12}}}' npx vitest run test/
 
 ## License
 
-The code is [MIT](LICENSE). The art and music are not part of this repository and are not covered by it: the release
-builds bundle bubbabba's art, the radio's songs and the fonts under their own licenses (see Credits below), so they
-can't be pulled out of a build and reused under the MIT terms.
+The code is [MIT](LICENSE). Release builds bundle bubbabba's art under the asset pack license, the radio's songs
+under [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/), and the fonts under the SIL Open Font
+License. See Credits below for the asset sources.
 
 ## Credits
 
@@ -219,7 +219,7 @@ can't be pulled out of a build and reused under the MIT terms.
 | Design & direction           | Sebastian Heinz                                                                                                                                |
 | Code                         | Written with Claude Opus 5.5 (Claude Code) and GPT 6.2 Sol                                                                                     |
 | Players, pitch & stadium art | _Soccer Match – Top Down Football Tileset & Players [32x32]_ by [bubbabba](https://bubbabba.itch.io) (licensed, not in repo)                   |
-| Radio                        | Songs made with [Suno](https://suno.com) (not in repo)                                                                                         |
+| Radio                        | [3xBlast](https://3xblast.itch.io/) (CC0 1.0, see soundtrack credits below)                                                                    |
 | Fonts                        | Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323, Noto Sans Symbols (SIL Open Font License, via [Fontsource](https://fontsource.org)) |
 | Source                       | [github.com/IamSebastianDev/tackle-tactics](https://github.com/IamSebastianDev/tackle-tactics)                                                 |
 | Built with                   | [Nørd & Grains](https://www.npmjs.com/package/@grainular/nord), TypeScript, Vite, [Tauri](https://tauri.app)                                   |
@@ -229,6 +229,11 @@ disclaimer and credits are in the game under Settings → About.
 
 **About the art.** Players, keepers, goals, ball and grass come from the bubbabba pack's 64px set (per-kit,
 4-direction strips).
+
+**Soundtrack.** 3xBlast released the [Free Music Pack](https://3xblast.itch.io/3xblastfreemusic) and
+[7 Pop-Punk Chiptune tracks](https://opengameart.org/content/7-pop-punk-chiptune-tracks) under
+[CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/). DonutShoes contributed saxophone and
+additional composition to [“Now This Is A Waterpark!”](https://3xblast.bandcamp.com/album/babe-you-look-poggers-tonight).
 
 ## Match controls
 
@@ -273,18 +278,18 @@ It uploads the current art and songs to R2 (`assets:upload`), bumps the version 
 `v…` tag), and pushes both. The tag starts `.github/workflows/release.yml`, which builds on GitHub's runners and
 publishes a GitHub Release once every build succeeded:
 
-| File                                      |                                                                     |
-| ----------------------------------------- | ------------------------------------------------------------------- |
-| `…_macos-universal.dmg` / `.app.zip`      | Apple silicon + Intel                                               |
-| `…_windows-x64-setup.exe`                 | installer (built natively, so NSIS works)                           |
-| `…_windows-x64-portable.exe`              | runs without installing (needs WebView2, in Windows 10/11)          |
-| `…_linux-x86_64.AppImage` / `…_amd64.deb` | Linux (built on Ubuntu 22.04)                                       |
-| `…_web.zip`                               | the browser build, for itch.io                                      |
-| `SHA256SUMS.txt`                          | checksums of all of the above                                       |
-| `THIRD-PARTY-NOTICES.txt`                 | licenses of the bundled open-source packages, fonts and Rust crates |
+| File                                      |                                                                |
+| ----------------------------------------- | -------------------------------------------------------------- |
+| `…_macos-universal.dmg` / `.app.zip`      | Apple silicon + Intel                                          |
+| `…_windows-x64-setup.exe`                 | installer (built natively, so NSIS works)                      |
+| `…_windows-x64-portable.exe`              | runs without installing (needs WebView2, in Windows 10/11)     |
+| `…_linux-x86_64.AppImage` / `…_amd64.deb` | Linux (built on Ubuntu 22.04)                                  |
+| `…_web.zip`                               | the browser build, for itch.io                                 |
+| `SHA256SUMS.txt`                          | checksums of all of the above                                  |
+| `THIRD-PARTY-NOTICES.txt`                 | soundtrack credits and licenses for bundled software and fonts |
 
-Every build also carries `THIRD-PARTY-NOTICES.txt` (shown in Settings → About): the license texts of the bundled
-JavaScript packages and fonts, plus, in desktop builds, every Rust crate (made with
+Every build also carries `THIRD-PARTY-NOTICES.txt` (shown in Settings → About). It includes the soundtrack credits,
+the license texts of the bundled JavaScript packages and fonts, and, in desktop builds, every Rust crate (made with
 [cargo-about](https://github.com/EmbarkStudios/cargo-about) from `src-tauri/about.toml`, which accepts permissive
 licenses only). `scripts/notices.mjs` writes it; `npm run desktop:build` adds the crates when cargo-about is installed.
 
