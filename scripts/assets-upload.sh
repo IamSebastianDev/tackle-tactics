@@ -14,7 +14,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 BUCKET="${R2_BUCKET:-tackle-tactics-assets}"
-KEY="game-assets.tar.gz"
+KEY="game-assets-goals-in-pixels.tar.gz"
 
 sh scripts/ensure-assets.sh
 

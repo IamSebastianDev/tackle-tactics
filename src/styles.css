@@ -330,7 +330,7 @@ a {
     overflow: hidden;
     flex: none;
     vertical-align: middle;
-    background: url(/assets/tiles/grass_001.png) 0 0 / 24px 24px;
+    background: url(/assets/tiles/turf.png) 0 0 / 24px 24px;
     box-shadow:
         0 0 0 2px var(--ink),
         inset 0 0 0 2px #0006;
@@ -372,18 +372,16 @@ a {
     top: 0;
 }
 .pitch {
-    background: url(/assets/tiles/grass_015.png) 0 0 / 48px 48px;
+    background:
+        linear-gradient(#0b190b60, #0b190b60),
+        url(/assets/tiles/turf.png) 0 0 / 64px 64px;
     box-shadow: 0 0 0 2000px #0d1f12;
 }
 .pitch .stripe {
     position: absolute;
-    background-size: 48px 48px;
 }
-.pitch .stripe.light {
-    background-image: url(/assets/tiles/grass_001.png);
-}
-.pitch .stripe.dark {
-    background-image: url(/assets/tiles/grass_006.png);
+.pitch .stripe.turf {
+    background: url(/assets/tiles/turf.png) 0 0 / 64px 64px;
 }
 .pitch .lines {
     position: absolute;
@@ -424,38 +422,38 @@ a {
     position: absolute;
 }
 .ov-move {
-    background: color-mix(in srgb, var(--move) 38%, transparent);
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--move) 55%, transparent);
+    background: color-mix(in srgb, var(--move) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--move) 34%, transparent);
 }
 .ov-path {
-    background: color-mix(in srgb, var(--move) 85%, white 10%);
-    box-shadow: inset 0 0 0 2px #fff6;
+    background: color-mix(in srgb, var(--move) 46%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--move) 82%, transparent);
 }
 .ov-danger {
-    background: color-mix(in srgb, var(--danger) 55%, transparent);
-    box-shadow: inset 0 0 0 2px var(--danger);
+    background: color-mix(in srgb, var(--danger) 22%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 66%, transparent);
 }
 .ov-scatter {
-    background: color-mix(in srgb, var(--scatter) 45%, transparent);
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--scatter) 60%, transparent);
+    background: color-mix(in srgb, var(--scatter) 17%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--scatter) 35%, transparent);
 }
 .ov-target {
-    background: var(--scatter);
-    box-shadow: inset 0 0 0 3px #fff;
+    background: color-mix(in srgb, var(--scatter) 47%, transparent);
+    box-shadow: inset 0 0 0 2px #fff;
 }
 .ov-tackle {
-    box-shadow: inset 0 0 0 4px var(--danger);
-    background: color-mix(in srgb, var(--danger) 30%, transparent);
-    animation: blink 0.6s steps(2) infinite;
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
+    box-shadow: inset 0 0 0 2px var(--danger);
+    animation: none;
 }
 .ov-active {
-    box-shadow: inset 0 0 0 3px var(--active);
-    background: color-mix(in srgb, var(--active) 28%, transparent);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--active) 44%, transparent);
 }
 .ov-pick {
-    box-shadow: inset 0 0 0 4px var(--active);
-    background: color-mix(in srgb, var(--active) 35%, transparent);
-    animation: blink 0.7s steps(2) infinite;
+    background: color-mix(in srgb, var(--active) 16%, transparent);
+    box-shadow: inset 0 0 0 2px var(--active);
+    animation: none;
 }
 .ov-run {
     box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--move) 90%, transparent);
@@ -475,7 +473,8 @@ a {
     height: 14px;
     margin: -7px 0 0 -15px;
     border-radius: 50%;
-    border: 2px dashed color-mix(in srgb, var(--danger) 85%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--danger) 85%, transparent);
+    opacity: 0.62;
 }
 
 .tokens {
@@ -501,15 +500,26 @@ a {
 }
 .token .ground-wrap {
     position: absolute;
-    left: calc(-13 * var(--ap));
-    top: calc(-5 * var(--ap));
+    left: -16px;
+    top: -6px;
+    width: 32px;
     line-height: 0;
 }
 .token .ground-wrap svg {
     display: block;
+    width: 100%;
+    height: auto;
 }
 .ground .g-shadow {
-    fill: #0007;
+    fill: #0004;
+}
+.ground .g-inner,
+.ground .g-outer,
+.ground .g-ink {
+    fill-opacity: 0.54;
+}
+.token:is(.active, .carrier) .ground .g-inner {
+    fill-opacity: 0.87;
 }
 .ground .g-inner {
     fill: var(--kit);
@@ -546,64 +556,32 @@ a {
 .token.inspected .ground .g-ink {
     fill: #fff;
 }
-/* the shirt number: a flat team-colour plate in the pixel font, a crisp 1-pixel outline and a
-   2-pixel tail pointing at the player */
-.token .tag {
+.tok-status {
     position: absolute;
-    left: calc(6 * var(--ap));
-    top: calc(-30 * var(--ap));
-    min-width: calc(7 * var(--ap));
-    padding: calc(1 * var(--ap)) calc(1.5 * var(--ap)) calc(0.5 * var(--ap));
-    font: 13px/1 var(--pixel);
-    text-align: center;
-    background: var(--kit);
-    color: #fff;
-    text-shadow: 0 var(--ap) 0 #0009;
-    box-shadow:
-        0 0 0 var(--ap) var(--ink),
-        0 calc(2 * var(--ap)) 0 var(--ap) #0005;
+    left: 0;
+    top: -40px;
+    transform: translateX(-50%);
+    padding: 1px 3px;
+    color: #fff3bb;
+    background: #0b160ee0;
+    font: 10px/1 var(--pixel);
+    letter-spacing: 1px;
     white-space: nowrap;
-}
-.token .tag::before {
-    content: '';
-    position: absolute;
-    left: calc(-1 * var(--ap));
-    bottom: calc(-3 * var(--ap));
-    width: calc(2 * var(--ap));
-    height: calc(2 * var(--ap));
-    background: var(--ink);
-}
-.token.team1 .tag {
-    left: auto;
-    right: calc(6 * var(--ap));
-}
-.token.team1 .tag::before {
-    left: auto;
-    right: calc(-1 * var(--ap));
-}
-.token.active .tag {
-    background: var(--active);
-    color: #111;
-    text-shadow: 0 var(--ap) 0 #fff6;
-}
-.token .tag .badges {
-    margin-left: calc(1 * var(--ap));
-    letter-spacing: 0;
-}
-.token .tag .badges:empty {
-    display: none;
 }
 /* the turn arrow bobs by whole art pixels */
 .turn-mark {
     display: none;
     position: absolute;
-    left: calc(-5.5 * var(--ap));
-    top: calc(-44 * var(--ap));
+    left: -6.5px;
+    top: -54px;
+    width: 13px;
     line-height: 0;
     animation: bob 0.8s steps(1) infinite;
 }
 .turn-mark svg {
     display: block;
+    width: 100%;
+    height: auto;
 }
 .token.active .turn-mark {
     display: block;
@@ -622,31 +600,8 @@ a {
         transform: translateY(calc(-2 * var(--ap)));
     }
 }
-/* the carrier's plate: blue outline and a pixel ball */
-.token.carrier .tag {
-    box-shadow:
-        0 0 0 var(--ap) #2f8cff,
-        0 calc(2 * var(--ap)) 0 var(--ap) #0005;
-}
-.token.carrier .tag::after {
-    content: '';
-    display: inline-block;
-    width: calc(3 * var(--ap));
-    height: calc(3 * var(--ap));
-    margin-left: calc(1 * var(--ap));
-    vertical-align: 0;
-    background: #fff;
-    box-shadow: 0 0 0 calc(0.5 * var(--ap)) #2f8cff;
-}
 .token.staggered .sprite {
     filter: saturate(0.45) brightness(0.8);
-}
-.token .tag .badges {
-    margin-left: 2px;
-    letter-spacing: 1px;
-}
-.token .tag .badges:empty {
-    display: none;
 }
 /* the name over a hovered player (and the one whose card you opened) */
 .token .tok-name {
@@ -687,43 +642,48 @@ a {
     font-size: 11px;
 }
 
-.ball {
-    --ball: #2f8cff;
+.ball-img {
+    position: absolute;
+    --ball-size: 10px;
+    width: var(--ball-size);
+    height: var(--ball-size);
+    left: calc(-0.5 * var(--ball-size));
+    top: calc(-1 * var(--ball-size));
+    filter: none;
+}
+.ball-panels {
+    position: absolute;
+    inset: 0;
+    background-image: url(/assets/football-roll.png);
+    background-size: 400% 100%;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+    animation: ball-roll var(--ball-roll);
+}
+@keyframes ball-roll {
+    to {
+        background-position-x: calc(-4 * var(--ball-size));
+    }
 }
 .ball-shadow {
     position: absolute;
-    width: 12px;
-    height: 6px;
-    left: -6px;
-    top: -3px;
-    border-radius: 50%;
-    background: #0009;
+    left: -4px;
+    top: -1.5px;
+    width: 8px;
+    height: 3px;
+    background: #09180f66;
 }
-.ball-ring {
+.ball-marker {
     position: absolute;
-    width: 22px;
-    height: 11px;
-    left: -11px;
-    top: -5.5px;
-    border-radius: 50%;
-    border: 2px solid var(--ball);
-    box-shadow: 0 0 0 2px #0006;
-    animation: ballring 1.2s steps(4) infinite;
-}
-@keyframes ballring {
-    50% {
-        transform: scale(1.35);
-        opacity: 0.5;
-    }
-}
-.ball-img {
-    position: absolute;
-    width: 14px;
-    height: 14px;
-    left: -7px;
-    top: -15px;
-    filter: drop-shadow(2px 0 0 var(--ball)) drop-shadow(-2px 0 0 var(--ball)) drop-shadow(0 2px 0 var(--ball))
-        drop-shadow(0 -2px 0 var(--ball));
+    left: -2px;
+    top: 2px;
+    width: 4px;
+    height: 1px;
+    border: 0;
+    border-radius: 0;
+    background: #a5d1f1;
+    box-shadow: none;
+    animation: none;
 }
 
 /* floating combat text */
@@ -1772,7 +1732,7 @@ dialog.drawer-wrap:not([open]) {
     grid-template-columns: 240px 1fr;
     background:
         linear-gradient(#0a0b0ce8, #0a0b0cf4),
-        url(/assets/tiles/grass_006.png) 0 0 / 48px 48px;
+        url(/assets/tiles/turf.png) 0 0 / 48px 48px;
 }
 .hub-side {
     display: flex;
@@ -2463,7 +2423,7 @@ dialog.drawer-wrap:not([open]) {
     min-height: 300px;
     margin-top: 6px;
     overflow: hidden;
-    background: url(/assets/tiles/grass_001.png) 0 0 / 48px 48px;
+    background: url(/assets/tiles/turf.png) 0 0 / 48px 48px;
     box-shadow:
         0 0 0 2px var(--ink),
         inset 0 0 0 3px #f4f6ef88;
@@ -2723,7 +2683,7 @@ dialog.drawer-wrap:not([open]) {
     overflow: hidden;
     background:
         linear-gradient(#080909cc, #080909f0 60%),
-        url(/assets/tiles/grass_006.png) 0 0 / 48px 48px;
+        url(/assets/tiles/turf.png) 0 0 / 48px 48px;
 }
 .setup-inner {
     max-width: 1140px;
@@ -2995,7 +2955,7 @@ dialog.drawer-wrap:not([open]) {
     height: 64%;
     background:
         repeating-linear-gradient(90deg, transparent 0 128px, #0000001c 128px 256px),
-        url(/assets/tiles/grass_001.png) 0 0 / 64px 64px;
+        url(/assets/tiles/turf.png) 0 0 / 64px 64px;
     filter: brightness(1.15);
     transform: perspective(700px) rotateX(50deg);
     transform-origin: 50% 100%;
@@ -3381,11 +3341,6 @@ dialog.drawer-wrap:not([open]) {
 }
 
 /* lofted ball: lifts off its shadow and drops back */
-@keyframes ball-spin {
-    to {
-        rotate: 360deg;
-    }
-}
 @keyframes arc-a {
     0% {
         transform: translateY(0);
@@ -3407,16 +3362,6 @@ dialog.drawer-wrap:not([open]) {
     100% {
         transform: translateY(0);
     }
-}
-
-/* net billow on a goal */
-.net.sprite {
-    position: absolute;
-    animation-duration: 1.2s;
-    animation-timing-function: steps(24);
-    animation-iteration-count: 1;
-    animation-fill-mode: forwards;
-    pointer-events: none;
 }
 
 /* particle bursts */
@@ -3498,7 +3443,7 @@ dialog.drawer-wrap:not([open]) {
     width: 96px;
     height: 96px;
     overflow: hidden;
-    background: url(/assets/tiles/grass_001.png) 0 0 / 32px 32px;
+    background: url(/assets/tiles/turf.png) 0 0 / 32px 32px;
     box-shadow:
         0 0 0 2px var(--ink),
         inset 0 0 0 2px #0006;
@@ -3666,7 +3611,7 @@ dialog.drawer-wrap:not([open]) {
     width: 128px;
     height: 128px;
     overflow: hidden;
-    background: url(/assets/tiles/grass_001.png) 0 0 / 32px 32px;
+    background: url(/assets/tiles/turf.png) 0 0 / 32px 32px;
     box-shadow:
         0 0 0 2px var(--ink),
         0 0 0 5px var(--gold),
@@ -4051,17 +3996,9 @@ dialog.drawer-wrap:not([open]) {
 }
 
 /* ================================================================== READABILITY PASS */
-/* Markers: yellow = whose turn it is (arrow above the head, ring at the feet); blue = the ball
-   (a steady ring at the carrier's feet and a ball dot on their tag; a pulsing ring only when loose). */
-.ball.held .ball-ring {
-    display: none;
-}
 /* players crowding the ball step back visually */
 .token.crowd .sprite {
     opacity: 0.72;
-}
-.token.crowd .tag {
-    opacity: 0.55;
 }
 
 /* pause */
@@ -4105,9 +4042,11 @@ dialog.drawer-wrap:not([open]) {
 .zoc {
     position: absolute;
 }
+.overlays .zoc {
+    opacity: 0.38;
+}
 .zoc-opp {
     background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--danger) 55%, transparent) 0 3px, transparent 3px 7px);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 45%, transparent);
 }
 .zoc-spent {
     background: repeating-linear-gradient(45deg, #ffffff30 0 2px, transparent 2px 7px);
@@ -4121,6 +4060,7 @@ dialog.drawer-wrap:not([open]) {
 .sw.zoc-own {
     background: radial-gradient(circle, var(--move) 0 2px, transparent 2.5px) 0 0 / 6px 6px;
 }
+
 .legend-toggle {
     cursor: pointer;
 }
@@ -4171,18 +4111,15 @@ dialog.drawer-wrap:not([open]) {
 }
 
 /* ================================================================== STADIUMS */
-.pitch .stripe {
-    background-size: 48px 48px;
-}
 .pitch .wear {
     position: absolute;
-    background-size: 48px 48px;
     image-rendering: pixelated;
     -webkit-mask: radial-gradient(ellipse, #000 35%, transparent 70%);
     mask: radial-gradient(ellipse, #000 35%, transparent 70%);
 }
 .pitch .frost {
     position: absolute;
+    opacity: 0.38;
     background: radial-gradient(circle, #ffffff40 0 1px, transparent 1.5px) 0 0 / 11px 11px;
 }
 .pitch .surface {
@@ -4213,64 +4150,36 @@ dialog.drawer-wrap:not([open]) {
     background-repeat: no-repeat;
     image-rendering: pixelated;
 }
-.adboard .prop-art {
-    box-shadow: 0 0 0 1px #0008;
+.terrace .prop-art {
+    background-color: #303839;
+    background-repeat: repeat-x;
+    background-size: 29px 17px;
+    box-shadow:
+        inset 0 -3px var(--kit),
+        0 2px #0008;
 }
-.flood.lit .prop-art::after {
+.terrace-roof .prop-art {
+    background: linear-gradient(var(--kit) 0 40%, color-mix(in srgb, var(--kit) 48%, #151819) 40%);
+    box-shadow:
+        inset 0 2px #fff4,
+        2px 4px #0008;
+}
+.flood .prop-art {
+    background: linear-gradient(90deg, #33433f 0 55%, #72817a 55%) center bottom / 6px 90% no-repeat;
+}
+.flood .prop-art::before {
     content: '';
     position: absolute;
-    left: -30px;
-    top: -26px;
-    width: 114px;
-    height: 70px;
-    border-radius: 50%;
-    background: radial-gradient(ellipse, #fff6c899 0%, #fff6c833 40%, transparent 70%);
-    pointer-events: none;
+    inset: 0 0 auto;
+    height: 14px;
+    background: repeating-linear-gradient(90deg, #526058 0 7px, #27302d 7px 9px);
+    box-shadow: 0 0 0 2px #27302d;
 }
-
-/* the main stand: tiers of animated fans, a name band in the club colour, a roof for the big ones */
-.stand-body {
-    display: flex;
-    flex-direction: column;
-    filter: drop-shadow(0 4px 0 #0008);
-}
-.stand-body .tier {
-    position: relative;
-    width: 100%;
-    box-shadow: inset 0 -3px 0 #0006;
-}
-.stand-body .tier i {
-    position: absolute;
-    top: 0;
-    height: 100%;
-    background-size: 100% 100%;
-    image-rendering: pixelated;
-}
-.stand-body .roof {
-    height: 16px;
-    background: linear-gradient(var(--kit) 0 40%, color-mix(in srgb, var(--kit) 55%, black) 40%);
-    box-shadow: inset 0 2px 0 #fff4;
-}
-.stand-body .stand-base {
-    height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: color-mix(in srgb, var(--kit) 65%, #121314);
+.flood.lit .prop-art::before {
+    background: repeating-linear-gradient(90deg, #f6e7b8 0 7px, #879080 7px 9px);
     box-shadow:
-        inset 0 3px 0 #fff3,
-        inset 0 -3px 0 #0005;
-    font-family: var(--display);
-    font-size: 13px;
-    color: #fff;
-    text-shadow: 2px 2px 0 #000;
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
-}
-.fence {
-    background:
-        repeating-linear-gradient(90deg, #e9e2cf 0 3px, transparent 3px 10px),
-        linear-gradient(transparent 4px, #e9e2cf 4px 6px, transparent 6px 11px, #e9e2cf 11px 13px, transparent 13px);
+        0 0 0 2px #27302d,
+        0 0 18px #e4cf9677;
 }
 
 /* matchday atmosphere (screen space, above the pitch, below the HUD) */
@@ -4353,67 +4262,11 @@ dialog.drawer-wrap:not([open]) {
     margin: -8px 0 12px;
     font-size: 14px;
 }
-.stand-body.village .fence-row {
-    height: 16px;
-    background:
-        repeating-linear-gradient(90deg, #e9e2cf 0 3px, transparent 3px 10px),
-        linear-gradient(transparent 4px, #e9e2cf 4px 6px, transparent 6px 11px, #e9e2cf 11px 13px, transparent 13px);
-}
-
 /* ================================================================== CAMERA */
 /* the art pack's top-down view: flat compositing, sprites y-sorted with z-index */
 .match .popup,
 .match .burst {
     z-index: 5000;
-}
-
-/* stands */
-.stand-main .stand-body,
-.stand-village .stand-body {
-    width: 100%;
-    height: 100%;
-}
-.stand-body .tier {
-    background-color: #3a3f4a;
-}
-.ground-art {
-    position: absolute;
-    display: flex;
-    flex-direction: column;
-    z-index: 0;
-    pointer-events: none;
-    box-shadow:
-        0 0 0 3px var(--kit),
-        0 0 0 5px var(--ink),
-        6px 8px 0 4px #0006;
-}
-.ground-art .tier {
-    position: relative;
-    width: 100%;
-    box-shadow: inset 0 -3px 0 #0006;
-}
-.ground-art .tier i {
-    position: absolute;
-    top: 0;
-    height: 100%;
-    background-size: 100% 100%;
-    image-rendering: pixelated;
-}
-.end-stand.roofed::before {
-    content: '';
-    position: absolute;
-    top: -14px;
-    left: -6px;
-    right: -6px;
-    height: 14px;
-    background: linear-gradient(var(--kit) 0 45%, color-mix(in srgb, var(--kit) 55%, black) 45%);
-    box-shadow: 0 0 0 2px var(--ink);
-}
-.scoreboard .prop-art {
-    filter: drop-shadow(3px 4px 0 #0007);
-}
-.flood .prop-art {
-    filter: drop-shadow(4px 6px 0 #0005);
 }
 
 /* ---- set pieces */
@@ -5180,30 +5033,17 @@ dialog.drawer-wrap:not([open]) {
 .ip-man .sprite {
     filter: drop-shadow(0 3px 0 #0007);
 }
-.ip-num {
+.ip-danger-mark {
     position: absolute;
     left: 0;
-    top: 6px;
+    top: -44px;
     transform: translateX(-50%);
-    min-width: 22px;
-    padding: 0 4px;
-    font-family: var(--display);
-    font-size: 15px;
-    line-height: 18px;
-    text-align: center;
-    color: #fff;
-    background: var(--kit);
-    box-shadow:
-        0 0 0 2px #000c,
-        2px 2px 0 2px #0008;
-    white-space: nowrap;
-}
-.ip-num.light {
-    color: #111;
-}
-.ip-man.danger .ip-num {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    color: var(--accent);
+    font: 16px/1 var(--display);
+    text-shadow:
+        1px 1px var(--ink),
+        -1px 1px var(--ink),
+        0 -1px var(--ink);
 }
 .intro-sides {
     display: flex;
@@ -5509,7 +5349,7 @@ dialog.drawer-wrap:not([open]) {
     min-width: 0;
     height: 70px;
     padding: 0 6px;
-    background: url(/assets/tiles/grass_001.png) 0 0 / 32px 32px;
+    background: url(/assets/tiles/turf.png) 0 0 / 32px 32px;
     box-shadow: inset 0 0 0 2px #0006;
 }
 .kit-model {

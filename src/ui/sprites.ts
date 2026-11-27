@@ -44,8 +44,9 @@ export const lookOf = (p: Player): { skin: number; hair: number } => {
     return { skin: h % defaultConfig.looks.skinTones, hair: pickHairIndex(defaultConfig.looks.hairWeights, ((h >>> 8) % 1000) / 1000) };
 };
 
-export const stripUrl = (sprite: string, anim: string, facing: Facing, player?: Player) => {
-    const src = castUrl(`assets/cast/${sprite}/${anim}_${facing}.png`);
+const stripUrl = (sprite: string, anim: string, facing: Facing, player?: Player) => {
+    const profile = facing === 'left' ? 'left' : 'right';
+    const src = castUrl(`assets/cast/${sprite}/${anim}_${profile}.png`);
     if (!player) return src;
     const l = lookOf(player);
     return recolored(src, l.skin, l.hair);
@@ -66,7 +67,8 @@ export const spriteStyle = (cfg: GameConfig, sprite: string, anim: string, facin
 };
 
 /** Strips worth preparing before kickoff so nobody flickers into their real colours. */
-export const prewarmPlayer = (sprite: string, player: Player, keeper: boolean) => {
+export const prewarmPlayer = (player: Player) => {
+    const keeper = player.cls === 'keeper';
     const anims = keeper ? ['gk_ready', 'idle', 'run', 'gk_hold', 'celebrate'] : ['idle', 'run', 'dribble', 'celebrate'];
-    for (const a of anims) for (const f of ['down', 'left', 'right', 'up'] as Facing[]) stripUrl(sprite, a, f, player);
+    for (const a of anims) for (const f of ['left', 'right'] as const) stripUrl(player.sprite, a, f, player);
 };

@@ -30,7 +30,7 @@ export default defineConfig({
     plugins: [
         // the radio: every song in assets/music becomes a playlist track (see scripts/music-plugin.ts)
         musicPlugin(resolve(import.meta.dirname, 'assets/music'), resolve(import.meta.dirname, 'node_modules/.cache/tt-music')),
-        // the ~1,400 sprite strips become one file in a build (web hosts cap the file count)
+        // the sprite strips become one file in a build (web hosts cap the file count)
         castPackPlugin(),
         // THIRD-PARTY-NOTICES.txt: the licences of the bundled packages, fonts and (desktop) Rust crates
         noticesPlugin(),

@@ -80,8 +80,8 @@ export const defaultConfig = {
         framePx: 64,
         renderPx: 52,
         /** Pixel row of the feet inside a frame, measured on the source art. */
-        feetY: 60,
-        msPerFrame: 110,
+        feetY: 56,
+        msPerFrame: 70,
         /** Goal sprite scale relative to the goal mouth. */
         goalScaleX: 1,
         goalScaleY: 1,

@@ -6,7 +6,7 @@ releases/
 src-tauri/gen/schemas/
 
 # third-party art packs are licensed, not redistributable: keep them local.
-# `npm run assets` (scripts/copy-assets.sh) copies the used subset into public/assets.
+# `npm run assets` exports the game-ready art into public/assets.
 # assets/music holds the radio's songs (scripts/music-plugin.ts).
 /assets/
 public/assets/

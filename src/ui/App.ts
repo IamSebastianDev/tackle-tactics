@@ -162,7 +162,8 @@ export const App = () => {
     const start = () => {
         const s = settings();
         saveSettings(s);
-        const clubs = buildClubs(configFor(s), s);
+        const base = configFor(s);
+        const clubs = buildClubs(base, s);
         const pick = <T extends string>(v: 'random' | T) => (v === 'random' ? undefined : v);
         const stadium = generateStadium(`quick-${s.seed}-${Math.random()}`, clubs[0].name.split(' ')[0]!, undefined, {
             size: pick(s.ground),
@@ -172,7 +173,7 @@ export const App = () => {
             time: pick(s.time),
             weather: pick(s.weather),
         });
-        const cfg = weatherCfg(configFor(s), conditions);
+        const cfg = weatherCfg(base, conditions);
         const controllers: [Controller, Controller] =
             s.mode === 'ai' ? ['human', 'ai'] : s.mode === 'hotseat' ? ['human', 'human'] : ['ai', 'ai'];
         ctl = new MatchController(cfg, clubs, { controllers, difficulty: s.difficulty, seed: s.seed, stadium, conditions });
@@ -513,11 +514,11 @@ export const App = () => {
 
     // ------------------------------------------------------------ title & new career
     const titleScene = () => {
-        const figs: Array<[string, string, number, string]> = [
-            ['blue_player_1', 'celebrate_down', 22, 'down'],
-            ['yellow_player_2', 'idle_left', 70, 'left'],
-            ['blue_player_2', 'juggle_right', 8, 'right'],
-            ['keeper_pink', 'gk_ready_down', 84, 'down'],
+        const figs: Array<[string, string, number]> = [
+            ['blue_player_1', 'celebrate_right', 22],
+            ['yellow_player_2', 'idle_left', 70],
+            ['blue_player_2', 'run_right', 8],
+            ['keeper_pink', 'gk_ready_left', 84],
         ];
         return html`<div class="title-scene">
             <div class="sky"></div><div class="stand-band"></div>
@@ -603,7 +604,7 @@ export const App = () => {
             <h1>Tackle <span>Tactics</span></h1>
             <nav class="title-menu">${menu}</nav>
             <p class="title-desc">${desc}</p>
-            <p class="credits">Art by bubbabba</p>
+            <p class="credits">Goals in Pixels art by Josee</p>
         </div></div>`;
     };
 

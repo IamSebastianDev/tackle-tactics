@@ -291,29 +291,19 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     });
 
     // ------------------------------------------------------------ static pitch
-    /**
-     * Goals as upright sprites standing on the pitch like the players (same art pack). The art's posts
-     * span ~193px from the far post (y≈35) to the near post (y≈228); it is scaled so that span matches
-     * the goal mouth.
-     */
+    /** Align the goal's painted posts with the playable mouth. */
     const goalSprite = (side: 'left' | 'right') => {
-        const base = (cfg.pitch.goalWidth * C) / 193;
+        const { w: artW, h: artH, mouth, midY, postX } = { w: 34, h: 96, mouth: 94, midY: 47.5, postX: side === 'left' ? 32 : 1 };
+        const base = (cfg.pitch.goalWidth * C) / mouth;
         const sx = base * cfg.sprites.goalScaleX;
         const sy = base * cfg.sprites.goalScaleY;
-        const postX = side === 'left' ? 95 : 33;
         const anchorX = side === 'left' ? px(0) : px(0) + cols * C;
         // the sprite's base sits on the ground, placed so the middle of the posts lines up with the mouth
-        const midY = (35 + 228) / 2;
-        const anchorY = px(gTop) + (cfg.pitch.goalWidth * C) / 2 + (256 - midY) * sy;
-        const w = 128 * sx;
-        const h = 256 * sy;
-        const box = `left:${-postX * sx}px;top:${-h}px;width:${w}px;height:${h}px`;
-        const art = derived(ctl.net, (n) =>
-            n === side
-                ? `${box};background-image:url(assets/fx/goal_${side}_net_billow.png);background-size:${24 * w}px ${h}px;--strip:${24 * w}px;animation:strip 1.2s steps(24) 1 forwards`
-                : `${box};background-image:url(assets/props/goal_${side}.png);background-size:${w}px ${h}px;animation:none`,
-        );
-        return html`<div class="goal-sprite" style="left:${String(anchorX)}px;top:${String(anchorY)}px;z-index:${String(Math.round(anchorY))}"><div class="stand"><div class="goal-art" ${attr({ style: art })}></div></div></div>`;
+        const anchorY = px(gTop) + (cfg.pitch.goalWidth * C) / 2 + (artH - midY) * sy;
+        const w = artW * sx;
+        const h = artH * sy;
+        const art = `left:${-postX * sx}px;top:${-h}px;width:${w}px;height:${h}px;background-image:url(assets/goal_${side}.png);background-size:${w}px ${h}px`;
+        return html`<div class="goal-sprite" style="left:${String(anchorX)}px;top:${String(anchorY)}px;z-index:${String(Math.round(anchorY))}"><div class="stand"><div class="goal-art" style="${art}"></div></div></div>`;
     };
 
     const pitchSvg = () => {
@@ -335,7 +325,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             const dy = Math.sqrt(Math.max(0, r * r - (edge - sx) ** 2));
             return `<path d="M ${edge} ${midY - dy} A ${r} ${r} 0 0 ${left ? 1 : 0} ${edge} ${midY + dy}" />`;
         };
-        const stripes = pitchSurface(stadium, { L, T, PW, PH, C, W, H, S: 1 });
+        const stripes = pitchSurface(stadium, { L, T, PW, PH, C });
         return `${stripes}
         <svg class="lines" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
           <rect x="${L}" y="${T}" width="${PW}" height="${PH}" />
@@ -409,6 +399,12 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         return resolveAnim(p, name);
     };
 
+    const horizontalFacing = new Map<string, 'left' | 'right'>();
+    const spriteFacing = (p: Piece) => {
+        if (p.facing === 'left' || p.facing === 'right') horizontalFacing.set(p.id, p.facing);
+        return horizontalFacing.get(p.id) ?? (p.team === 0 ? 'right' : 'left');
+    };
+
     const Token = (p: Piece) => {
         const R = cfg.sprites.renderPx;
         const feet = (cfg.sprites.feetY / cfg.sprites.framePx) * R;
@@ -428,7 +424,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         const sprite = derived(
             ctl.tick,
             () =>
-                `${spriteStyle(cfg, p.player.sprite, currentAnim(p), p.facing, p.player)};width:${R}px;height:${R}px;left:${-R / 2}px;top:${-feet}px`,
+                `${spriteStyle(cfg, p.player.sprite, currentAnim(p), spriteFacing(p), p.player)};width:${R}px;height:${R}px;left:${-R / 2}px;top:${-feet}px`,
         );
         const kit = kitColor(m.state.clubs[p.team].kit);
         const stamina = derived(ctl.tick, () => p.stamina);
@@ -451,7 +447,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
             <div class="ground-wrap" style="--kit:${kit}" ${rawSvg(groundSvg)}></div>
             <div class="stand">
                 <div class="sprite" ${attr({ style: sprite })}></div>
-                <div class="tag" style="--kit:${kit}">${String(p.player.number)}<span class="badges">${badges}</span></div>
+                ${$if(derived(badges, Boolean)).$then(() => html`<div class="tok-status">${badges}</div>`)}
                 <div class="tok-name">${p.player.name}</div>
                 <div class="turn-mark" ${rawSvg(turnArrowSvg)}></div>
                 ${tokenStam}
@@ -465,11 +461,11 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         let y: number;
         if (b.kind === 'held') {
             const h = m.piece(b.by);
-            const off = h.facing === 'right' ? 0.38 : h.facing === 'left' ? -0.38 : 0;
-            const offY = h.facing === 'down' ? 0.3 : h.facing === 'up' ? -0.2 : 0.12;
+            const facing = spriteFacing(h);
+            const off = facing === 'right' ? 0.38 : -0.38;
             const at = ctl.shownPos(h);
             x = cx(at.x) + off * C;
-            y = px(at.y) + C / 2 + offY * C;
+            y = px(at.y) + C * 0.62;
         } else {
             x = cx(b.at.x);
             y = px(b.at.y) + C / 2;
@@ -481,9 +477,6 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         const ms = ctl.ballMs;
         return `left:${x}px;top:${y}px;z-index:${Math.round(y) + 2};transition:left ${ms}ms cubic-bezier(.3,.6,.4,1), top ${ms}ms cubic-bezier(.3,.6,.4,1)`;
     });
-
-    /** A held ball is just the ball at its carrier's feet; a loose one gets the pulsing ring. */
-    const ballClass = derived(ctl.tick, () => (m.state.ball.kind === 'held' && !ctl.ballAt ? 'ball held' : 'ball loose'));
 
     // ------------------------------------------------------------ HUD pieces
     const club = (t: TeamSide) => m.state.clubs[t];
@@ -853,12 +846,13 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
 
     const ballImgStyle = derived(ctl.ballArc, (a) => {
         if (!a) return '';
-        // spins while travelling (faster for shots); lofted balls also rise and fall
+        // Rolls while travelling (faster for shots); lofted balls also rise and fall.
         const turns = Math.max(1, Math.round((a.ms / 1000) * 6 * a.spin));
-        const spin = `ball-spin ${Math.round(a.ms / turns)}ms steps(4) ${turns}`;
-        return a.height
-            ? `--arc-h:${-a.height}px;animation:${a.id % 2 ? 'arc-a' : 'arc-b'} ${a.ms}ms cubic-bezier(.3,.6,.4,1) both, ${spin}`
-            : `animation:${spin}`;
+        const roll = `${Math.round(a.ms / turns)}ms steps(4) ${turns}`;
+        const lift = a.height
+            ? `--arc-h:${-a.height}px;animation:${a.id % 2 ? 'arc-a' : 'arc-b'} ${a.ms}ms cubic-bezier(.3,.6,.4,1) both`
+            : '';
+        return `--ball-roll:${roll};${lift}`;
     });
 
     const burst = (b: { id: number; at: { x: number; y: number }; kind: 'confetti' | 'dust'; colors: string[] }) => {
@@ -917,13 +911,12 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         const box = (depth: number, width: number, left: boolean, cls: string) =>
             html`<i class="${cls}" style="${left ? 'left' : 'right'}:0;top:${pct((P.rows - width) / 2, P.rows)};width:${pct(depth, P.cols)};height:${pct(width, P.rows)}"></i>`;
         const men = m.state.pieces.map((p) => {
-            const c = club(p.team);
-            const kit = p.player.cls === 'keeper' ? c.keeperKit : c.kit;
             const danger = dangerMan(m, p.team) === p;
             const anim = p.player.cls === 'keeper' ? 'gk_ready' : 'idle';
-            return html`<div class="ip-man${danger ? ' danger' : ''}" title="${`${p.player.number} ${p.player.name} · ${cfg.classes[p.player.cls].label}${danger ? ' · danger man' : ''}`}" style="left:${pct(p.pos.x + 0.5, P.cols)};top:${pct(p.pos.y + 0.5, P.rows)}">
+            const dangerStar = danger ? html`<b class="ip-danger-mark" aria-hidden="true">★</b>` : '';
+            return html`<div class="ip-man" title="${`${p.player.name} · ${cfg.classes[p.player.cls].label}${danger ? ' · danger man' : ''}`}" style="left:${pct(p.pos.x + 0.5, P.cols)};top:${pct(p.pos.y + 0.5, P.rows)}">
                 <div class="sprite" style="${spriteStyle(cfg, p.player.sprite, anim, p.team === 0 ? 'right' : 'left', p.player)};width:${R}px;height:${R}px;left:${-R / 2}px;top:${-feet}px"></div>
-                <b class="ip-num${isLightKit(kit) ? ' light' : ''}" style="--kit:${kitColor(kit)}">${danger ? '★' : ''}${String(p.player.number)}</b>
+                ${dangerStar}
             </div>`;
         });
         return html`<div class="ip-turf"><div class="ip-field" style="aspect-ratio:${P.cols} / ${P.rows}">
@@ -1267,7 +1260,7 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
         const unwatchTurn = ctl.tick.subscribe(recenterOnTurn);
         const unwatchInput = ctl.awaitingHuman.subscribe(() => infoFor.set(null));
         const unwatchInspect = activePiece.subscribe(() => inspected.set(null));
-        for (const p of m.state.pieces) prewarmPlayer(p.player.sprite, p.player, p.player.cls === 'keeper');
+        for (const p of m.state.pieces) prewarmPlayer(p.player);
         const wheel = (e: WheelEvent) => {
             if (!(e.target as HTMLElement).closest('.viewport')) return;
             e.preventDefault();
@@ -1340,6 +1333,8 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
     });
 
     const pieces = derived(distinct(derived(ctl.tick, () => m.state.pieces.map((p) => p.id).join(','))), () => [...m.state.pieces]);
+    const ground = { L: px(0), T: px(0), PW: cols * C, PH: rows * C, C };
+    const groundProps = stadiumProps(stadium, conditions, kitColor(club(0).kit), ground);
     const matchContent = html`<div>
         <div ${attr({ class: shakeClass })}>
             <div class="world" ${attr({ style: camera })}>
@@ -1366,14 +1361,14 @@ export const MatchView = (ctl: MatchController, { onExit, onSettings, finishOdds
                         )}
                 </div>
                 <div class="tokens">
-                    ${stadiumProps(stadium, conditions, kitColor(club(0).kit), { L: px(0), T: px(0), PW: cols * C, PH: rows * C, C, W, H, S: cfg.sprites.renderPx / cfg.sprites.framePx })}
+                    ${groundProps}
                     ${goalSprite('left')}${goalSprite('right')}
                     ${$each(pieces)
                         .$withKey((p) => p.id)
                         .$as(Token)}
-                    <div ${attr({ class: ballClass, style: ballStyle })}>
-                        <div class="ball-shadow"></div><div class="ball-ring"></div>
-                        <div class="stand"><img class="ball-img" src="assets/props/ball_classic.png" ${attr({ style: ballImgStyle })} /></div>
+                    <div class="ball" ${attr({ style: ballStyle })}>
+                        <div class="ball-shadow"></div><div class="ball-marker"></div>
+                        <div class="stand"><div class="ball-img" ${attr({ style: ballImgStyle })}><div class="ball-panels"></div></div></div>
                     </div>
                     ${$each(ctl.popups)
                         .$withKey((p) => p.id)

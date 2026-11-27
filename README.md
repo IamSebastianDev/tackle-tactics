@@ -21,16 +21,15 @@ The code is in this repository; the **art and music are not**. The art comes fro
 license allows using it in games but not sharing the files on their own, so it must never be committed (a public
 repo would hand the pack out). Both `assets/` and the generated `public/assets/` are git-ignored.
 
-**Requirements:** Node 22+ (see `.nvmrc`); for the desktop app also a Rust toolchain (`rustup`).
+Local builds require Node 22+ (see `.nvmrc`) and Python 3 to export the art. Desktop builds also require a Rust toolchain (`rustup`).
 
-**1. Get the art pack.** Buy or download _Soccer Match - Top Down Football Tileset & Players [32x32]_ by bubbabba
-([bubbabba.itch.io](https://bubbabba.itch.io)) and unzip it into `assets/`, so this folder exists:
+**1. Get the art pack.** Download [Goals in Pixels](https://n3cloud.itch.io/goals-in-pixels) by Josee and unzip it into `assets/`.
 
 ```text
 assets/
-├── Soccer_Match_-_Top_Down_Football_Tileset_&_Players_[32x32]/
-│   ├── 64/            ← the game uses the 64 px art
-│   └── license.txt
+├── Goals_in_Pixels/
+│   ├── characters/
+│   └── tilesets/
 └── music/             ← optional: songs for the in-game radio
 ```
 
@@ -42,9 +41,8 @@ npm run dev              # http://localhost:5173
 npm run desktop          # or the desktop app (Tauri)
 ```
 
-`dev` and `build` first run `scripts/ensure-assets.sh`: if `public/assets` is missing it copies the art the game
-uses out of the pack (`scripts/copy-assets.sh`, about 6 MB of the pack's 50+), and if the pack isn't there either it
-stops with these instructions. After updating the pack, run `npm run assets` to copy it again.
+`dev` and `build` run `scripts/ensure-assets.sh` to export the game-ready art into `public/assets` when needed.
+Run `npm run assets` to regenerate the art after changing the source pack or exporter.
 
 **3. Music (optional).** Drop audio files into `assets/music/` (see [Radio](#radio)). The release soundtrack uses
 the two 3xBlast packs listed in [Credits](#credits). Without audio files the radio stays hidden.
@@ -64,7 +62,7 @@ allows: it's the game, not the pack.
 | `npm run build`         | web build into `dist/`                                        |
 | `npm run desktop:build` | macOS + Windows builds into `releases/<version>/`             |
 | `npm run web:build`     | browser build zipped for itch.io into `releases/<version>/`   |
-| `npm run assets`        | copy the used art out of the pack again                       |
+| `npm run assets`        | regenerate game-ready art from Goals in Pixels                |
 | `npm run assets:upload` | pack the art and songs and upload them to R2 for cloud builds |
 
 **Checks run as a git pre-commit hook** ([lefthook](https://lefthook.dev), installed by `npm install`): typecheck,
@@ -208,7 +206,7 @@ TT_VARIANTS='{"base":{},"bolder":{"ai":{"xtLinear":0.12}}}' npx vitest run test/
 
 ## License
 
-The code is [MIT](LICENSE). Release builds bundle bubbabba's art under the asset pack license, the radio's songs
+The code is [MIT](LICENSE). Release builds bundle art from Goals in Pixels under the asset pack license, the radio's songs
 under [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/), and the fonts under the SIL Open Font
 License. See Credits below for the asset sources.
 
@@ -218,7 +216,7 @@ License. See Credits below for the asset sources.
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | Design & direction           | Sebastian Heinz                                                                                                                                |
 | Code                         | Written with Claude Opus 5.5 (Claude Code) and GPT 6.2 Sol                                                                                     |
-| Players, pitch & stadium art | _Soccer Match – Top Down Football Tileset & Players [32x32]_ by [bubbabba](https://bubbabba.itch.io) (licensed, not in repo)                   |
+| Players, pitch & stadium art | From [Goals in Pixels](https://n3cloud.itch.io/goals-in-pixels) by Josee                                                                       |
 | Radio                        | [3xBlast](https://3xblast.itch.io/) (CC0 1.0, see soundtrack credits below)                                                                    |
 | Fonts                        | Barlow Condensed, Inter, Silkscreen, Pixelify Sans, VT323, Noto Sans Symbols (SIL Open Font License, via [Fontsource](https://fontsource.org)) |
 | Source                       | [github.com/IamSebastianDev/tackle-tactics](https://github.com/IamSebastianDev/tackle-tactics)                                                 |
@@ -227,8 +225,8 @@ License. See Credits below for the asset sources.
 Clubs, players, nations and leagues are invented; any resemblance to real ones is a nod, not a claim. The same
 disclaimer and credits are in the game under Settings → About.
 
-**About the art.** Players, keepers, goals, ball and grass come from the bubbabba pack's 64px set (per-kit,
-4-direction strips).
+**About the art.** The exporter processes Josee's source sheets for use in the game. It crops frames and tiles,
+mirrors poses, recolors kits and turf, and assembles animation strips. It draws the football and season awards separately.
 
 **Soundtrack.** 3xBlast released the [Free Music Pack](https://3xblast.itch.io/3xblastfreemusic) and
 [7 Pop-Punk Chiptune tracks](https://opengameart.org/content/7-pop-punk-chiptune-tracks) under
@@ -257,10 +255,9 @@ additional composition to [“Now This Is A Waterpark!”](https://3xblast.bandc
 
 ## Camera & grounds
 
-- Matches use the art pack's top-down projection, with sprites drawn in order of their position on the pitch.
+- Matches use a top-down pitch and side-facing players, drawn in order of their position on the pitch.
 - Grounds (`src/world/stadium.ts`, drawn by `src/ui/StadiumView.ts`) are generated per club: village / town / city /
-  grand, from a fenced bank up to a roofed main stand, end stands, LED boards on both touchlines, four floodlight
-  pylons, TV gantry and scoreboard. All pack art is drawn at the players' pixel scale (renderPx / framePx).
+  grand, from a fenced ground with benches to a roofed main stand with several tiers and floodlights.
 - Each match rolls time of day and weather; rain/snow/fog nudge kick scatter (`config.weather`).
 
 ## Releases
@@ -333,7 +330,7 @@ Cloudflare Workers Builds deploys it on every push to `main`: build command `npm
 
 1. Once, and again whenever the art or music changes: `npx wrangler login`, then `npm run assets:upload`. It packs
    `public/assets` and the songs (converted to `.m4a`, since the build machine runs Linux) into
-   `game-assets.tar.gz` and uploads it to the `tackle-tactics-assets` bucket (created on first use).
+   `game-assets-goals-in-pixels.tar.gz` and uploads it to the `tackle-tactics-assets` bucket (created on first use).
 2. In the R2 dashboard, create an API token with **Object Read** on that bucket.
 3. In the Worker's build settings, add the build variables `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and
    `R2_SECRET_ACCESS_KEY` (the last two as secrets).
@@ -345,7 +342,7 @@ at the top. Upload it to itch.io as an HTML5 game ("This file will be played in 
 viewport and the fullscreen button on. The build:
 
 - uses relative paths (`base: './'` in `vite.config.ts`), so it runs from whatever folder a host puts it in;
-- packs the ~1,400 player sprite strips into one file, `assets/cast.pack` (`scripts/cast-pack-plugin.ts`, read by
+- packs the player sprite strips into one file, `assets/cast.pack` (`scripts/cast-pack-plugin.ts`, read by
   `src/ui/castPack.ts`), which keeps the zip at ~80 files (itch.io allows 1,000);
 - saves to the browser's IndexedDB, per browser and site: players can export a backup in Settings → Gameplay.
 

@@ -1,5 +1,5 @@
 /**
- * Packs the player sprite strips (dist/assets/cast/**.png, ~1,400 files) into one binary file,
+ * Packs the player sprite strips (dist/assets/cast/**.png) into one binary file,
  * dist/assets/cast.pack, after a build. Hosts such as itch.io cap a web game at 1,000 files, and
  * one request beats a thousand. Dev serves the loose files; src/ui/castPack.ts reads the pack.
  * Only the web build (TT_WEB=1) deletes the loose files afterwards.

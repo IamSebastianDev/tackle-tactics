@@ -419,7 +419,7 @@ export const SettingsModal = (props: SettingsProps) => {
         <dl class="credits-list">
             <dt>Design & direction</dt><dd>Sebastian Heinz</dd>
             <dt>Code</dt><dd>Written with Claude Opus 5.5 (Claude Code) and GPT 6.2 Sol</dd>
-            <dt>Players, pitch & stadium art</dt><dd><i>Soccer Match – Top Down Football Tileset & Players</i> by ${link('https://bubbabba.itch.io', 'bubbabba')}</dd>
+            <dt>Players, pitch & stadium art</dt><dd>From ${link('https://n3cloud.itch.io/goals-in-pixels', 'Goals in Pixels')} by Josee</dd>
             <dt>Radio</dt><dd>
                 ${link('https://3xblast.itch.io/3xblastfreemusic', 'Free Music Pack')} and
                 ${link('https://opengameart.org/content/7-pop-punk-chiptune-tracks', '7 Pop-Punk Chiptune tracks')}

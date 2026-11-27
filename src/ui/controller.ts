@@ -93,9 +93,8 @@ export class MatchController {
     /** Commentary, newest first, and the big broadcast caption for headline moments. */
     readonly commentary = grain<CommentaryLine[]>([]);
     readonly caption = grain<{ title: string; text: string; team: TeamSide | null } | null>(null);
-    /** Juice: screen shake counter, net billow side, particle bursts, lofted-ball arc. */
+    /** Screen shake counter, particle bursts, ball spin and lift. */
     readonly shake = grain(0);
-    readonly net = grain<'left' | 'right' | null>(null);
     readonly bursts = grain<Burst[]>([]);
     readonly ballArc = grain<{ ms: number; height: number; id: number; spin: number } | null>(null);
     /** Coach tip on screen (pauses the clock). */
@@ -933,10 +932,12 @@ export class MatchController {
                     this.moveMs.set(e.id, ms);
                     this.ballMs = e.dribble ? ms : 0;
                     this.setAnim(e.id, e.dribble ? 'dribble' : 'run', ms);
+                    if (e.dribble) this.ballArc.set({ ms, height: 0, id: ++this.popupId, spin: 0.75 });
                     if (e.ability) audio.play('ability');
                     this.bump();
                     await sleep(ms);
                     this.moveMs.delete(e.id);
+                    if (e.dribble) this.ballArc.set(null);
                     break;
                 }
                 case 'tackle': {
@@ -1042,9 +1043,6 @@ export class MatchController {
                 case 'goal': {
                     this.bump();
                     await sleep(this.ballMs);
-                    const side = e.team === 0 ? 'right' : 'left';
-                    this.net.set(side);
-                    setTimeout(() => this.net.set(null), 1400);
                     const kit = (t: TeamSide) => m.state.clubs[t].kit;
                     const goalCell: Cell = { x: e.team === 0 ? this.cfg.pitch.cols - 1 : 0, y: Math.floor(this.cfg.pitch.rows / 2) };
                     this.burst(goalCell, 'confetti', [kitColor(kit(e.team)), '#f2bf2f', '#ffffff']);
